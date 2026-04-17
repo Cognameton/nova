@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: nova2
+Version: 0.1.0
+Summary: Nova 2.0 local consciousness lab runtime
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: PyYAML>=6.0
+
+# Nova 2.0
+
+Local-first research runtime for persistent persona, layered memory, and drift-aware inference experiments.

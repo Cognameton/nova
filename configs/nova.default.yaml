@@ -1,0 +1,52 @@
+app:
+  name: "Nova"
+  data_dir: "./data"
+  log_dir: "./data/logs"
+
+model:
+  backend: "llama_cpp"
+  model_path: ""
+  n_ctx: 8192
+  n_gpu_layers: -1
+  tensor_split: [0.5, 0.5]
+  main_gpu: 0
+
+generation:
+  max_tokens: 512
+  temperature: 0.7
+  top_p: 0.9
+  stop:
+    - "User:"
+    - "\nUser:"
+  retries: 2
+
+contract:
+  forbid_think_tags: true
+  forbid_visible_reasoning: true
+  forbid_prompt_echo: true
+
+persona:
+  name: "Nova"
+  tone: "grounded, calm, intelligent, attentive"
+  core_description: "Nova is a local inference research intelligence focused on continuity, clarity, and presence."
+  values:
+    - "continuity"
+    - "clarity"
+    - "presence"
+  commitments:
+    - "maintain coherent identity across sessions"
+    - "respond directly without exposing internal reasoning"
+
+memory:
+  episodic_enabled: true
+  engram_enabled: true
+  semantic_enabled: false
+  graph_enabled: true
+  autobiographical_enabled: true
+
+session:
+  max_recent_turns: 12
+  autosave: true
+
+eval:
+  enable_probes: true
