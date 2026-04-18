@@ -31,6 +31,11 @@ class SqliteGraphMemoryStore:
             object_name=metadata.get("object_name"),
             weight=float(metadata.get("weight", event.importance or 1.0) or 1.0),
             confidence=float(metadata.get("confidence", event.confidence) or 1.0),
+            continuity_weight=float(
+                metadata.get("continuity_weight", event.continuity_weight) or 0.0
+            ),
+            active=bool(metadata.get("active", True)),
+            superseded_by=metadata.get("superseded_by"),
             evidence_text=metadata.get("evidence_text", event.text),
             source=event.source,
             metadata=metadata,
@@ -44,8 +49,9 @@ class SqliteGraphMemoryStore:
                 INSERT OR REPLACE INTO graph_facts (
                     fact_id, timestamp, subject_type, subject_key, relation,
                     object_type, object_key, subject_name, object_name,
-                    weight, confidence, evidence_text, source, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    weight, confidence, continuity_weight, active, superseded_by,
+                    evidence_text, source, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     fact.fact_id,
@@ -59,6 +65,9 @@ class SqliteGraphMemoryStore:
                     fact.object_name,
                     fact.weight,
                     fact.confidence,
+                    fact.continuity_weight,
+                    1 if fact.active else 0,
+                    fact.superseded_by,
                     fact.evidence_text,
                     fact.source,
                     json.dumps(fact.metadata, ensure_ascii=False, sort_keys=True),
@@ -74,9 +83,10 @@ class SqliteGraphMemoryStore:
             rows = conn.execute(
                 """
                 SELECT fact_id, subject_type, subject_key, relation, object_type, object_key,
-                       subject_name, object_name, weight, confidence, evidence_text, source, metadata_json
+                       subject_name, object_name, weight, confidence, continuity_weight, active,
+                       superseded_by, evidence_text, source, metadata_json
                 FROM graph_facts
-                ORDER BY timestamp DESC
+                ORDER BY active DESC, timestamp DESC
                 """
             ).fetchall()
 
@@ -87,20 +97,32 @@ class SqliteGraphMemoryStore:
             text = f"{subject_name} [{row['subject_type']}] -> {row['relation']} -> {object_name} [{row['object_type']}]"
             evidence = str(row["evidence_text"] or "").strip()
             haystack = f"{text} {evidence}".lower()
-            score = float(sum(1 for token in tokens if token in haystack))
+            lexical_score = float(sum(1 for token in tokens if token in haystack))
+            structural_score = (
+                float(row["weight"] or 0.0)
+                + float(row["confidence"] or 0.0)
+                + float(row["continuity_weight"] or 0.0)
+            )
+            active_boost = 0.5 if int(row["active"] or 0) else 0.0
+            score = lexical_score + structural_score + active_boost
             if score <= 0:
                 continue
-            if evidence:
-                text = f"{text} | Evidence: {evidence}"
+            status = "active" if int(row["active"] or 0) else "historical"
+            domain = ""
             metadata = json.loads(row["metadata_json"] or "{}")
+            domain = str(metadata.get("fact_domain", "") or "")
+            if evidence:
+                text = f"{text} | Status: {status} | Evidence: {evidence}"
+            else:
+                text = f"{text} | Status: {status}"
             hits.append(
                 RetrievalHit(
                     channel="graph",
                     text=text,
                     score=score,
-                    kind="fact",
+                    kind=domain or "fact",
                     source_ref=row["fact_id"],
-                    tags=[],
+                    tags=[tag for tag in (domain, status) if tag],
                     metadata=metadata,
                 )
             )
@@ -110,12 +132,57 @@ class SqliteGraphMemoryStore:
 
     def stats(self) -> dict[str, int | str]:
         with self._connect() as conn:
-            row = conn.execute("SELECT COUNT(*) AS count FROM graph_facts").fetchone()
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS count,
+                    SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END) AS active_count
+                FROM graph_facts
+                """
+            ).fetchone()
         return {
             "channel": "graph",
             "entries": int(row["count"] if row is not None else 0),
+            "active_entries": int(row["active_count"] if row is not None and row["active_count"] is not None else 0),
             "path": str(self.path),
         }
+
+    def list_events(self) -> list[MemoryEvent]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT fact_id, timestamp, subject_type, subject_key, relation, object_type, object_key,
+                       subject_name, object_name, weight, confidence, continuity_weight, active,
+                       superseded_by, evidence_text, source, metadata_json
+                FROM graph_facts
+                ORDER BY timestamp DESC
+                """
+            ).fetchall()
+
+        events: list[MemoryEvent] = []
+        for row in rows:
+            metadata = json.loads(row["metadata_json"] or "{}")
+            events.append(
+                MemoryEvent(
+                    event_id=str(row["fact_id"] or ""),
+                    timestamp=str(row["timestamp"] or ""),
+                    session_id=str(metadata.get("session_id", "") or ""),
+                    turn_id=str(metadata.get("turn_id", "") or ""),
+                    channel="graph",
+                    kind=str(metadata.get("fact_domain") or "fact"),
+                    text=str(row["evidence_text"] or ""),
+                    summary=None,
+                    tags=[tag for tag in (metadata.get("fact_domain"), "active" if int(row["active"] or 0) else "historical") if tag],
+                    importance=float(row["weight"] or 0.0),
+                    confidence=float(row["confidence"] or 1.0),
+                    continuity_weight=float(row["continuity_weight"] or 0.0),
+                    retention="active" if int(row["active"] or 0) else "archived",
+                    supersedes=[row["superseded_by"]] if row["superseded_by"] else [],
+                    source=str(row["source"] or ""),
+                    metadata=metadata,
+                )
+            )
+        return events
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
@@ -138,12 +205,31 @@ class SqliteGraphMemoryStore:
                     object_name TEXT,
                     weight REAL NOT NULL,
                     confidence REAL NOT NULL,
+                    continuity_weight REAL NOT NULL DEFAULT 0.0,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    superseded_by TEXT,
                     evidence_text TEXT,
                     source TEXT NOT NULL,
                     metadata_json TEXT NOT NULL DEFAULT '{}'
                 )
                 """
             )
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(graph_facts)").fetchall()
+            }
+            if "continuity_weight" not in columns:
+                conn.execute(
+                    "ALTER TABLE graph_facts ADD COLUMN continuity_weight REAL NOT NULL DEFAULT 0.0"
+                )
+            if "active" not in columns:
+                conn.execute(
+                    "ALTER TABLE graph_facts ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
+                )
+            if "superseded_by" not in columns:
+                conn.execute(
+                    "ALTER TABLE graph_facts ADD COLUMN superseded_by TEXT"
+                )
 
     def _tokens(self, text: str) -> set[str]:
         return {

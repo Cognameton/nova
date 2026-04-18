@@ -1,0 +1,260 @@
+Nova 2.0 Phase 1 Plan
+
+Mission
+Nova 2.0 Phase 1 establishes a stable, text-only local runtime that can host a candidate GGUF model under a fixed identity, prompt, memory, and output contract. Phase 1 is not about agentic behavior, voice, or model bakeoff. It is about creating a disciplined experimental harness for continuity-oriented local inference.
+
+Phase 1 Objectives
+1. Create one canonical text runtime for Nova.
+2. Define and enforce a no-<think> output contract.
+3. Persist persona state and mutable self-state separately.
+4. Establish baseline memory channels and retrieval plumbing.
+5. Produce full session and trace logging for forensic inspection.
+6. Add basic continuity probes.
+7. End with a runnable CLI and smoke-test coverage.
+
+Architectural Principles
+- Local inference only.
+- One canonical runtime path.
+- Model artifacts live outside the repo.
+- Prompt composition is deterministic and inspectable.
+- Memory channels have distinct responsibilities.
+- Invalid generations do not poison long-term memory.
+- Logging and traces are first-class, not optional extras.
+- Architecture cleanliness takes priority over feature sprawl.
+
+Top-Level Package Shape
+- src/nova/
+- configs/
+- data/
+- tests/
+- docs/
+
+Core Runtime Components
+- NovaConfig
+  Loads and validates runtime configuration.
+- InferenceBackend
+  Abstract model execution contract.
+- LlamaCppBackend
+  Phase 1 local inference backend.
+- PersonaState
+  Stable identity scaffold.
+- SelfState
+  Mutable current self-model.
+- PromptComposer
+  Deterministic prompt assembly.
+- OutputValidator
+  Enforces the response contract.
+- RetryPolicy
+  Handles format failures cleanly.
+- SessionStore
+  Persists session turns.
+- TraceLogger
+  Persists forensic traces and probe results.
+- MemoryStore implementations
+  Episodic, engram, graph, autobiographical.
+- MemoryRouter
+  Coordinates writes and retrieval across channels.
+- ProbeRunner
+  Emits lightweight continuity probes.
+- NovaRuntime
+  Orchestrates the end-to-end turn lifecycle.
+- CLI
+  User-facing text runner.
+
+Prompt Contract
+Nova responses must:
+- respond directly
+- avoid visible chain-of-thought
+- never emit <think> tags
+- avoid prompt/section echoing
+- avoid leaking internal planning language
+
+If validation fails:
+1. mark the output invalid
+2. retry with a concise repair instruction
+3. fall back if necessary
+4. never write invalid generations into long-term memory
+
+Prompt Composition Order
+1. Persona
+2. Self-State
+3. Memory blocks
+4. Recent conversation
+5. User input
+6. Response rules
+
+Phase 1 Memory Roles
+Episodic memory
+- append-oriented event history
+- raw user and assistant turns
+
+Engram memory
+- associative pattern memory
+- recurring phrasing, motifs, identity-relevant wording
+
+Graph memory
+- structured facts and relations
+- self, user, preference, project, runtime facts
+
+Autobiographical memory
+- privileged continuity-bearing notes
+- identity-relevant summaries and self-model continuity
+
+Semantic memory
+- intentionally deferred as a true layer until Phase 2
+
+Phase 1 Data Contracts
+The runtime defines explicit schemas for:
+- PersonaState
+- SelfState
+- MemoryEvent
+- GraphFact
+- RetrievalHit
+- PromptBundle
+- GenerationRequest
+- GenerationResult
+- ValidationResult
+- TurnRecord
+- TraceRecord
+- ProbeResult
+
+Phase 1 Stages
+
+Stage 1: Package Skeleton
+Deliverables
+- repo skeleton
+- pyproject.toml
+- README.md
+- config file
+- module layout under src/nova/
+
+Stage 2: Shared Types
+Deliverables
+- typed Phase 1 data contracts in types.py
+- schema versioning
+- serialization helpers
+
+Stage 3: Config Layer
+Deliverables
+- NovaConfig and config sections
+- YAML loading and override merge
+- validation and config snapshot support
+
+Stage 4: Persona and Self-State Persistence
+Deliverables
+- default PersonaState and SelfState
+- JSON persona store
+- JSON self-state store
+- startup initialization behavior
+
+Stage 5: Inference Backend
+Deliverables
+- InferenceBackend contract
+- LlamaCppBackend implementation
+- support for model path, context, GPU settings, tensor split
+
+Stage 6: Output Contract and Validation
+Deliverables
+- canonical response rules
+- validator for no-<think>, no visible reasoning, no prompt echo
+- retry policy
+
+Stage 7: Prompt Composer
+Deliverables
+- deterministic PromptBundle generation
+- fixed block order
+- token estimation hook
+- grouped memory formatting
+
+Stage 8: Session and Trace Persistence
+Deliverables
+- JSONL session store
+- JSONL trace logger
+- recent turn reconstruction
+- probe log persistence
+
+Stage 9: Initial Memory Channels
+Deliverables
+- MemoryStore contract
+- episodic memory store
+- graph memory store
+- autobiographical memory store
+
+Stage 10: Memory Routing and Event Creation
+Deliverables
+- memory event factory
+- write fan-out to enabled stores
+- multi-channel retrieval merge and dedupe
+
+Stage 11: Runtime Orchestrator
+Deliverables
+- NovaRuntime start/respond/close lifecycle
+- prompt assembly, generation, validation, retries
+- session persistence, memory writes, trace logging
+
+Stage 12: Engram Memory
+Deliverables
+- associative n-gram/postings memory store
+- retention controls and pruning hooks
+- engram writes and retrieval integrated into runtime
+
+Stage 13: Initial Continuity Probes
+Deliverables
+- startup probe
+- no-think compliance probe
+- identity consistency probe
+- self-description stability probe
+
+Stage 14: CLI
+Deliverables
+- interactive text CLI
+- config override support
+- session selection
+- debug mode
+
+Stage 15: Hardening and Smoke Tests
+Deliverables
+- malformed session-line tolerance
+- runtime cleanup improvements
+- unittest smoke suite covering config, prompt/validation, session/memory, and end-to-end runtime
+
+Session Lifecycle
+1. load config
+2. load persona state
+3. load self-state
+4. initialize backend
+5. start or resume session
+6. retrieve memory hits
+7. compose prompt
+8. generate output
+9. validate output
+10. retry if needed
+11. persist turn
+12. write memory events
+13. log trace
+14. log probes if enabled
+
+Phase 1 Testing
+Smoke coverage should verify:
+- config override merging
+- prompt composition
+- output validation and retry policy
+- session persistence round-trip
+- episodic retrieval
+- one full runtime turn with a fake backend
+
+Phase 1 Exit Criteria
+Phase 1 is complete when:
+- Nova runs through one canonical text-only runtime
+- one local GGUF model can be loaded and queried reproducibly
+- output validation blocks or retries visible reasoning leakage
+- persona and self-state persist across sessions
+- sessions and traces are logged every turn
+- baseline memory channels are active
+- continuity probes exist and run
+- the CLI is usable
+- smoke tests pass
+
+Phase 1 Completion Status
+Completed.
+The Phase 1 runtime, memory scaffolding, probes, CLI, and smoke tests were implemented, committed, and pushed to GitHub on branch main.

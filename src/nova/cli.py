@@ -14,6 +14,7 @@ from nova.memory.engram import JsonEngramMemoryStore
 from nova.memory.episodic import JsonlEpisodicMemoryStore
 from nova.memory.graph import SqliteGraphMemoryStore
 from nova.memory.retrieval import BasicMemoryEventFactory, BasicMemoryRouter
+from nova.memory.semantic import JsonlSemanticMemoryStore
 from nova.persona.store import JsonPersonaStore, JsonSelfStateStore
 from nova.prompt.composer import NovaPromptComposer
 from nova.prompt.retry import BasicRetryPolicy
@@ -59,11 +60,13 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     autobiographical_store = JsonlAutobiographicalMemoryStore(
         memory_dir / "autobiographical.jsonl"
     )
+    semantic_store = JsonlSemanticMemoryStore(memory_dir / "semantic.jsonl")
     memory_router = BasicMemoryRouter(
         episodic=episodic_store if config.memory.episodic_enabled else None,
         engram=engram_store if config.memory.engram_enabled else None,
         graph=graph_store if config.memory.graph_enabled else None,
         autobiographical=autobiographical_store if config.memory.autobiographical_enabled else None,
+        semantic=semantic_store if config.memory.semantic_enabled else None,
     )
 
     backend = LlamaCppBackend(config)

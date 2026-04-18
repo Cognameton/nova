@@ -57,6 +57,9 @@ class JsonlEpisodicMemoryStore:
             "path": str(self.path),
         }
 
+    def list_events(self) -> list[MemoryEvent]:
+        return [self._event_from_payload(payload) for payload in self._load_events()]
+
     def _load_events(self) -> list[dict]:
         events: list[dict] = []
         with self.path.open("r", encoding="utf-8") as handle:
@@ -71,6 +74,27 @@ class JsonlEpisodicMemoryStore:
                 if isinstance(payload, dict):
                     events.append(payload)
         return events
+
+    def _event_from_payload(self, payload: dict) -> MemoryEvent:
+        return MemoryEvent(
+            schema_version=str(payload.get("schema_version", "")) or "1.0",
+            event_id=str(payload.get("event_id", "") or ""),
+            timestamp=str(payload.get("timestamp", "") or ""),
+            session_id=str(payload.get("session_id", "") or ""),
+            turn_id=str(payload.get("turn_id", "") or ""),
+            channel=str(payload.get("channel", "episodic") or "episodic"),
+            kind=str(payload.get("kind", "") or ""),
+            text=str(payload.get("text", "") or ""),
+            summary=payload.get("summary"),
+            tags=list(payload.get("tags", []) or []),
+            importance=float(payload.get("importance", 0.0) or 0.0),
+            confidence=float(payload.get("confidence", 1.0) or 1.0),
+            continuity_weight=float(payload.get("continuity_weight", 0.0) or 0.0),
+            retention=str(payload.get("retention", "active") or "active"),
+            supersedes=list(payload.get("supersedes", []) or []),
+            source=str(payload.get("source", "") or ""),
+            metadata=dict(payload.get("metadata", {}) or {}),
+        )
 
     def _tokens(self, text: str) -> set[str]:
         return {

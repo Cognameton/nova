@@ -140,6 +140,37 @@ class JsonEngramMemoryStore:
             "path": str(self.path),
         }
 
+    def list_events(self) -> list[MemoryEvent]:
+        if not self.enabled:
+            return []
+        events: list[MemoryEvent] = []
+        for entry in self.entries:
+            created_at = float(entry.get("created_at", 0.0) or 0.0)
+            timestamp = datetime.fromtimestamp(created_at, tz=datetime.now().astimezone().tzinfo).astimezone().isoformat() if created_at else ""
+            metadata = dict(entry.get("meta", {}) or {})
+            metadata["hit_count"] = int(entry.get("hit_count", 0) or 0)
+            events.append(
+                MemoryEvent(
+                    event_id=str(entry.get("event_id", "") or ""),
+                    timestamp=timestamp,
+                    session_id=str(metadata.get("session_id", "") or ""),
+                    turn_id=str(metadata.get("turn_id", "") or ""),
+                    channel="engram",
+                    kind=str(entry.get("kind", "") or ""),
+                    text=str(entry.get("text", "") or ""),
+                    summary=None,
+                    tags=list(entry.get("tags", []) or []),
+                    importance=float(entry.get("importance", 0.0) or 0.0),
+                    confidence=float(entry.get("confidence", 1.0) or 1.0),
+                    continuity_weight=float(metadata.get("continuity_weight", 0.0) or 0.0),
+                    retention=str(metadata.get("retention", "active") or "active"),
+                    supersedes=list(metadata.get("supersedes", []) or []),
+                    source=str(entry.get("source", "") or ""),
+                    metadata=metadata,
+                )
+            )
+        return events
+
     def set_auto_prune(self, enabled: bool) -> dict[str, Any]:
         self.auto_prune = bool(enabled)
         if self.auto_prune:

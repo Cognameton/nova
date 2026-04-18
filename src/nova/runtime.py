@@ -86,6 +86,7 @@ class NovaRuntime:
         memory_hits = self.memory_router.retrieve(
             query=user_text,
             top_k_by_channel={
+                "semantic": 3,
                 "episodic": 4,
                 "engram": 4,
                 "graph": 4,
@@ -179,6 +180,8 @@ class NovaRuntime:
                 turn_id=turn_id,
                 user_text=user_text,
                 final_answer=final_answer,
+                persona=self.persona,
+                self_state=self.self_state,
             )
             self.memory_router.add_events(memory_events)
             persisted_memory_events = [event.to_dict() for event in memory_events]

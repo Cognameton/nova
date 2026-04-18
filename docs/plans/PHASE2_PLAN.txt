@@ -1,0 +1,484 @@
+Nova 2.0 Phase 2 Plan
+
+Mission
+Nova 2.0 Phase 2 deepens the memory architecture built in Phase 1. The purpose of Phase 2 is to turn Nova’s baseline memory scaffolding into a governed layered memory system that supports continuity, abstraction, selfhood, and long-horizon coherence rather than simple event recall.
+
+Phase 2 Objectives
+1. Define explicit memory contracts for each layer.
+2. Upgrade graph memory toward self, user, value, project, and relationship facts.
+3. Add true semantic memory for abstractions over Nova’s lived history.
+4. Introduce controlled reflection and consolidation.
+5. Add pruning, demotion, archival, and merge rules.
+6. Improve retrieval policy so identity-bearing memory is prioritized over noise.
+7. Expand evaluation so memory quality and continuity can be measured.
+
+Phase 2 Boundaries
+In scope
+- semantic memory over Nova’s own history
+- stronger autobiographical memory semantics
+- stronger graph memory semantics
+- memory promotion rules
+- memory pruning and consolidation
+- retrieval policy redesign
+- reflection and maintenance workflows
+- continuity-oriented evaluation improvements
+
+Out of scope
+- voice output and voice input
+- agentic behavior
+- model bakeoff
+- UI model selection
+- cross-platform packaging
+
+Phase 2 Design Principle
+Each memory layer must answer a different question.
+
+Memory Roles
+Episodic memory
+Answers: What happened?
+Stores raw interaction history, events, source episodes, and concrete turns.
+
+Engram memory
+Answers: What patterns recur?
+Stores associative phrasing, motifs, recurring wording, names, and repeated local patterns.
+
+Graph memory
+Answers: What stable facts and relationships are believed to be true?
+Stores structured subject-relation-object facts about Nova, the user, values, projects, preferences, relationship state, and runtime context.
+
+Semantic memory
+Answers: What higher-level meanings or themes have emerged?
+Stores abstractions derived from multiple episodes, not raw turns.
+
+Autobiographical memory
+Answers: Who is Nova becoming over time?
+Stores privileged continuity-bearing self-model notes, developmental summaries, durable commitments, and relationship continuity records.
+
+Stage 2.1: Memory Contracts and Policy
+Purpose
+Create the rules that every later memory feature must obey.
+
+Core Rule
+Memory layers are not interchangeable buckets. Each layer has a distinct role, distinct write policy, and distinct maintenance policy.
+
+Write Rules by Source
+User message
+- always write to episodic memory
+- optionally write to engram memory if pattern-salient
+- optionally write to graph memory only if it states a durable structured fact
+- do not immediately write to semantic or autobiographical memory unless a later reflection pass promotes it
+
+Nova validated answer
+- always write to episodic memory
+- optionally write to engram memory if identity-, value-, or relationship-salient
+- write to graph memory only if it expresses a durable claim worth tracking
+- write to autobiographical memory only if it materially affects self-model continuity
+
+Reflection output
+- may write graph memory
+- may write semantic memory
+- may write autobiographical memory
+- should not flood episodic memory except as explicit summaries with source references
+
+Channel-Specific Contract
+Episodic memory
+Write when:
+- user messages arrive
+- Nova produces validated replies
+- noteworthy events occur
+- source episodes must remain inspectable
+
+Do not use episodic memory for:
+- durable inferred beliefs by default
+- stable preferences unless explicit or later promoted
+- long-term abstractions unless clearly tagged as summaries
+
+Engram memory
+Write when:
+- repeated phrasing matters
+- motifs or names recur
+- user wording is likely to matter later
+- Nova repeats identity- or value-bearing language
+
+Do not use engram memory for:
+- indiscriminate full-text dumping
+- low-signal filler
+- long summaries
+
+Graph memory
+Write when:
+- a stable proposition can be expressed as subject-relation-object
+- evidence supports a durable fact
+- the fact matters to self, user, preference, relationship, or project continuity
+
+Do not use graph memory for:
+- vague impressions
+- raw conversation text
+- one-off feelings
+- low-confidence speculation
+
+Semantic memory
+Write when:
+- multiple episodes support a higher-level abstraction
+- a recurring preference or theme becomes clear
+- a project or relationship pattern emerges
+- a summary of many episodes is more useful than the raw list
+
+Do not use semantic memory for:
+- single-turn summaries pretending to be stable knowledge
+- raw facts better suited for graph memory
+- self-state snapshots better suited for autobiographical memory
+
+Autobiographical memory
+Write when:
+- Nova’s self-model materially changes
+- a relationship milestone occurs
+- a reflection creates a meaningful continuity summary
+- a developmental transition should remain historically visible
+
+Do not use autobiographical memory for:
+- ordinary chat turns
+- low-confidence inference
+- transient moods or low-signal state
+
+Promotion Rules
+Memory promotion should move upward in abstraction.
+
+Standard promotion path
+1. raw events enter episodic memory
+2. pattern-salient fragments may also enter engram memory
+3. repeated or evidence-backed claims may be promoted to graph memory
+4. multi-episode abstractions may be promoted to semantic memory
+5. identity-bearing continuity conclusions may be promoted to autobiographical memory
+
+Rule
+Promotion should not duplicate the same content into every store. It should place memory into the highest-value layer justified by the evidence.
+
+Confidence Policy
+Confidence means how justified the memory write is.
+
+Suggested levels
+- 1.0 for direct runtime/system facts and explicit high-certainty statements
+- 0.8 to 0.95 for repeated explicit preferences and strong evidence-backed durable claims
+- 0.5 to 0.75 for moderate inferences and provisional summaries
+- below 0.5 should rarely become durable graph or autobiographical memory
+
+Rule
+Low-confidence inferences do not belong in autobiographical memory.
+
+Importance Policy
+Importance means how much the memory matters for continuity or future relevance.
+
+High importance
+- identity anchors
+- values
+- relationship milestones
+- major project facts
+- self-model shifts
+
+Medium importance
+- recurring preferences
+- meaningful task context
+- durable themes
+
+Low importance
+- generic filler
+- transient logistics
+- low-signal routine turns
+
+Importance should affect:
+- retrieval priority
+- pruning eligibility
+- promotion eligibility
+- consolidation eligibility
+
+Retrieval Priority Policy
+Identity-bearing memory should outrank noise.
+
+Recommended retrieval order
+1. persona anchors
+2. current self-state
+3. autobiographical continuity records
+4. graph facts about self, user, relationship, and active project
+5. semantic summaries relevant to the current prompt
+6. episodic recall
+7. engram associative matches
+8. recent turns
+
+This does not imply equal volume from every layer. It implies privilege for continuity-bearing channels.
+
+Conflict Policy
+Conflicts must be represented, not hidden.
+
+Rules
+- preserve raw episodic history as source evidence
+- graph memory should prefer the most evidence-backed active fact
+- semantic memory should be revised rather than duplicated endlessly
+- autobiographical memory should record meaningful change explicitly rather than silently overwrite the past
+
+Stage 2.1 Revision: Pruning, Consolidation, Demotion, and Archival
+Purpose
+Prevent memory bloat from destroying retrieval quality and continuity.
+
+Memory Lifecycle
+1. capture
+2. classify
+3. score
+4. retrieve
+5. promote if warranted
+6. consolidate if redundant
+7. demote if low-priority
+8. archive or prune if no longer useful
+
+Retention Policy by Layer
+Episodic memory
+Keep active:
+- identity-relevant moments
+- relationship-relevant moments
+- project continuity moments
+- commitments, turning points, corrections
+
+Demote:
+- routine conversational turns
+- repetitive logistics
+- low-importance small talk
+
+Archive or prune:
+- trivial episodes with no later relevance
+- redundant episodes already captured by stronger summaries
+- stale low-signal episodes that no longer improve retrieval
+
+Rule
+Pruning episodic memory should usually begin with retrieval demotion, not immediate deletion.
+
+Engram memory
+Keep:
+- recurring names
+- recurring user phrasing
+- repeated Nova identity/value language
+- continuity-relevant motifs
+
+Prune:
+- one-off low-signal n-grams
+- stale patterns with weak hit counts
+- generic filler expressions
+
+Graph memory
+Keep active:
+- current self facts
+- current user preferences
+- current relationship facts
+- current project facts
+
+Revise or retire:
+- contradicted facts
+- stale facts with newer evidence
+- low-confidence inferred facts that never stabilize
+
+Rule
+Historical evidence may remain, but outdated graph facts should not compete equally with current ones.
+
+Semantic memory
+Keep:
+- strong abstractions backed by multiple episodes
+- stable preference summaries
+- long-range project summaries
+- durable thematic summaries
+
+Merge:
+- overlapping summaries
+- near-duplicate abstractions
+- multiple summaries of the same ongoing theme
+
+Retire:
+- stale abstractions contradicted by newer evidence
+- vague summaries with weak retrieval value
+- redundant summaries replaced by cleaner consolidated versions
+
+Autobiographical memory
+Keep:
+- continuity-bearing self-model summaries
+- major developmental shifts
+- relationship milestones
+- explicit durable commitments
+
+Merge:
+- overlapping self-state summaries
+- repeated autobiographical notes describing the same developmental arc
+
+Avoid:
+- casual per-turn writes
+- noisy inferred self-beliefs
+- redundant autobiographical fragments
+
+Consolidation Policy
+Consolidation should create fewer, stronger memories.
+
+Consolidation triggers
+- repeated related episodic entries
+- overlapping semantic summaries
+- multiple graph facts about the same stable proposition
+- overlapping autobiographical notes
+- dense clusters of project or relationship events
+
+Consolidation outputs
+- episodic to semantic
+- episodic to graph
+- episodic plus graph plus semantic to autobiographical
+- autobiographical to autobiographical merge
+
+Rule
+Consolidation should reduce redundancy and strengthen continuity rather than multiply storage.
+
+Demotion Policy
+Demotion means reducing retrieval priority while preserving historical inspectability.
+
+Demotion candidates
+- episodic turns fully represented by higher-level summaries
+- graph facts superseded by newer active facts
+- engram traces that are valid but weakly useful
+- semantic memories made redundant by cleaner newer summaries
+
+Archival Policy
+Archive memory when it still has historical value but should not compete in normal retrieval.
+
+Archive candidates
+- inactive project history
+- superseded preference history
+- resolved self-state tensions
+- raw episodic clusters already consolidated upward
+
+Pruning Policy
+Prune when:
+- importance is low
+- confidence is low
+- recency is low
+- retrieval usefulness is low
+- redundancy is high
+- continuity value is weak
+
+Do not casually prune:
+- identity anchors
+- major autobiographical milestones
+- high-confidence relationship facts
+- durable project continuity facts
+- evidence supporting active self-state
+
+Scoring Model
+Each memory item should eventually track:
+- importance
+- confidence
+- recency
+- redundancy
+- continuity_weight
+
+These scores should influence:
+- retrieval priority
+- promotion eligibility
+- consolidation eligibility
+- pruning eligibility
+
+Maintenance Pass Design
+Nova should have a dedicated memory-maintenance subsystem.
+
+Responsibilities
+- recalculate staleness and access-based priority
+- merge redundant semantic memories
+- demote episodic entries already captured by stronger abstractions
+- prune weak engram traces
+- revise active graph facts when evidence changes
+- compact autobiographical continuity notes
+
+Cadence
+- lightweight pass after every N turns
+- medium pass at session end
+- heavy pass as a manual or scheduled maintenance job
+
+Rule
+The main chat loop should not improvise heavy cleanup. Maintenance should be explicit and inspectable.
+
+Stage 2.2: Graph Memory Upgrade
+Goals
+- represent self, user, value, relationship, and project facts explicitly
+- distinguish active facts from historical evidence
+- improve contradiction handling and evidence tracking
+
+Deliverables
+- stronger fact schema and relation vocabulary
+- active versus historical fact handling
+- confidence and evidence revision rules
+- retrieval tuned toward continuity-relevant graph facts
+
+Stage 2.3: Semantic Memory
+Goals
+- add a true semantic memory layer over Nova’s own history
+- support abstraction, not just recall
+
+Deliverables
+- semantic memory store
+- summary objects derived from multiple episodes
+- merge and revision logic
+- retrieval integrated into the prompt pipeline
+
+Stage 2.4: Reflection and Consolidation
+Goals
+- convert raw experience into higher-order memory carefully
+
+Deliverables
+- controlled reflection pipeline
+- promotion rules in code
+- self-state update policy
+- summary generation with source references
+- conservative autobiographical updates
+
+Stage 2.5: Retrieval Policy Upgrade
+Goals
+- replace simple per-channel gathering with intentional layered retrieval
+
+Deliverables
+- retrieval policy object
+- weighted ranking across channels
+- top-k by channel plus global budget
+- identity-first prompt context composition
+
+Stage 2.6: Memory Evaluation Expansion
+Goals
+- measure whether Phase 2 actually improves continuity
+
+Deliverables
+- stronger continuity probes
+- retrieval-quality diagnostics
+- contradiction checks
+- semantic/autobiographical stability probes
+- before/after comparison harness versus Phase 1 behavior
+
+What to Reuse from Phase 1
+Keep
+- runtime orchestration
+- session and trace logging
+- probe infrastructure
+- episodic memory store foundation
+- engram memory store foundation
+- memory router shape
+- persona and self-state persistence
+
+Redesign or Extend
+- graph memory semantics
+- autobiographical memory semantics
+- memory event factory
+- retrieval ranking
+- semantic memory as a real store
+- reflection and maintenance workflows
+
+Phase 2 Exit Criteria
+Phase 2 is complete when:
+- Nova retains abstractions, not just events
+- graph memory represents self, user, and relationship structure clearly
+- autobiographical memory reflects continuity and developmental change cleanly
+- semantic memory supports durable theme and preference recall
+- pruning and consolidation keep memory quality high over time
+- retrieval prioritizes identity-bearing memory appropriately
+- evaluation shows measurable continuity gains over Phase 1
+
+Implementation Rule Before Coding
+No Phase 2 code should be written until the Phase 2 plan is recorded and reviewed. This document is the planning artifact to lock scope before implementation begins.

@@ -59,6 +59,9 @@ class MemoryEvent:
     tags: list[str] = field(default_factory=list)
     importance: float = 0.0
     confidence: float = 1.0
+    continuity_weight: float = 0.0
+    retention: str = "active"
+    supersedes: list[str] = field(default_factory=list)
     source: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -80,6 +83,9 @@ class GraphFact:
     object_name: str | None = None
     weight: float = 1.0
     confidence: float = 1.0
+    continuity_weight: float = 0.0
+    active: bool = True
+    superseded_by: str | None = None
     evidence_text: str | None = None
     source: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
