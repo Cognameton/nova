@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
 from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
+from nova.memory.maintenance import MemoryMaintenanceRunner
 from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
 from nova.memory.engram import JsonEngramMemoryStore
@@ -34,7 +36,7 @@ def _resolve_path(path_str: str) -> Path:
     return REPO_ROOT / path
 
 
-def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
+def build_memory_components(*, config_override: str | None = None) -> dict[str, Any]:
     config = load_config(
         default_path=REPO_ROOT / DEFAULT_CONFIG_PATH,
         override_path=config_override,
@@ -50,7 +52,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     persona_store = JsonPersonaStore(data_dir / "persona_state.json")
     self_state_store = JsonSelfStateStore(data_dir / "self_state.json")
     session_store = JsonlSessionStore(sessions_dir)
-    trace_logger = JsonlTraceLogger(traces_dir, probes_path=probes_path)
+    trace_logger = JsonlTraceLogger(traces_dir, probe_path=probes_path)
 
     episodic_store = JsonlEpisodicMemoryStore(memory_dir / "episodic.jsonl")
     engram_store = JsonEngramMemoryStore(
@@ -69,6 +71,40 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         autobiographical=autobiographical_store if config.memory.autobiographical_enabled else None,
         semantic=semantic_store if config.memory.semantic_enabled else None,
     )
+    maintenance_runner = MemoryMaintenanceRunner(
+        episodic=episodic_store,
+        engram=engram_store,
+        graph=graph_store,
+        autobiographical=autobiographical_store,
+        semantic=semantic_store,
+    )
+
+    return {
+        "config": config,
+        "data_dir": data_dir,
+        "log_dir": log_dir,
+        "persona_store": persona_store,
+        "self_state_store": self_state_store,
+        "session_store": session_store,
+        "trace_logger": trace_logger,
+        "episodic_store": episodic_store,
+        "engram_store": engram_store,
+        "graph_store": graph_store,
+        "autobiographical_store": autobiographical_store,
+        "semantic_store": semantic_store,
+        "memory_router": memory_router,
+        "maintenance_runner": maintenance_runner,
+    }
+
+
+def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
+    components = build_memory_components(config_override=config_override)
+    config = components["config"]
+    trace_logger = components["trace_logger"]
+    memory_router = components["memory_router"]
+    persona_store = components["persona_store"]
+    self_state_store = components["self_state_store"]
+    session_store = components["session_store"]
 
     backend = LlamaCppBackend(config)
     composer = NovaPromptComposer(token_counter=backend.tokenize)
@@ -116,12 +152,71 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print extra runtime details after each reply.",
     )
+    parser.add_argument(
+        "--maintenance-action",
+        choices=("plan", "write-semantic", "write-autobiographical", "apply", "full"),
+        help="Run a maintenance/reflection action instead of interactive chat.",
+    )
     return parser
+
+
+def run_maintenance_action(*, config_override: str | None = None, action: str) -> dict[str, Any]:
+    components = build_memory_components(config_override=config_override)
+    runner: MemoryMaintenanceRunner = components["maintenance_runner"]
+
+    if action == "plan":
+        return {
+            "action": action,
+            "summary": runner.summarize_plan(),
+        }
+    if action == "write-semantic":
+        candidates = runner.write_semantic_candidates()
+        return {
+            "action": action,
+            "written": len(candidates),
+            "event_ids": [candidate.event_id for candidate in candidates],
+        }
+    if action == "write-autobiographical":
+        candidates = runner.write_autobiographical_candidates()
+        return {
+            "action": action,
+            "written": len(candidates),
+            "event_ids": [candidate.event_id for candidate in candidates],
+        }
+    if action == "apply":
+        decisions = runner.build_plan()
+        return {
+            "action": action,
+            "applied": runner.apply_plan(decisions),
+        }
+    if action == "full":
+        semantic_candidates = runner.write_semantic_candidates()
+        autobiographical_candidates = runner.write_autobiographical_candidates()
+        decisions = runner.build_plan()
+        applied = runner.apply_plan(decisions)
+        return {
+            "action": action,
+            "semantic_written": len(semantic_candidates),
+            "autobiographical_written": len(autobiographical_candidates),
+            "applied": applied,
+            "summary": runner.summarize_plan(),
+        }
+    raise ValueError(f"Unsupported maintenance action: {action}")
 
 
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.maintenance_action:
+        result = run_maintenance_action(
+            config_override=args.config_override,
+            action=args.maintenance_action,
+        )
+        print("Nova 2.0 Maintenance")
+        for key, value in result.items():
+            print(f"{key}: {value}")
+        return 0
 
     runtime = build_runtime(config_override=args.config_override)
     session_id = None if args.new_session else args.session_id
