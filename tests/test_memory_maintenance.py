@@ -287,6 +287,74 @@ class MemoryMaintenanceTests(unittest.TestCase):
             self.assertEqual(len(semantic_events), 1)
             self.assertEqual(semantic_events[0].channel, "semantic")
 
+    def test_runner_can_apply_retention_mutations_to_stores(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            episodic = JsonlEpisodicMemoryStore(base / "episodic.jsonl")
+            graph = SqliteGraphMemoryStore(base / "graph.db")
+
+            episodic.add(
+                MemoryEvent(
+                    event_id="ep1",
+                    timestamp="2026-04-01T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="Routine update",
+                    importance=0.2,
+                    confidence=1.0,
+                    continuity_weight=0.1,
+                    source="nova",
+                    metadata={"promoted": True},
+                )
+            )
+            graph.add(
+                MemoryEvent(
+                    event_id="gr1",
+                    timestamp="2026-03-15T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t3",
+                    channel="graph",
+                    kind="preference_fact",
+                    text="Historical preference",
+                    importance=0.5,
+                    confidence=0.7,
+                    continuity_weight=0.4,
+                    source="user",
+                    metadata={
+                        "fact_id": "user-old-pref",
+                        "fact_domain": "preference",
+                        "subject_type": "user",
+                        "subject_key": "user",
+                        "relation": "prefers",
+                        "object_type": "preference",
+                        "object_key": "old-pref",
+                        "weight": 0.5,
+                        "confidence": 0.7,
+                        "continuity_weight": 0.4,
+                        "active": False,
+                        "evidence_text": "Historical preference",
+                    },
+                )
+            )
+
+            runner = MemoryMaintenanceRunner(episodic=episodic, graph=graph)
+            decisions = runner.build_plan()
+            results = runner.apply_plan(decisions)
+
+            self.assertGreaterEqual(results.get("episodic", 0), 1)
+            self.assertGreaterEqual(results.get("graph", 0), 1)
+
+            episodic_event = episodic.list_events()[0]
+            graph_event = graph.list_events()[0]
+            self.assertEqual(episodic_event.retention, "demoted")
+            self.assertEqual(graph_event.retention, "archived")
+
+            hits = episodic.search("routine", top_k=3)
+            self.assertEqual(len(hits), 1)
+            self.assertEqual(hits[0].metadata.get("retention"), "demoted")
+
 
 if __name__ == "__main__":
     unittest.main()

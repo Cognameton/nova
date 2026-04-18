@@ -9,6 +9,7 @@ from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
+from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
 from nova.memory.engram import JsonEngramMemoryStore
 from nova.memory.episodic import JsonlEpisodicMemoryStore
@@ -74,6 +75,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     validator = NovaOutputValidator(config.contract)
     retry_policy = BasicRetryPolicy()
     event_factory = BasicMemoryEventFactory()
+    retrieval_policy = IdentityFirstRetrievalPolicy()
     probe_runner = BasicProbeRunner() if config.eval.enable_probes else None
 
     return NovaRuntime(
@@ -88,6 +90,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         trace_logger=trace_logger,
         memory_router=memory_router,
         memory_event_factory=event_factory,
+        retrieval_policy=retrieval_policy,
         probe_runner=probe_runner,
     )
 

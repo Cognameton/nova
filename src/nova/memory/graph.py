@@ -108,8 +108,14 @@ class SqliteGraphMemoryStore:
             if score <= 0:
                 continue
             status = "active" if int(row["active"] or 0) else "historical"
-            domain = ""
             metadata = json.loads(row["metadata_json"] or "{}")
+            retention = str(metadata.get("retention", "active") or "active")
+            if retention == "pruned":
+                continue
+            if retention == "demoted":
+                score *= 0.7
+            elif retention == "archived":
+                score *= 0.45
             domain = str(metadata.get("fact_domain", "") or "")
             if evidence:
                 text = f"{text} | Status: {status} | Evidence: {evidence}"
@@ -122,7 +128,7 @@ class SqliteGraphMemoryStore:
                     score=score,
                     kind=domain or "fact",
                     source_ref=row["fact_id"],
-                    tags=[tag for tag in (domain, status) if tag],
+                    tags=[tag for tag in (domain, status, retention) if tag],
                     metadata=metadata,
                 )
             )
@@ -176,13 +182,56 @@ class SqliteGraphMemoryStore:
                     importance=float(row["weight"] or 0.0),
                     confidence=float(row["confidence"] or 1.0),
                     continuity_weight=float(row["continuity_weight"] or 0.0),
-                    retention="active" if int(row["active"] or 0) else "archived",
+                    retention=str(metadata.get("retention", "active" if int(row["active"] or 0) else "archived")),
                     supersedes=[row["superseded_by"]] if row["superseded_by"] else [],
                     source=str(row["source"] or ""),
                     metadata=metadata,
                 )
             )
         return events
+
+    def apply_maintenance_decisions(self, decisions: list[object]) -> int:
+        decision_map = {
+            getattr(decision, "event_id", ""): decision
+            for decision in decisions
+            if getattr(decision, "event_id", "")
+        }
+        if not decision_map:
+            return 0
+
+        updated = 0
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT fact_id, metadata_json FROM graph_facts"
+            ).fetchall()
+            for row in rows:
+                fact_id = str(row["fact_id"] or "")
+                decision = decision_map.get(fact_id)
+                if decision is None:
+                    continue
+                metadata = json.loads(row["metadata_json"] or "{}")
+                target_retention = str(getattr(decision, "target_retention", "active") or "active")
+                metadata["retention"] = target_retention
+                metadata["maintenance"] = {
+                    "action": getattr(decision, "action", ""),
+                    "reason": getattr(decision, "reason", ""),
+                    "applied_at": "maintenance",
+                }
+                active = 1 if target_retention == "active" else 0
+                conn.execute(
+                    """
+                    UPDATE graph_facts
+                    SET active = ?, metadata_json = ?
+                    WHERE fact_id = ?
+                    """,
+                    (
+                        active,
+                        json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+                        fact_id,
+                    ),
+                )
+                updated += 1
+        return updated
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)

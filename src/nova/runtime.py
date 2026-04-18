@@ -8,6 +8,7 @@ from uuid import uuid4
 from nova.config import NovaConfig
 from nova.inference.base import InferenceBackend
 from nova.logging.traces import JsonlTraceLogger
+from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.retrieval import BasicMemoryEventFactory, BasicMemoryRouter
 from nova.persona.store import JsonPersonaStore, JsonSelfStateStore
 from nova.prompt.composer import NovaPromptComposer
@@ -38,6 +39,7 @@ class NovaRuntime:
         trace_logger: JsonlTraceLogger,
         memory_router: BasicMemoryRouter,
         memory_event_factory: BasicMemoryEventFactory,
+        retrieval_policy: IdentityFirstRetrievalPolicy | None = None,
         probe_runner: object | None = None,
     ):
         self.config = config
@@ -51,6 +53,7 @@ class NovaRuntime:
         self.trace_logger = trace_logger
         self.memory_router = memory_router
         self.memory_event_factory = memory_event_factory
+        self.retrieval_policy = retrieval_policy or IdentityFirstRetrievalPolicy()
         self.probe_runner = probe_runner
 
         self.session_id: str | None = None
@@ -83,16 +86,15 @@ class NovaRuntime:
             session_id=self.session_id,
             limit=self.config.session.max_recent_turns,
         )
+        retrieval_plan = self.retrieval_policy.plan(
+            query=user_text,
+            self_state=self.self_state,
+        )
         memory_hits = self.memory_router.retrieve(
             query=user_text,
-            top_k_by_channel={
-                "semantic": 3,
-                "episodic": 4,
-                "engram": 4,
-                "graph": 4,
-                "autobiographical": 3,
-            },
+            top_k_by_channel=retrieval_plan.top_k_by_channel,
         )
+        memory_hits = self.retrieval_policy.rerank_hits(memory_hits)
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,

@@ -100,10 +100,17 @@ class JsonEngramMemoryStore:
             if entry_id < 0 or entry_id >= len(self.entries):
                 continue
             entry = self.entries[entry_id]
+            retention = str((entry.get("meta", {}) or {}).get("retention", "active") or "active")
+            if retention == "pruned":
+                continue
             denom = (query_norm * max(1.0, float(len(entry.get("ngrams", []))))) ** 0.5
             score = float(hits / denom) + (0.1 * float(entry.get("importance", 0.0) or 0.0))
             if score <= 0.0:
                 continue
+            if retention == "demoted":
+                score *= 0.6
+            elif retention == "archived":
+                score *= 0.35
             ranked.append(
                 RetrievalHit(
                     channel="engram",
@@ -116,6 +123,8 @@ class JsonEngramMemoryStore:
                         **dict(entry.get("meta", {}) or {}),
                         "source": entry.get("source"),
                         "confidence": entry.get("confidence", 1.0),
+                        "importance": entry.get("importance", 0.0),
+                        "retention": retention,
                         "memory_channel": "engram",
                     },
                 )
@@ -170,6 +179,37 @@ class JsonEngramMemoryStore:
                 )
             )
         return events
+
+    def apply_maintenance_decisions(self, decisions: list[object]) -> int:
+        if not self.enabled:
+            return 0
+        decision_map = {
+            getattr(decision, "event_id", ""): decision
+            for decision in decisions
+            if getattr(decision, "event_id", "")
+        }
+        if not decision_map:
+            return 0
+
+        updated = 0
+        for entry in self.entries:
+            event_id = str(entry.get("event_id", "") or "")
+            decision = decision_map.get(event_id)
+            if decision is None:
+                continue
+            meta = dict(entry.get("meta", {}) or {})
+            meta["retention"] = str(getattr(decision, "target_retention", "active") or "active")
+            meta["maintenance"] = {
+                "action": getattr(decision, "action", ""),
+                "reason": getattr(decision, "reason", ""),
+                "applied_at": time.time(),
+            }
+            entry["meta"] = meta
+            updated += 1
+
+        if updated:
+            self._save()
+        return updated
 
     def set_auto_prune(self, enabled: bool) -> dict[str, Any]:
         self.auto_prune = bool(enabled)

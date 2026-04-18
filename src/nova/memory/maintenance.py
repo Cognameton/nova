@@ -288,3 +288,26 @@ class MemoryMaintenanceRunner:
         for candidate in candidates:
             semantic_store.add(candidate)
         return candidates
+
+    def apply_plan(
+        self,
+        decisions: list[MaintenanceDecision] | None = None,
+        *,
+        actions: set[str] | None = None,
+    ) -> dict[str, int]:
+        selected_actions = actions or {"demote", "archive", "prune"}
+        decisions = decisions or self.build_plan()
+        by_channel: dict[str, list[MaintenanceDecision]] = {}
+        for decision in decisions:
+            if decision.action not in selected_actions:
+                continue
+            by_channel.setdefault(decision.channel, []).append(decision)
+
+        results: dict[str, int] = {}
+        for channel, channel_decisions in by_channel.items():
+            store = self.stores.get(channel)
+            if store is None or not hasattr(store, "apply_maintenance_decisions"):
+                results[channel] = 0
+                continue
+            results[channel] = int(store.apply_maintenance_decisions(channel_decisions))
+        return results

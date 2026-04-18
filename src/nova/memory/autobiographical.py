@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from nova.types import MemoryEvent, RetrievalHit
@@ -27,6 +28,9 @@ class JsonlAutobiographicalMemoryStore:
 
         hits: list[RetrievalHit] = []
         for payload in self._load_events():
+            retention = str(payload.get("retention", "active") or "active")
+            if retention == "pruned":
+                continue
             text = str(payload.get("text", "") or "")
             text_tokens = set(self._tokens(text))
             if not text_tokens:
@@ -36,6 +40,10 @@ class JsonlAutobiographicalMemoryStore:
             score = overlap + importance
             if score <= 0:
                 continue
+            if retention == "demoted":
+                score *= 0.7
+            elif retention == "archived":
+                score *= 0.45
             hits.append(
                 RetrievalHit(
                     channel="autobiographical",
@@ -44,7 +52,13 @@ class JsonlAutobiographicalMemoryStore:
                     kind=payload.get("kind"),
                     source_ref=payload.get("event_id"),
                     tags=list(payload.get("tags", []) or []),
-                    metadata=dict(payload.get("metadata", {}) or {}),
+                    metadata={
+                        **dict(payload.get("metadata", {}) or {}),
+                        "retention": retention,
+                        "importance": importance,
+                        "continuity_weight": float(payload.get("continuity_weight", 0.0) or 0.0),
+                        "confidence": float(payload.get("confidence", 1.0) or 1.0),
+                    },
                 )
             )
 
@@ -61,6 +75,36 @@ class JsonlAutobiographicalMemoryStore:
     def list_events(self) -> list[MemoryEvent]:
         return [self._event_from_payload(payload) for payload in self._load_events()]
 
+    def apply_maintenance_decisions(self, decisions: list[object]) -> int:
+        decision_map = {
+            getattr(decision, "event_id", ""): decision
+            for decision in decisions
+            if getattr(decision, "event_id", "")
+        }
+        if not decision_map:
+            return 0
+
+        payloads = self._load_events()
+        updated = 0
+        for payload in payloads:
+            event_id = str(payload.get("event_id", "") or "")
+            decision = decision_map.get(event_id)
+            if decision is None:
+                continue
+            payload["retention"] = str(getattr(decision, "target_retention", "active") or "active")
+            metadata = dict(payload.get("metadata", {}) or {})
+            metadata["maintenance"] = {
+                "action": getattr(decision, "action", ""),
+                "reason": getattr(decision, "reason", ""),
+                "applied_at": datetime.now(timezone.utc).isoformat(),
+            }
+            payload["metadata"] = metadata
+            updated += 1
+
+        if updated:
+            self._save_payloads(payloads)
+        return updated
+
     def _load_events(self) -> list[dict]:
         events: list[dict] = []
         with self.path.open("r", encoding="utf-8") as handle:
@@ -75,6 +119,11 @@ class JsonlAutobiographicalMemoryStore:
                 if isinstance(payload, dict):
                     events.append(payload)
         return events
+
+    def _save_payloads(self, payloads: list[dict]) -> None:
+        with self.path.open("w", encoding="utf-8") as handle:
+            for payload in payloads:
+                handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     def _event_from_payload(self, payload: dict) -> MemoryEvent:
         return MemoryEvent(
