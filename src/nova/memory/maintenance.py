@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from nova.memory.consolidation import SemanticConsolidator
+from nova.memory.reflection import ReflectionEngine
 from nova.types import MemoryEvent
 
 
@@ -239,7 +239,7 @@ class MemoryMaintenanceRunner:
         autobiographical: Any | None = None,
         semantic: Any | None = None,
         planner: MemoryMaintenancePlanner | None = None,
-        consolidator: SemanticConsolidator | None = None,
+        reflection_engine: ReflectionEngine | None = None,
     ):
         self.stores = {
             "episodic": episodic,
@@ -249,7 +249,7 @@ class MemoryMaintenanceRunner:
             "semantic": semantic,
         }
         self.planner = planner or MemoryMaintenancePlanner()
-        self.consolidator = consolidator or SemanticConsolidator()
+        self.reflection_engine = reflection_engine or ReflectionEngine()
 
     def collect_events(self) -> list[MemoryEvent]:
         events: list[MemoryEvent] = []
@@ -278,7 +278,7 @@ class MemoryMaintenanceRunner:
         episodic_store = self.stores.get("episodic")
         if episodic_store is None or not hasattr(episodic_store, "list_events"):
             return []
-        return self.consolidator.build_candidates(episodic_store.list_events())
+        return self.reflection_engine.build_semantic_candidates(episodic_store.list_events())
 
     def write_semantic_candidates(self) -> list[MemoryEvent]:
         semantic_store = self.stores.get("semantic")
@@ -287,6 +287,30 @@ class MemoryMaintenanceRunner:
             return candidates
         for candidate in candidates:
             semantic_store.add(candidate)
+        return candidates
+
+    def build_autobiographical_candidates(self) -> list[MemoryEvent]:
+        episodic_store = self.stores.get("episodic")
+        if episodic_store is None or not hasattr(episodic_store, "list_events"):
+            return []
+        semantic_store = self.stores.get("semantic")
+        semantic_events = (
+            semantic_store.list_events()
+            if semantic_store is not None and hasattr(semantic_store, "list_events")
+            else []
+        )
+        return self.reflection_engine.build_autobiographical_candidates(
+            episodic_events=episodic_store.list_events(),
+            semantic_events=semantic_events,
+        )
+
+    def write_autobiographical_candidates(self) -> list[MemoryEvent]:
+        autobiographical_store = self.stores.get("autobiographical")
+        candidates = self.build_autobiographical_candidates()
+        if autobiographical_store is None or not hasattr(autobiographical_store, "add"):
+            return candidates
+        for candidate in candidates:
+            autobiographical_store.add(candidate)
         return candidates
 
     def apply_plan(

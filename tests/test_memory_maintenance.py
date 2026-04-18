@@ -10,6 +10,7 @@ from nova.memory.engram import JsonEngramMemoryStore
 from nova.memory.episodic import JsonlEpisodicMemoryStore
 from nova.memory.graph import SqliteGraphMemoryStore
 from nova.memory.maintenance import MemoryMaintenancePlanner, MemoryMaintenanceRunner
+from nova.memory.reflection import ReflectionEngine
 from nova.memory.semantic import JsonlSemanticMemoryStore
 from nova.types import MemoryEvent
 
@@ -286,6 +287,115 @@ class MemoryMaintenanceTests(unittest.TestCase):
             semantic_events = semantic.list_events()
             self.assertEqual(len(semantic_events), 1)
             self.assertEqual(semantic_events[0].channel, "semantic")
+
+    def test_reflection_engine_builds_autobiographical_candidates(self) -> None:
+        engine = ReflectionEngine()
+        episodic_events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="assistant_message",
+                text="My name is Nova. I remain focused on continuity.",
+                tags=["assistant", "turn", "identity"],
+                importance=0.85,
+                confidence=1.0,
+                continuity_weight=0.95,
+                source="nova",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="assistant_message",
+                text="I keep continuity at the center of my self-model.",
+                tags=["assistant", "turn", "identity", "value"],
+                importance=0.9,
+                confidence=1.0,
+                continuity_weight=0.95,
+                source="nova",
+            ),
+        ]
+
+        candidates = engine.build_autobiographical_candidates(episodic_events=episodic_events)
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.channel, "autobiographical")
+        self.assertEqual(candidate.kind, "reflection_note")
+        self.assertIn("identity-continuity", candidate.tags)
+        self.assertEqual(set(candidate.supersedes), {"e1", "e2"})
+
+    def test_runner_can_write_autobiographical_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            episodic = JsonlEpisodicMemoryStore(base / "episodic.jsonl")
+            semantic = JsonlSemanticMemoryStore(base / "semantic.jsonl")
+            autobiographical = JsonlAutobiographicalMemoryStore(base / "autobiographical.jsonl")
+
+            episodic.add(
+                MemoryEvent(
+                    event_id="e1",
+                    timestamp="2026-04-18T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="My name is Nova. I remain focused on continuity.",
+                    tags=["assistant", "turn", "identity"],
+                    importance=0.85,
+                    confidence=1.0,
+                    continuity_weight=0.95,
+                    source="nova",
+                )
+            )
+            episodic.add(
+                MemoryEvent(
+                    event_id="e2",
+                    timestamp="2026-04-18T00:01:00Z",
+                    session_id="s1",
+                    turn_id="t2",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="I keep continuity at the center of my self-model.",
+                    tags=["assistant", "turn", "identity", "value"],
+                    importance=0.9,
+                    confidence=1.0,
+                    continuity_weight=0.95,
+                    source="nova",
+                )
+            )
+            semantic.add(
+                MemoryEvent(
+                    event_id="s1",
+                    timestamp="2026-04-18T00:02:00Z",
+                    session_id="s1",
+                    turn_id="t3",
+                    channel="semantic",
+                    kind="theme_summary",
+                    text="Nova identity: continuity remains central.",
+                    summary="Nova identity: continuity remains central.",
+                    tags=["semantic", "summary", "nova-identity"],
+                    importance=0.85,
+                    confidence=0.9,
+                    continuity_weight=0.9,
+                    source="reflection",
+                )
+            )
+
+            runner = MemoryMaintenanceRunner(
+                episodic=episodic,
+                semantic=semantic,
+                autobiographical=autobiographical,
+            )
+            written = runner.write_autobiographical_candidates()
+            self.assertEqual(len(written), 1)
+            autobiographical_events = autobiographical.list_events()
+            self.assertEqual(len(autobiographical_events), 1)
+            self.assertEqual(autobiographical_events[0].channel, "autobiographical")
 
     def test_runner_can_apply_retention_mutations_to_stores(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
