@@ -21,6 +21,28 @@ class JsonlSemanticMemoryStore:
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
 
+    def merge_reflection_candidate(self, event: MemoryEvent) -> MemoryEvent:
+        payloads = self._load_events()
+        theme = str((event.metadata or {}).get("theme", "") or "")
+        if not theme:
+            self.add(event)
+            return event
+
+        for index, payload in enumerate(payloads):
+            metadata = dict(payload.get("metadata", {}) or {})
+            if (
+                str(payload.get("source", "") or "") == "reflection"
+                and str(metadata.get("theme", "") or "") == theme
+                and str(payload.get("retention", "active") or "active") == "active"
+            ):
+                merged = self._merge_payload(payload, event)
+                payloads[index] = merged
+                self._save_payloads(payloads)
+                return self._event_from_payload(merged)
+
+        self.add(event)
+        return event
+
     def search(self, query: str, *, top_k: int) -> list[RetrievalHit]:
         tokens = self._tokens(query)
         if not tokens:
@@ -126,6 +148,46 @@ class JsonlSemanticMemoryStore:
         with self.path.open("w", encoding="utf-8") as handle:
             for payload in payloads:
                 handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def _merge_payload(self, existing: dict, event: MemoryEvent) -> dict:
+        existing_metadata = dict(existing.get("metadata", {}) or {})
+        event_metadata = dict(event.metadata or {})
+        merged_source_ids = sorted(
+            {
+                *list(existing_metadata.get("source_event_ids", []) or []),
+                *list(event_metadata.get("source_event_ids", []) or []),
+                *list(existing.get("supersedes", []) or []),
+                *list(event.supersedes or []),
+            }
+        )
+        merged_tags = sorted(set(list(existing.get("tags", []) or []) + list(event.tags or [])))
+        revision_count = int(existing_metadata.get("revision_count", 0) or 0) + 1
+
+        existing.update(
+            {
+                "timestamp": event.timestamp,
+                "text": event.text,
+                "summary": event.summary,
+                "tags": merged_tags,
+                "importance": max(float(existing.get("importance", 0.0) or 0.0), event.importance),
+                "confidence": max(float(existing.get("confidence", 1.0) or 1.0), event.confidence),
+                "continuity_weight": max(
+                    float(existing.get("continuity_weight", 0.0) or 0.0),
+                    event.continuity_weight,
+                ),
+                "retention": "active",
+                "supersedes": merged_source_ids,
+                "source": "reflection",
+                "metadata": {
+                    **existing_metadata,
+                    **event_metadata,
+                    "source_event_ids": merged_source_ids,
+                    "revision_count": revision_count,
+                    "revised_at": event.timestamp,
+                },
+            }
+        )
+        return existing
 
     def _event_from_payload(self, payload: dict) -> MemoryEvent:
         return MemoryEvent(

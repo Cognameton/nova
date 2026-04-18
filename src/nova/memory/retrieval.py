@@ -172,6 +172,47 @@ class MemoryPolicy:
                         "continuity_weight": 0.8,
                         "evidence_text": user_text.strip(),
                         "active": True,
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                    },
+                )
+            )
+
+        if self._contains_any(user_lower, self.RELATIONSHIP_TOKENS):
+            relationship_text = user_text.strip()
+            events.append(
+                MemoryEvent(
+                    event_id=uuid4().hex,
+                    timestamp=timestamp,
+                    session_id=session_id,
+                    turn_id=turn_id,
+                    channel="graph",
+                    kind="relationship_fact",
+                    text=relationship_text,
+                    summary="User relationship-context statement",
+                    tags=["relationship", "fact", "user"],
+                    importance=0.7,
+                    confidence=0.75,
+                    continuity_weight=0.8,
+                    retention="active",
+                    source="user",
+                    metadata={
+                        "fact_id": self._fact_id("nova", "relates_to", "user"),
+                        "fact_domain": "relationship",
+                        "subject_type": "self",
+                        "subject_key": "nova",
+                        "subject_name": persona.name if persona is not None else "Nova",
+                        "relation": "relates_to",
+                        "object_type": "user",
+                        "object_key": "user",
+                        "object_name": "User",
+                        "weight": 0.7,
+                        "confidence": 0.75,
+                        "continuity_weight": 0.8,
+                        "evidence_text": relationship_text,
+                        "active": True,
+                        "session_id": session_id,
+                        "turn_id": turn_id,
                     },
                 )
             )
@@ -214,6 +255,8 @@ class MemoryPolicy:
                         "continuity_weight": 1.0,
                         "evidence_text": final_answer.strip(),
                         "active": True,
+                        "session_id": session_id,
+                        "turn_id": turn_id,
                     },
                 )
             )
@@ -251,6 +294,47 @@ class MemoryPolicy:
                         "continuity_weight": 0.95,
                         "evidence_text": final_answer.strip(),
                         "active": True,
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                    },
+                )
+            )
+
+        if self._contains_any(answer_lower, self.RELATIONSHIP_TOKENS):
+            relationship_text = final_answer.strip()
+            events.append(
+                MemoryEvent(
+                    event_id=uuid4().hex,
+                    timestamp=timestamp,
+                    session_id=session_id,
+                    turn_id=turn_id,
+                    channel="graph",
+                    kind="relationship_fact",
+                    text=relationship_text,
+                    summary="Nova relationship-context statement",
+                    tags=["relationship", "fact", "nova"],
+                    importance=0.75,
+                    confidence=0.8,
+                    continuity_weight=0.85,
+                    retention="active",
+                    source="nova",
+                    metadata={
+                        "fact_id": self._fact_id("nova", "relates_to", "user"),
+                        "fact_domain": "relationship",
+                        "subject_type": "self",
+                        "subject_key": "nova",
+                        "subject_name": persona.name if persona is not None else "Nova",
+                        "relation": "relates_to",
+                        "object_type": "user",
+                        "object_key": "user",
+                        "object_name": "User",
+                        "weight": 0.75,
+                        "confidence": 0.8,
+                        "continuity_weight": 0.85,
+                        "evidence_text": relationship_text,
+                        "active": True,
+                        "session_id": session_id,
+                        "turn_id": turn_id,
                     },
                 )
             )

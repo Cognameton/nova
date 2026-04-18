@@ -285,9 +285,14 @@ class MemoryMaintenanceRunner:
         candidates = self.build_semantic_candidates()
         if semantic_store is None or not hasattr(semantic_store, "add"):
             return candidates
+        written: list[MemoryEvent] = []
         for candidate in candidates:
-            semantic_store.add(candidate)
-        return candidates
+            if hasattr(semantic_store, "merge_reflection_candidate"):
+                written.append(semantic_store.merge_reflection_candidate(candidate))
+            else:
+                semantic_store.add(candidate)
+                written.append(candidate)
+        return written
 
     def build_autobiographical_candidates(self) -> list[MemoryEvent]:
         episodic_store = self.stores.get("episodic")
@@ -309,9 +314,14 @@ class MemoryMaintenanceRunner:
         candidates = self.build_autobiographical_candidates()
         if autobiographical_store is None or not hasattr(autobiographical_store, "add"):
             return candidates
+        written: list[MemoryEvent] = []
         for candidate in candidates:
-            autobiographical_store.add(candidate)
-        return candidates
+            if hasattr(autobiographical_store, "merge_reflection_candidate"):
+                written.append(autobiographical_store.merge_reflection_candidate(candidate))
+            else:
+                autobiographical_store.add(candidate)
+                written.append(candidate)
+        return written
 
     def apply_plan(
         self,

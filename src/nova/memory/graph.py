@@ -44,6 +44,8 @@ class SqliteGraphMemoryStore:
             return
 
         with self._connect() as conn:
+            self._supersede_conflicting_facts(conn, fact)
+            fact = self._merge_existing_fact(conn, fact)
             conn.execute(
                 """
                 INSERT OR REPLACE INTO graph_facts (
@@ -232,6 +234,87 @@ class SqliteGraphMemoryStore:
                 )
                 updated += 1
         return updated
+
+    def _merge_existing_fact(self, conn: sqlite3.Connection, fact: GraphFact) -> GraphFact:
+        existing = conn.execute(
+            """
+            SELECT metadata_json, weight, confidence, continuity_weight, evidence_text
+            FROM graph_facts
+            WHERE fact_id = ?
+            """,
+            (fact.fact_id,),
+        ).fetchone()
+        if existing is None:
+            return fact
+
+        existing_metadata = json.loads(existing["metadata_json"] or "{}")
+        revision_count = int(existing_metadata.get("revision_count", 0) or 0) + 1
+        merged_evidence = self._merge_evidence(
+            str(existing["evidence_text"] or ""),
+            str(fact.evidence_text or ""),
+        )
+        fact.weight = max(float(existing["weight"] or 0.0), fact.weight)
+        fact.confidence = max(float(existing["confidence"] or 0.0), fact.confidence)
+        fact.continuity_weight = max(
+            float(existing["continuity_weight"] or 0.0),
+            fact.continuity_weight,
+        )
+        fact.evidence_text = merged_evidence
+        fact.metadata = {
+            **existing_metadata,
+            **fact.metadata,
+            "revision_count": revision_count,
+            "revised_at": fact.timestamp,
+        }
+        return fact
+
+    def _supersede_conflicting_facts(self, conn: sqlite3.Connection, fact: GraphFact) -> None:
+        domain = str(fact.metadata.get("fact_domain", "") or "")
+        if not domain:
+            return
+        rows = conn.execute(
+            """
+            SELECT fact_id, object_key, metadata_json
+            FROM graph_facts
+            WHERE subject_key = ? AND relation = ? AND active = 1
+            """,
+            (fact.subject_key, fact.relation),
+        ).fetchall()
+        for row in rows:
+            prior_fact_id = str(row["fact_id"] or "")
+            if prior_fact_id == fact.fact_id:
+                continue
+            prior_metadata = json.loads(row["metadata_json"] or "{}")
+            prior_domain = str(prior_metadata.get("fact_domain", "") or "")
+            if prior_domain != domain:
+                continue
+            prior_object_key = str(row["object_key"] or "")
+            if prior_object_key == fact.object_key:
+                continue
+            prior_metadata["retention"] = "archived"
+            prior_metadata["superseded_by"] = fact.fact_id
+            prior_metadata["superseded_at"] = fact.timestamp
+            conn.execute(
+                """
+                UPDATE graph_facts
+                SET active = 0, superseded_by = ?, metadata_json = ?
+                WHERE fact_id = ?
+                """,
+                (
+                    fact.fact_id,
+                    json.dumps(prior_metadata, ensure_ascii=False, sort_keys=True),
+                    prior_fact_id,
+                ),
+            )
+
+    def _merge_evidence(self, existing: str, incoming: str) -> str:
+        existing = existing.strip()
+        incoming = incoming.strip()
+        if not existing:
+            return incoming
+        if not incoming or incoming in existing:
+            return existing
+        return f"{existing} || {incoming}"
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)

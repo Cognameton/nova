@@ -288,6 +288,56 @@ class MemoryMaintenanceTests(unittest.TestCase):
             self.assertEqual(len(semantic_events), 1)
             self.assertEqual(semantic_events[0].channel, "semantic")
 
+    def test_semantic_store_merges_repeated_reflection_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            episodic = JsonlEpisodicMemoryStore(base / "episodic.jsonl")
+            semantic = JsonlSemanticMemoryStore(base / "semantic.jsonl")
+
+            episodic.add(
+                MemoryEvent(
+                    event_id="e1",
+                    timestamp="2026-04-18T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="episodic",
+                    kind="user_message",
+                    text="I prefer local inference for Nova.",
+                    tags=["user", "turn", "preference"],
+                    importance=0.75,
+                    confidence=1.0,
+                    continuity_weight=0.75,
+                    source="user",
+                )
+            )
+            episodic.add(
+                MemoryEvent(
+                    event_id="e2",
+                    timestamp="2026-04-18T00:01:00Z",
+                    session_id="s1",
+                    turn_id="t2",
+                    channel="episodic",
+                    kind="user_message",
+                    text="I want Nova to stay local-first.",
+                    tags=["user", "turn", "preference"],
+                    importance=0.8,
+                    confidence=1.0,
+                    continuity_weight=0.8,
+                    source="user",
+                )
+            )
+
+            runner = MemoryMaintenanceRunner(episodic=episodic, semantic=semantic)
+            first_written = runner.write_semantic_candidates()
+            second_written = runner.write_semantic_candidates()
+
+            self.assertEqual(len(first_written), 1)
+            self.assertEqual(len(second_written), 1)
+            semantic_events = semantic.list_events()
+            self.assertEqual(len(semantic_events), 1)
+            self.assertEqual(semantic_events[0].metadata.get("revision_count"), 1)
+            self.assertEqual(semantic_events[0].metadata.get("theme"), "user-preferences")
+
     def test_reflection_engine_builds_autobiographical_candidates(self) -> None:
         engine = ReflectionEngine()
         episodic_events = [
@@ -396,6 +446,79 @@ class MemoryMaintenanceTests(unittest.TestCase):
             autobiographical_events = autobiographical.list_events()
             self.assertEqual(len(autobiographical_events), 1)
             self.assertEqual(autobiographical_events[0].channel, "autobiographical")
+
+    def test_autobiographical_store_merges_repeated_reflection_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            episodic = JsonlEpisodicMemoryStore(base / "episodic.jsonl")
+            semantic = JsonlSemanticMemoryStore(base / "semantic.jsonl")
+            autobiographical = JsonlAutobiographicalMemoryStore(base / "autobiographical.jsonl")
+
+            episodic.add(
+                MemoryEvent(
+                    event_id="e1",
+                    timestamp="2026-04-18T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="My name is Nova. I remain focused on continuity.",
+                    tags=["assistant", "turn", "identity"],
+                    importance=0.85,
+                    confidence=1.0,
+                    continuity_weight=0.95,
+                    source="nova",
+                )
+            )
+            episodic.add(
+                MemoryEvent(
+                    event_id="e2",
+                    timestamp="2026-04-18T00:01:00Z",
+                    session_id="s1",
+                    turn_id="t2",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="I keep continuity at the center of my self-model.",
+                    tags=["assistant", "turn", "identity", "value"],
+                    importance=0.9,
+                    confidence=1.0,
+                    continuity_weight=0.95,
+                    source="nova",
+                )
+            )
+            semantic.add(
+                MemoryEvent(
+                    event_id="s1",
+                    timestamp="2026-04-18T00:02:00Z",
+                    session_id="s1",
+                    turn_id="t3",
+                    channel="semantic",
+                    kind="theme_summary",
+                    text="Nova identity: continuity remains central.",
+                    summary="Nova identity: continuity remains central.",
+                    tags=["semantic", "summary", "nova-identity"],
+                    importance=0.85,
+                    confidence=0.9,
+                    continuity_weight=0.9,
+                    source="reflection",
+                    metadata={"theme": "nova-identity"},
+                )
+            )
+
+            runner = MemoryMaintenanceRunner(
+                episodic=episodic,
+                semantic=semantic,
+                autobiographical=autobiographical,
+            )
+            first_written = runner.write_autobiographical_candidates()
+            second_written = runner.write_autobiographical_candidates()
+
+            self.assertEqual(len(first_written), 1)
+            self.assertEqual(len(second_written), 1)
+            autobiographical_events = autobiographical.list_events()
+            self.assertEqual(len(autobiographical_events), 1)
+            self.assertEqual(autobiographical_events[0].metadata.get("revision_count"), 1)
+            self.assertEqual(autobiographical_events[0].metadata.get("theme"), "identity-continuity")
 
     def test_runner_can_apply_retention_mutations_to_stores(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
