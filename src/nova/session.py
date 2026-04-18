@@ -42,7 +42,10 @@ class JsonlSessionStore:
             line = line.strip()
             if not line:
                 continue
-            payload = json.loads(line)
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             turns.append(self._turn_from_dict(payload))
         return turns
 

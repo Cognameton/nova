@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 from nova.config import NovaConfig
@@ -59,11 +57,17 @@ class NovaRuntime:
         self.persona = None
         self.self_state = None
 
-    def start(self) -> str:
+    def start(self, *, session_id: str | None = None) -> str:
         self.persona = self.persona_store.load()
         self.self_state = self.self_state_store.load(persona=self.persona)
         self.backend.load()
-        self.session_id = self.session_store.start_session()
+        self.session_id = self.session_store.start_session(session_id=session_id)
+        if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
+            for probe in self.probe_runner.run_startup_probes(
+                model_id=self.backend.metadata().get("model_name", "nova-model"),
+                session_id=self.session_id,
+            ):
+                self.trace_logger.log_probe(probe)
         return self.session_id
 
     def respond(self, user_text: str) -> TurnRecord:
@@ -83,6 +87,7 @@ class NovaRuntime:
             query=user_text,
             top_k_by_channel={
                 "episodic": 4,
+                "engram": 4,
                 "graph": 4,
                 "autobiographical": 3,
             },
@@ -193,10 +198,18 @@ class NovaRuntime:
             persisted_memory_events=persisted_memory_events,
         )
         self.trace_logger.log_trace(trace)
+        if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
+            for probe in self.probe_runner.run_turn_probes(
+                session_id=self.session_id,
+                turn=turn,
+                self_state=self.self_state,
+            ):
+                self.trace_logger.log_probe(probe)
         return turn
 
     def close(self) -> None:
         self.backend.unload()
+        self.session_id = None
 
     def _generation_request(self, *, prompt: str):
         from nova.types import GenerationRequest

@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
+from nova.memory.engram import JsonEngramMemoryStore
 from nova.memory.episodic import JsonlEpisodicMemoryStore
 from nova.memory.graph import SqliteGraphMemoryStore
 from nova.types import MemoryEvent, RetrievalHit
@@ -50,12 +51,42 @@ class BasicMemoryEventFactory:
                 timestamp=timestamp,
                 session_id=session_id,
                 turn_id=turn_id,
+                channel="engram",
+                kind="user_message",
+                text=user_text.strip(),
+                summary=None,
+                tags=["user", "turn", "pattern"],
+                importance=0.5,
+                confidence=1.0,
+                source="user",
+                metadata={},
+            ),
+            MemoryEvent(
+                event_id=uuid4().hex,
+                timestamp=timestamp,
+                session_id=session_id,
+                turn_id=turn_id,
                 channel="episodic",
                 kind="assistant_message",
                 text=final_answer.strip(),
                 summary=None,
                 tags=["assistant", "turn"],
                 importance=0.4,
+                confidence=1.0,
+                source="nova",
+                metadata={},
+            ),
+            MemoryEvent(
+                event_id=uuid4().hex,
+                timestamp=timestamp,
+                session_id=session_id,
+                turn_id=turn_id,
+                channel="engram",
+                kind="assistant_message",
+                text=final_answer.strip(),
+                summary=None,
+                tags=["assistant", "turn", "pattern"],
+                importance=0.5,
                 confidence=1.0,
                 source="nova",
                 metadata={},
@@ -92,12 +123,15 @@ class BasicMemoryRouter:
         self,
         *,
         episodic: JsonlEpisodicMemoryStore | None = None,
+        engram: JsonEngramMemoryStore | None = None,
         graph: SqliteGraphMemoryStore | None = None,
         autobiographical: JsonlAutobiographicalMemoryStore | None = None,
     ):
         self.stores: dict[str, Any] = {}
         if episodic is not None:
             self.stores["episodic"] = episodic
+        if engram is not None:
+            self.stores["engram"] = engram
         if graph is not None:
             self.stores["graph"] = graph
         if autobiographical is not None:
