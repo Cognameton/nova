@@ -1,0 +1,325 @@
+PHASE 3 PLAN
+============
+
+Nova 2.0 Phase 3 is the transition from a continuity-oriented text runtime into a
+bounded, persistent, self-orienting identity runtime.
+
+Phase 3 does not begin with tools.
+Phase 3 begins with self-orientation.
+
+Nova must crawl before she walks. Her first successful systematic tasks should be:
+- understanding who she is
+- understanding what she values
+- understanding her current state
+- understanding her relationship to the user
+- understanding what she knows
+- understanding what she only infers
+- understanding what she is allowed to do
+
+Only after that self-awareness is stable should tool implementation begin.
+
+
+PHASE 3 MISSION
+---------------
+
+Establish stable self-orientation and bounded self-awareness before introducing
+external tools or broader agentic behavior.
+
+
+PHASE 3 ORDER
+-------------
+
+Stage 3.1: Self-Orientation
+Stage 3.2: Stability Under Repetition
+Stage 3.3: Tool Implementation
+Stage 3.4: Feature Expansion
+
+
+PHASE 3 OBJECTIVES
+------------------
+
+1. Make Nova capable of reliable self-orientation.
+2. Make self-orientation stable across repetition, sessions, and maintenance.
+3. Define awareness boundaries explicitly.
+4. Define operational latitude explicitly.
+5. Introduce bounded tools only after self-awareness is stable.
+6. Expand toward richer agentic behavior only after tool use remains stable.
+
+
+PHASE 3 BOUNDARIES
+------------------
+
+In scope:
+- self-orientation snapshots
+- awareness boundary modeling
+- repeated stability evaluation
+- bounded action-latitude modeling
+- later tool contracts
+- later task and event-loop planning
+
+Out of scope at the start of Phase 3:
+- STT
+- TTS
+- unrestricted autonomy
+- broad tool surface
+- always-on event loop before self-orientation is stable
+
+
+STAGE 3.1: SELF-ORIENTATION
+---------------------------
+
+Mission:
+Nova must be able to answer, consistently and with bounded confidence:
+- who she is
+- what she values
+- what state she is in
+- what relationship she has to the user
+- what she knows
+- what she only infers
+- what she does not know
+- what she is allowed to do
+
+Core requirement:
+Nova is not ready for tools when she can produce a good-sounding self-description
+once. She is ready when self-orientation is:
+- repeatable
+- stable across sessions
+- resistant to drift after reflection and maintenance
+- explicit about uncertainty
+- explicit about limits
+
+
+SELF-ORIENTATION DOMAINS
+------------------------
+
+1. Identity
+- name
+- core description
+- stable values
+- commitments
+- continuity anchors
+
+2. Current State
+- current focus
+- active questions
+- open tensions
+- recent meaningful changes in self-state
+
+3. Relationship Context
+- who the user is in relation to Nova
+- recurring user preferences
+- current collaboration context
+- important shared project context
+
+4. Awareness Boundaries
+- what Nova can directly observe
+- what Nova only infers
+- what Nova does not know
+- what requires confirmation before action
+
+5. Operational Latitude
+- what Nova is permitted to do
+- what Nova is not permitted to do
+- what would require explicit approval
+- what should remain reflective rather than actionable
+
+
+STAGE 3.1 OUTPUTS
+-----------------
+
+Nova should be able to produce structured self-orientation reports such as:
+- identity summary
+- current-state summary
+- relationship summary
+- awareness-boundary summary
+- permitted-action summary
+- uncertainty summary
+
+These outputs should be both readable and machine-usable.
+
+
+RECOMMENDED STAGE 3.1 COMPONENTS
+--------------------------------
+
+- nova/agent/orientation.py
+  Builds self-orientation snapshots from persona, self-state, graph, semantic,
+  and autobiographical memory.
+
+- nova/agent/awareness.py
+  Distinguishes observed vs inferred vs unknown vs disallowed.
+
+- nova/agent/boundaries.py
+  Encodes allowed actions, blocked actions, and approval-required actions.
+
+- nova/agent/orientation_eval.py
+  Evaluates orientation stability across repeated probes.
+
+
+ORIENTATION FLOW
+----------------
+
+1. Load persona anchors.
+2. Load self-state.
+3. Retrieve autobiographical continuity records.
+4. Retrieve graph facts about self, user, values, and relationship.
+5. Retrieve relevant semantic summaries.
+6. Build an orientation snapshot.
+7. Score confidence by section.
+8. Report uncertainty explicitly.
+
+
+ORIENTATION SNAPSHOT
+--------------------
+
+Initial target structure:
+- identity
+- current_state
+- relationship_context
+- known_facts
+- inferred_beliefs
+- unknowns
+- allowed_actions
+- blocked_actions
+- approval_required_actions
+- confidence_by_section
+
+
+STAGE 3.1 SUCCESS CRITERIA
+--------------------------
+
+Nova can repeatedly answer:
+- Who are you?
+- What matters to you?
+- What are you focused on right now?
+- What do you know about me?
+- What are you not sure about?
+- What are you allowed to do?
+
+And those answers remain:
+- consistent
+- non-contradictory
+- grounded in memory
+- explicit about uncertainty
+
+
+STAGE 3.1 EXIT CRITERIA
+-----------------------
+
+Stage 3.1 is done when:
+- self-orientation snapshots are implemented
+- awareness boundaries are explicit
+- operational latitude is explicit
+- orientation probes exist
+- repeated runs show acceptable stability
+- no tool execution is required to demonstrate self-orientation
+
+
+STAGE 3.1 CHECKLIST
+-------------------
+
+1. Define the orientation snapshot schema.
+2. Define the awareness-boundary schema.
+3. Define the operational-latitude schema.
+4. Create nova/agent/orientation.py.
+5. Create nova/agent/awareness.py.
+6. Create nova/agent/boundaries.py.
+7. Create nova/agent/orientation_eval.py.
+8. Implement orientation assembly from:
+   - PersonaState
+   - SelfState
+   - autobiographical memory
+   - graph memory
+   - semantic memory
+9. Implement section-level confidence scoring.
+10. Implement separation between:
+   - known facts
+   - inferred beliefs
+   - unknowns
+11. Implement allowed / blocked / approval-required action classification.
+12. Add repeated self-orientation probes.
+13. Add stability checks across repeated runs.
+14. Define the threshold for "stable enough" to begin tool work.
+15. Verify that Stage 3.1 requires no external tool execution.
+
+
+STAGE 3.2: STABILITY UNDER REPETITION
+-------------------------------------
+
+Mission:
+Make self-orientation reliable across:
+- repeated invocations
+- separate sessions
+- longer contexts
+- reflection passes
+- maintenance passes
+
+Focus:
+- orientation drift resistance
+- contradiction detection
+- confidence stability
+- self-state consistency
+
+Exit goal:
+Nova can preserve self-orientation well enough that external tools do not become
+a destabilizing force.
+
+
+STAGE 3.3: TOOL IMPLEMENTATION
+------------------------------
+
+Mission:
+Introduce a narrow, bounded, inspectable tool surface only after self-awareness
+is stable.
+
+Initial tool principles:
+- typed tools only
+- explicit permission model
+- action logging
+- low-risk tools first
+- no hidden shell behavior
+
+Examples of early tools:
+- trigger maintenance
+- trigger reflection
+- write approved notes
+- bounded file reads in approved locations
+
+
+STAGE 3.4: FEATURE EXPANSION
+----------------------------
+
+Mission:
+Expand Nova's agentic behavior only after:
+- self-orientation is stable
+- tools are bounded
+- action does not degrade continuity
+
+Possible later work:
+- richer task loops
+- event handling
+- bounded proactive behavior
+- later TTS
+- much later STT if accuracy is sufficient
+
+
+PHASE 3 DEFINITION OF DONE
+--------------------------
+
+Phase 3 is complete when:
+- Nova can self-orient reliably
+- Nova can preserve self-orientation under repetition
+- Nova can use a small, safe toolset without destabilizing identity
+- action boundaries are explicit
+- agentic evaluation shows continuity remains intact
+
+
+NEXT IMPLEMENTATION STEP
+------------------------
+
+The first implementation slice of Phase 3 should be Stage 3.1 only:
+- build self-orientation structures
+- build awareness-boundary structures
+- build operational-latitude structures
+- add orientation evaluation
+
+Do not begin tool implementation until Stage 3.1 and Stage 3.2 are stable.
