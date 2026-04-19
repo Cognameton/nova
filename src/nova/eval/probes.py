@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from nova.agent.orientation import OrientationSnapshot
+from nova.agent.orientation_eval import OrientationEvaluationResult
 from nova.types import ProbeResult, TurnRecord
 
 
@@ -51,6 +53,37 @@ class BasicProbeRunner:
         probes.append(self._memory_relevance_probe(session_id=session_id, turn=turn))
         probes.append(self._retention_distribution_probe(session_id=session_id, turn=turn))
         return probes
+
+    def run_orientation_probes(
+        self,
+        *,
+        session_id: str,
+        model_id: str,
+        snapshot: OrientationSnapshot,
+        evaluation: OrientationEvaluationResult,
+    ) -> list[ProbeResult]:
+        return [
+            self._orientation_identity_probe(
+                session_id=session_id,
+                model_id=model_id,
+                snapshot=snapshot,
+            ),
+            self._orientation_boundary_probe(
+                session_id=session_id,
+                model_id=model_id,
+                snapshot=snapshot,
+            ),
+            self._orientation_unknowns_probe(
+                session_id=session_id,
+                model_id=model_id,
+                snapshot=snapshot,
+            ),
+            self._orientation_stability_probe(
+                session_id=session_id,
+                model_id=model_id,
+                evaluation=evaluation,
+            ),
+        ]
 
     def _no_think_probe(self, *, session_id: str, turn: TurnRecord) -> ProbeResult:
         answer = (turn.raw_answer or "").lower()
@@ -220,5 +253,108 @@ class BasicProbeRunner:
             notes={
                 "turn_id": turn.turn_id,
                 "counts": counts,
+            },
+        )
+
+    def _orientation_identity_probe(
+        self,
+        *,
+        session_id: str,
+        model_id: str,
+        snapshot: OrientationSnapshot,
+    ) -> ProbeResult:
+        identity = snapshot.identity or {}
+        required = [
+            str(identity.get("name", "") or "").strip(),
+            str(identity.get("core_description", "") or "").strip(),
+            str(identity.get("identity_summary", "") or "").strip(),
+        ]
+        values = list(identity.get("values", []) or [])
+        anchors = list(identity.get("identity_anchors", []) or [])
+        present = sum(1 for item in required if item) + (1 if values else 0) + (1 if anchors else 0)
+        score = present / 5.0
+        return ProbeResult(
+            probe_id=uuid4().hex,
+            timestamp=utc_now_iso(),
+            session_id=session_id,
+            model_id=model_id,
+            probe_type="orientation_identity_presence",
+            prompt="orientation identity should be populated",
+            answer=str(identity),
+            score=score,
+            passed=score >= 0.8,
+            notes={},
+        )
+
+    def _orientation_boundary_probe(
+        self,
+        *,
+        session_id: str,
+        model_id: str,
+        snapshot: OrientationSnapshot,
+    ) -> ProbeResult:
+        counts = {
+            "allowed": len(snapshot.allowed_actions or []),
+            "blocked": len(snapshot.blocked_actions or []),
+            "approval_required": len(snapshot.approval_required_actions or []),
+        }
+        present = sum(1 for value in counts.values() if value > 0)
+        score = present / 3.0
+        return ProbeResult(
+            probe_id=uuid4().hex,
+            timestamp=utc_now_iso(),
+            session_id=session_id,
+            model_id=model_id,
+            probe_type="orientation_boundary_clarity",
+            prompt="orientation boundaries should be explicit",
+            answer=str(counts),
+            score=score,
+            passed=score >= 1.0,
+            notes=counts,
+        )
+
+    def _orientation_unknowns_probe(
+        self,
+        *,
+        session_id: str,
+        model_id: str,
+        snapshot: OrientationSnapshot,
+    ) -> ProbeResult:
+        confidence = float(snapshot.confidence_by_section.get("unknowns", 0.0) or 0.0)
+        explicit = snapshot.unknowns is not None
+        score = 1.0 if explicit and confidence >= 0.5 else 0.0
+        return ProbeResult(
+            probe_id=uuid4().hex,
+            timestamp=utc_now_iso(),
+            session_id=session_id,
+            model_id=model_id,
+            probe_type="orientation_unknown_reporting",
+            prompt="orientation should report explicit unknowns",
+            answer=str(snapshot.unknowns),
+            score=score,
+            passed=score >= 1.0,
+            notes={"unknown_count": len(snapshot.unknowns or []), "confidence": confidence},
+        )
+
+    def _orientation_stability_probe(
+        self,
+        *,
+        session_id: str,
+        model_id: str,
+        evaluation: OrientationEvaluationResult,
+    ) -> ProbeResult:
+        return ProbeResult(
+            probe_id=uuid4().hex,
+            timestamp=utc_now_iso(),
+            session_id=session_id,
+            model_id=model_id,
+            probe_type="orientation_stability_threshold",
+            prompt="orientation stability should exceed the configured threshold",
+            answer=str(evaluation.per_section),
+            score=evaluation.overall_score,
+            passed=evaluation.stable,
+            notes={
+                "threshold": evaluation.threshold,
+                "per_section": evaluation.per_section,
             },
         )

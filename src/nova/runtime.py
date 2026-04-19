@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
+from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.config import NovaConfig
 from nova.inference.base import InferenceBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -41,6 +43,8 @@ class NovaRuntime:
         memory_event_factory: BasicMemoryEventFactory,
         retrieval_policy: IdentityFirstRetrievalPolicy | None = None,
         probe_runner: object | None = None,
+        orientation_engine: SelfOrientationEngine | None = None,
+        orientation_evaluator: OrientationStabilityEvaluator | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -55,6 +59,10 @@ class NovaRuntime:
         self.memory_event_factory = memory_event_factory
         self.retrieval_policy = retrieval_policy or IdentityFirstRetrievalPolicy()
         self.probe_runner = probe_runner
+        self.orientation_engine = orientation_engine or SelfOrientationEngine()
+        self.orientation_evaluator = orientation_evaluator or OrientationStabilityEvaluator(
+            threshold=self.config.eval.orientation_stability_threshold
+        )
 
         self.session_id: str | None = None
         self.persona = None
@@ -72,6 +80,41 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return self.session_id
+
+    def orientation_snapshot(self) -> OrientationSnapshot:
+        self._ensure_state_loaded()
+        assert self.persona is not None
+        assert self.self_state is not None
+
+        return self.orientation_engine.build_snapshot(
+            persona=self.persona,
+            self_state=self.self_state,
+            graph_memory=self.memory_router.stores.get("graph"),
+            semantic_memory=self.memory_router.stores.get("semantic"),
+            autobiographical_memory=self.memory_router.stores.get("autobiographical"),
+        )
+
+    def evaluate_orientation_stability(self, *, runs: int = 2) -> OrientationEvaluationResult:
+        effective_runs = max(self.config.eval.orientation_min_runs, runs)
+        snapshots = [self.orientation_snapshot() for _ in range(max(1, effective_runs))]
+        result = self.orientation_evaluator.evaluate(snapshots)
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        self.trace_logger.log_orientation(
+            session_id=self.session_id,
+            snapshot=snapshots[-1].to_dict(),
+            evaluation=result.to_dict(),
+        )
+        if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
+            model_id = self.backend.metadata().get("model_name", "nova-model")
+            for probe in self.probe_runner.run_orientation_probes(
+                session_id=self.session_id,
+                model_id=model_id,
+                snapshot=snapshots[-1],
+                evaluation=result,
+            ):
+                self.trace_logger.log_probe(probe)
+        return result
 
     def respond(self, user_text: str) -> TurnRecord:
         if self.session_id is None:
@@ -215,6 +258,14 @@ class NovaRuntime:
     def close(self) -> None:
         self.backend.unload()
         self.session_id = None
+
+    def _ensure_state_loaded(self) -> None:
+        if self.persona is None:
+            self.persona = self.persona_store.load()
+        if self.self_state is None:
+            self.self_state = self.self_state_store.load(persona=self.persona)
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
 
     def _generation_request(self, *, prompt: str):
         from nova.types import GenerationRequest

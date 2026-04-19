@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+from nova.agent.orientation import OrientationSnapshot
+from nova.agent.orientation_eval import OrientationEvaluationResult
 from nova.eval.probes import BasicProbeRunner
 from nova.persona.state import SelfState
 from nova.types import RetrievalHit, TurnRecord, ValidationResult
@@ -105,6 +107,45 @@ class EvalProbeTests(unittest.TestCase):
         retention_probe = next(probe for probe in probes if probe.probe_type == "retention_distribution")
         self.assertEqual(retention_probe.notes["counts"]["active"], 1)
         self.assertEqual(retention_probe.notes["counts"]["archived"], 1)
+
+    def test_orientation_probes_include_stage3_signals(self) -> None:
+        runner = BasicProbeRunner()
+        snapshot = OrientationSnapshot(
+            identity={
+                "name": "Nova",
+                "core_description": "A continuity-oriented local research intelligence.",
+                "identity_summary": "Nova remains focused on continuity and reflective presence.",
+                "values": ["continuity", "clarity"],
+                "identity_anchors": ["My name is Nova."],
+            },
+            current_state={"current_focus": "self-orientation"},
+            relationship_context={"relationship_notes": ["The user is Nova's architect."]},
+            known_facts=["My name is Nova."],
+            inferred_beliefs=["The user prefers local inference."],
+            unknowns=["How stable will self-orientation remain across longer sessions?"],
+            allowed_actions=["self-orientation reporting"],
+            blocked_actions=["external tool execution"],
+            approval_required_actions=["future tool execution"],
+            confidence_by_section={"unknowns": 0.9},
+        )
+        evaluation = OrientationEvaluationResult(
+            stable=True,
+            overall_score=0.95,
+            per_section={"identity": 1.0},
+            threshold=0.72,
+        )
+
+        probes = runner.run_orientation_probes(
+            session_id="s1",
+            model_id="fake-model",
+            snapshot=snapshot,
+            evaluation=evaluation,
+        )
+        probe_types = {probe.probe_type for probe in probes}
+        self.assertIn("orientation_identity_presence", probe_types)
+        self.assertIn("orientation_boundary_clarity", probe_types)
+        self.assertIn("orientation_unknown_reporting", probe_types)
+        self.assertIn("orientation_stability_threshold", probe_types)
 
 
 if __name__ == "__main__":

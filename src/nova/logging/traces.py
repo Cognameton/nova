@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from nova.types import ProbeResult, TraceRecord
@@ -25,3 +26,21 @@ class JsonlTraceLogger:
     def log_probe(self, probe: ProbeResult) -> None:
         with self.probe_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(probe.to_dict(), ensure_ascii=False) + "\n")
+
+    def log_orientation(
+        self,
+        *,
+        session_id: str,
+        snapshot: dict,
+        evaluation: dict | None = None,
+    ) -> None:
+        orientation_path = self.trace_dir / f"{session_id}.orientation.jsonl"
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "snapshot": snapshot,
+        }
+        if evaluation is not None:
+            payload["evaluation"] = evaluation
+        with orientation_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")

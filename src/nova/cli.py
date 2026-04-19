@@ -10,6 +10,8 @@ from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
+from nova.agent.orientation import SelfOrientationEngine
+from nova.agent.orientation_eval import OrientationStabilityEvaluator
 from nova.memory.maintenance import MemoryMaintenanceRunner
 from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
@@ -113,6 +115,10 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     event_factory = BasicMemoryEventFactory()
     retrieval_policy = IdentityFirstRetrievalPolicy()
     probe_runner = BasicProbeRunner() if config.eval.enable_probes else None
+    orientation_engine = SelfOrientationEngine()
+    orientation_evaluator = OrientationStabilityEvaluator(
+        threshold=config.eval.orientation_stability_threshold
+    )
 
     return NovaRuntime(
         config=config,
@@ -128,6 +134,8 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         memory_event_factory=event_factory,
         retrieval_policy=retrieval_policy,
         probe_runner=probe_runner,
+        orientation_engine=orientation_engine,
+        orientation_evaluator=orientation_evaluator,
     )
 
 
@@ -156,6 +164,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--maintenance-action",
         choices=("plan", "write-semantic", "write-autobiographical", "apply", "full"),
         help="Run a maintenance/reflection action instead of interactive chat.",
+    )
+    parser.add_argument(
+        "--orientation",
+        action="store_true",
+        help="Print Nova's current self-orientation snapshot instead of interactive chat.",
+    )
+    parser.add_argument(
+        "--orientation-runs",
+        type=int,
+        default=1,
+        help="Number of repeated orientation passes to evaluate for stability.",
     )
     return parser
 
@@ -217,6 +236,39 @@ def main() -> int:
         for key, value in result.items():
             print(f"{key}: {value}")
         return 0
+
+    if args.orientation:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            snapshot = runtime.orientation_snapshot()
+            print("Nova 2.0 Orientation")
+            print(f"Session: {runtime.session_id}")
+            print(f"Identity: {snapshot.identity}")
+            print(f"Current State: {snapshot.current_state}")
+            print(f"Relationship Context: {snapshot.relationship_context}")
+            print(f"Known Facts: {snapshot.known_facts}")
+            print(f"Inferred Beliefs: {snapshot.inferred_beliefs}")
+            print(f"Unknowns: {snapshot.unknowns}")
+            print(f"Allowed Actions: {snapshot.allowed_actions}")
+            print(f"Blocked Actions: {snapshot.blocked_actions}")
+            print(f"Approval Required Actions: {snapshot.approval_required_actions}")
+            print(f"Confidence: {snapshot.confidence_by_section}")
+            if args.orientation_runs > 1:
+                evaluation = runtime.evaluate_orientation_stability(runs=args.orientation_runs)
+                print("Orientation Stability")
+                print(f"stable: {evaluation.stable}")
+                print(f"overall_score: {evaluation.overall_score}")
+                print(f"per_section: {evaluation.per_section}")
+                print(f"threshold: {evaluation.threshold}")
+                print(f"ready_for_next_stage: {evaluation.stable}")
+            else:
+                runtime.trace_logger.log_orientation(
+                    session_id=runtime.session_id,
+                    snapshot=snapshot.to_dict(),
+                )
+            return 0
+        finally:
+            runtime.close()
 
     runtime = build_runtime(config_override=args.config_override)
     session_id = None if args.new_session else args.session_id

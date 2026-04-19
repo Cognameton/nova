@@ -73,6 +73,8 @@ class SessionConfig:
 @dataclass(slots=True)
 class EvalConfig:
     enable_probes: bool = True
+    orientation_stability_threshold: float = 0.72
+    orientation_min_runs: int = 2
 
 
 @dataclass(slots=True)
@@ -103,6 +105,10 @@ class NovaConfig:
             raise ValueError("app.data_dir is required")
         if not self.app.log_dir:
             raise ValueError("app.log_dir is required")
+        if not 0.0 <= self.eval.orientation_stability_threshold <= 1.0:
+            raise ValueError("eval.orientation_stability_threshold must be between 0.0 and 1.0")
+        if self.eval.orientation_min_runs <= 0:
+            raise ValueError("eval.orientation_min_runs must be positive")
 
     def snapshot(self) -> dict[str, Any]:
         return asdict(self)
