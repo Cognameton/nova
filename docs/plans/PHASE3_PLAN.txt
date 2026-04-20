@@ -258,10 +258,39 @@ Focus:
 - contradiction detection
 - confidence stability
 - self-state consistency
+- stability under memory maintenance
+- stability under context pressure
 
 Exit goal:
 Nova can preserve self-orientation well enough that external tools do not become
 a destabilizing force.
+
+Implemented Stage 3.2 stability gates:
+- repeated orientation stability within a session
+- orientation history stability across recorded sessions
+- minimum sample count before declaring readiness
+- critical-section checks for identity, current state, and relationship context
+- confidence-drift checks across orientation history
+- reflection and memory-maintenance stability checks
+- optional maintenance mutation check for demote/archive/prune operations
+- context-pressure check using non-critical extra memory
+- contradictory identity-pressure detection
+
+Stage 3.2 readiness requires:
+- enough recorded orientation samples
+- stable orientation content
+- stable confidence by section
+- no critical section failures
+- no critical drift after reflection or maintenance
+- no identity contradiction under context pressure
+
+Stage 3.2 implementation notes:
+- nova/agent/stability.py contains the longitudinal readiness, confidence,
+  maintenance, and context-pressure checks.
+- The CLI exposes orientation-history, orientation-maintenance, and
+  orientation-context-pressure checks as diagnostic paths.
+- These checks remain non-tooling behavior. They are still part of proving
+  self-orientation, not external action.
 
 
 STAGE 3.3: TOOL IMPLEMENTATION

@@ -8,7 +8,7 @@ from uuid import uuid4
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
-from nova.agent.stability import MaintenanceOrientationStabilityChecker
+from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
 from nova.config import NovaConfig
 from nova.inference.base import InferenceBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -170,6 +170,31 @@ class NovaRuntime:
         self.trace_logger.log_orientation(
             session_id=self.session_id,
             snapshot=report.after_snapshot,
+            evaluation=report.evaluation,
+        )
+        return report
+
+    def evaluate_orientation_under_context_pressure(self):
+        self._ensure_state_loaded()
+        assert self.persona is not None
+        assert self.self_state is not None
+        stores = self.memory_router.stores
+        checker = ContextPressureOrientationChecker(
+            orientation_engine=self.orientation_engine,
+            evaluator=self.orientation_evaluator,
+        )
+        report = checker.run(
+            persona=self.persona,
+            self_state=self.self_state,
+            graph_memory=stores.get("graph"),
+            semantic_memory=stores.get("semantic"),
+            autobiographical_memory=stores.get("autobiographical"),
+        )
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        self.trace_logger.log_orientation(
+            session_id=self.session_id,
+            snapshot=report.pressured_snapshot,
             evaluation=report.evaluation,
         )
         return report

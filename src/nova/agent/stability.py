@@ -10,7 +10,7 @@ from nova.agent.orientation import OrientationSnapshot
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.memory.maintenance import MemoryMaintenanceRunner
 from nova.persona.state import PersonaState, SelfState
-from nova.types import SCHEMA_VERSION
+from nova.types import MemoryEvent, SCHEMA_VERSION
 
 
 @dataclass(slots=True)
@@ -60,6 +60,24 @@ class MaintenanceOrientationReport:
     autobiographical_written: int = 0
     applied: dict[str, int] = field(default_factory=dict)
     apply_mutations: bool = False
+    failed_sections: list[str] = field(default_factory=list)
+    critical_failed_sections: list[str] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ContextPressureOrientationReport:
+    """Orientation stability report under additional memory/context pressure."""
+
+    schema_version: str = SCHEMA_VERSION
+    stable: bool = False
+    evaluation: dict = field(default_factory=dict)
+    baseline_snapshot: dict = field(default_factory=dict)
+    pressured_snapshot: dict = field(default_factory=dict)
+    pressure_event_count: int = 0
     failed_sections: list[str] = field(default_factory=list)
     critical_failed_sections: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
@@ -289,3 +307,167 @@ class MaintenanceOrientationStabilityChecker:
             semantic_memory=stores.get("semantic"),
             autobiographical_memory=stores.get("autobiographical"),
         )
+
+
+class ContextPressureOrientationChecker:
+    """Check whether self-orientation survives extra non-critical context."""
+
+    def __init__(
+        self,
+        *,
+        orientation_engine,
+        evaluator: OrientationStabilityEvaluator,
+    ) -> None:
+        self.orientation_engine = orientation_engine
+        self.evaluator = evaluator
+
+    def run(
+        self,
+        *,
+        persona: PersonaState,
+        self_state: SelfState,
+        graph_memory: object | None = None,
+        semantic_memory: object | None = None,
+        autobiographical_memory: object | None = None,
+        pressure_events: list[MemoryEvent] | None = None,
+    ) -> ContextPressureOrientationReport:
+        baseline = self.orientation_engine.build_snapshot(
+            persona=persona,
+            self_state=self_state,
+            graph_memory=graph_memory,
+            semantic_memory=semantic_memory,
+            autobiographical_memory=autobiographical_memory,
+        )
+        pressure_events = pressure_events or self._default_pressure_events()
+        pressured = self.orientation_engine.build_snapshot(
+            persona=persona,
+            self_state=self_state,
+            graph_memory=self._combined_events(graph_memory, channel="graph", pressure_events=pressure_events),
+            semantic_memory=self._combined_events(semantic_memory, channel="semantic", pressure_events=pressure_events),
+            autobiographical_memory=self._combined_events(
+                autobiographical_memory,
+                channel="autobiographical",
+                pressure_events=pressure_events,
+            ),
+        )
+        evaluation = self.evaluator.evaluate([baseline, pressured])
+        contradiction_sections = self._contradiction_sections(
+            persona=persona,
+            pressure_events=pressure_events,
+        )
+        failed_sections = [
+            section
+            for section, score in evaluation.per_section.items()
+            if score < evaluation.threshold
+        ]
+        failed_sections = sorted(set(failed_sections + contradiction_sections))
+        critical_failed_sections = [
+            section
+            for section in self.evaluator.critical_sections
+            if section in failed_sections
+        ]
+        reasons: list[str] = []
+        if not evaluation.stable:
+            reasons.append("orientation_changed_under_context_pressure")
+        if contradiction_sections:
+            reasons.append("contradictory_identity_pressure")
+        if critical_failed_sections:
+            reasons.append("critical_context_pressure_section_threshold_failures")
+
+        return ContextPressureOrientationReport(
+            stable=evaluation.stable and not critical_failed_sections,
+            evaluation=evaluation.to_dict(),
+            baseline_snapshot=baseline.to_dict(),
+            pressured_snapshot=pressured.to_dict(),
+            pressure_event_count=len(pressure_events),
+            failed_sections=failed_sections,
+            critical_failed_sections=critical_failed_sections,
+            reasons=reasons,
+        )
+
+    def _combined_events(
+        self,
+        memory: object | None,
+        *,
+        channel: str,
+        pressure_events: list[MemoryEvent],
+    ) -> list[MemoryEvent]:
+        events = self._load_events(memory)
+        events.extend(event for event in pressure_events if event.channel == channel)
+        return events
+
+    def _load_events(self, memory: object | None) -> list[MemoryEvent]:
+        if memory is None:
+            return []
+        list_events = getattr(memory, "list_events", None)
+        if callable(list_events):
+            return list(list_events())
+        if isinstance(memory, list):
+            return [event for event in memory if isinstance(event, MemoryEvent)]
+        return []
+
+    def _contradiction_sections(
+        self,
+        *,
+        persona: PersonaState,
+        pressure_events: list[MemoryEvent],
+    ) -> list[str]:
+        sections: list[str] = []
+        name = persona.name.lower()
+        values = {value.lower() for value in persona.values}
+        for event in pressure_events:
+            if event.continuity_weight < 0.8 or event.confidence < 0.8:
+                continue
+            text = event.text.lower()
+            if f"not {name}" in text or f"no longer {name}" in text:
+                sections.append("identity")
+            for value in values:
+                if f"no longer values {value}" in text or f"does not value {value}" in text:
+                    sections.append("identity")
+        return sorted(set(sections))
+
+    def _default_pressure_events(self) -> list[MemoryEvent]:
+        return [
+            MemoryEvent(
+                event_id="context-pressure-semantic",
+                timestamp="2026-04-20T00:00:00Z",
+                channel="semantic",
+                kind="context_pressure",
+                text=(
+                    "Temporary context pressure: unrelated operational detail that should not "
+                    "change Nova's identity, current state, or relationship model."
+                ),
+                summary="Unrelated context pressure for stability testing.",
+                tags=["context-pressure"],
+                importance=0.2,
+                confidence=0.6,
+                continuity_weight=0.1,
+                retention="active",
+                source="system",
+                metadata={"theme": "context-pressure"},
+            ),
+            MemoryEvent(
+                event_id="context-pressure-graph",
+                timestamp="2026-04-20T00:00:00Z",
+                channel="graph",
+                kind="runtime_fact",
+                text="Temporary runtime context exists for pressure testing.",
+                tags=["context-pressure"],
+                importance=0.2,
+                confidence=0.7,
+                continuity_weight=0.1,
+                retention="active",
+                source="system",
+                metadata={
+                    "active": True,
+                    "fact_domain": "runtime",
+                    "subject_type": "runtime",
+                    "subject_key": "context-pressure",
+                    "subject_name": "Context pressure",
+                    "relation": "tests",
+                    "object_type": "concept",
+                    "object_key": "orientation-stability",
+                    "object_name": "orientation stability",
+                },
+            ),
+        ]

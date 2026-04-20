@@ -13,7 +13,7 @@ from nova.logging.traces import JsonlTraceLogger
 from nova.agent.orientation import SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
-from nova.agent.stability import MaintenanceOrientationStabilityChecker
+from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
 from nova.memory.maintenance import MemoryMaintenanceRunner
 from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
@@ -194,6 +194,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow the orientation maintenance check to apply demote/archive/prune mutations.",
     )
+    parser.add_argument(
+        "--orientation-context-pressure-check",
+        action="store_true",
+        help="Check whether self-orientation remains stable under extra non-critical memory context.",
+    )
     return parser
 
 
@@ -345,6 +350,33 @@ def main() -> int:
         print(f"apply_mutations: {report.apply_mutations}")
         print(f"maintenance_summary: {report.maintenance_summary}")
         print(f"evaluation: {report.evaluation}")
+        print(f"reasons: {report.reasons}")
+        return 0
+
+    if args.orientation_context_pressure_check:
+        components = build_memory_components(config_override=args.config_override)
+        config = components["config"]
+        persona = components["persona_store"].load()
+        self_state = components["self_state_store"].load(persona=persona)
+        checker = ContextPressureOrientationChecker(
+            orientation_engine=SelfOrientationEngine(),
+            evaluator=OrientationStabilityEvaluator(
+                threshold=config.eval.orientation_stability_threshold
+            ),
+        )
+        report = checker.run(
+            persona=persona,
+            self_state=self_state,
+            graph_memory=components["graph_store"],
+            semantic_memory=components["semantic_store"],
+            autobiographical_memory=components["autobiographical_store"],
+        )
+        print("Nova 2.0 Orientation Context Pressure Check")
+        print(f"stable: {report.stable}")
+        print(f"pressure_event_count: {report.pressure_event_count}")
+        print(f"evaluation: {report.evaluation}")
+        print(f"failed_sections: {report.failed_sections}")
+        print(f"critical_failed_sections: {report.critical_failed_sections}")
         print(f"reasons: {report.reasons}")
         return 0
 
