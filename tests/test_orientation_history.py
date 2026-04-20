@@ -49,6 +49,7 @@ class OrientationHistoryTests(unittest.TestCase):
             self.assertTrue(result.stable)
             self.assertGreaterEqual(result.overall_score, 0.95)
             self.assertTrue(readiness.ready)
+            self.assertTrue(analyzer.ready_for_next_stage(limit=2, minimum_samples=2))
             self.assertEqual(readiness.sample_count, 2)
             self.assertEqual(readiness.reasons, [])
             self.assertTrue(confidence.stable)
@@ -111,6 +112,7 @@ class OrientationHistoryTests(unittest.TestCase):
             self.assertFalse(result.stable)
             self.assertLess(result.per_section["identity"], 0.5)
             self.assertFalse(readiness.ready)
+            self.assertFalse(analyzer.ready_for_next_stage(limit=2, minimum_samples=2))
             self.assertIn("orientation_stability_below_threshold", readiness.reasons)
             self.assertIn("identity", readiness.failed_sections)
 
@@ -147,6 +149,7 @@ class OrientationHistoryTests(unittest.TestCase):
             readiness = analyzer.readiness_report(limit=3, minimum_samples=2)
 
             self.assertFalse(readiness.ready)
+            self.assertFalse(analyzer.ready_for_next_stage(limit=3, minimum_samples=2))
             self.assertEqual(readiness.sample_count, 1)
             self.assertIn("insufficient_orientation_history", readiness.reasons)
 

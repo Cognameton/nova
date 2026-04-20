@@ -129,9 +129,18 @@ class OrientationHistoryAnalyzer:
         snapshots = self.load_snapshots(limit=limit)
         return self.evaluator.evaluate(snapshots)
 
-    def ready_for_next_stage(self, *, limit: int = 5) -> bool:
-        result = self.evaluate_recent(limit=limit)
-        return result.stable
+    def ready_for_next_stage(
+        self,
+        *,
+        limit: int = 5,
+        minimum_samples: int = 3,
+        confidence_delta_threshold: float = 0.2,
+    ) -> bool:
+        return self.readiness_report(
+            limit=limit,
+            minimum_samples=minimum_samples,
+            confidence_delta_threshold=confidence_delta_threshold,
+        ).ready
 
     def confidence_report(
         self,
