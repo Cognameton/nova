@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
+from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.config import NovaConfig
 from nova.inference.base import InferenceBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -115,6 +116,30 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return result
+
+    def evaluate_orientation_history(self, *, limit: int = 5) -> OrientationEvaluationResult:
+        analyzer = OrientationHistoryAnalyzer(
+            trace_dir=self.trace_logger.trace_dir,
+            evaluator=self.orientation_evaluator,
+        )
+        return analyzer.evaluate_recent(limit=limit)
+
+    def orientation_readiness_report(self, *, limit: int = 5):
+        analyzer = OrientationHistoryAnalyzer(
+            trace_dir=self.trace_logger.trace_dir,
+            evaluator=self.orientation_evaluator,
+        )
+        return analyzer.readiness_report(
+            limit=limit,
+            minimum_samples=self.config.eval.orientation_min_runs,
+        )
+
+    def orientation_confidence_report(self, *, limit: int = 5):
+        analyzer = OrientationHistoryAnalyzer(
+            trace_dir=self.trace_logger.trace_dir,
+            evaluator=self.orientation_evaluator,
+        )
+        return analyzer.confidence_report(limit=limit)
 
     def respond(self, user_text: str) -> TurnRecord:
         if self.session_id is None:

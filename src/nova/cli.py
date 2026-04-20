@@ -12,6 +12,7 @@ from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
 from nova.agent.orientation import SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationStabilityEvaluator
+from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.memory.maintenance import MemoryMaintenanceRunner
 from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
@@ -176,6 +177,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Number of repeated orientation passes to evaluate for stability.",
     )
+    parser.add_argument(
+        "--orientation-history",
+        type=int,
+        metavar="N",
+        help="Evaluate self-orientation stability across the most recent N recorded orientation snapshots.",
+    )
     return parser
 
 
@@ -269,6 +276,38 @@ def main() -> int:
             return 0
         finally:
             runtime.close()
+
+    if args.orientation_history:
+        components = build_memory_components(config_override=args.config_override)
+        config = components["config"]
+        evaluator = OrientationStabilityEvaluator(
+            threshold=config.eval.orientation_stability_threshold
+        )
+        analyzer = OrientationHistoryAnalyzer(
+            trace_dir=components["trace_logger"].trace_dir,
+            evaluator=evaluator,
+        )
+        result = analyzer.evaluate_recent(limit=args.orientation_history)
+        readiness = analyzer.readiness_report(
+            limit=args.orientation_history,
+            minimum_samples=config.eval.orientation_min_runs,
+        )
+        confidence = analyzer.confidence_report(limit=args.orientation_history)
+        print("Nova 2.0 Orientation History")
+        print(f"limit: {args.orientation_history}")
+        print(f"stable: {result.stable}")
+        print(f"overall_score: {result.overall_score}")
+        print(f"per_section: {result.per_section}")
+        print(f"threshold: {result.threshold}")
+        print(f"confidence_stable: {confidence.stable}")
+        print(f"confidence_max_delta: {confidence.max_delta}")
+        print(f"confidence_deltas: {confidence.per_section_delta}")
+        print(f"ready_for_next_stage: {readiness.ready}")
+        print(f"sample_count: {readiness.sample_count}")
+        print(f"minimum_samples: {readiness.minimum_samples}")
+        print(f"failed_sections: {readiness.failed_sections}")
+        print(f"reasons: {readiness.reasons}")
+        return 0
 
     runtime = build_runtime(config_override=args.config_override)
     session_id = None if args.new_session else args.session_id
