@@ -13,6 +13,7 @@ from nova.logging.traces import JsonlTraceLogger
 from nova.agent.orientation import SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
+from nova.agent.stability import MaintenanceOrientationStabilityChecker
 from nova.memory.maintenance import MemoryMaintenanceRunner
 from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
@@ -183,6 +184,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Evaluate self-orientation stability across the most recent N recorded orientation snapshots.",
     )
+    parser.add_argument(
+        "--orientation-maintenance-check",
+        action="store_true",
+        help="Check whether self-orientation remains stable after reflection and memory maintenance.",
+    )
+    parser.add_argument(
+        "--orientation-maintenance-apply",
+        action="store_true",
+        help="Allow the orientation maintenance check to apply demote/archive/prune mutations.",
+    )
     return parser
 
 
@@ -307,6 +318,34 @@ def main() -> int:
         print(f"minimum_samples: {readiness.minimum_samples}")
         print(f"failed_sections: {readiness.failed_sections}")
         print(f"reasons: {readiness.reasons}")
+        return 0
+
+    if args.orientation_maintenance_check:
+        components = build_memory_components(config_override=args.config_override)
+        config = components["config"]
+        persona = components["persona_store"].load()
+        self_state = components["self_state_store"].load(persona=persona)
+        checker = MaintenanceOrientationStabilityChecker(
+            orientation_engine=SelfOrientationEngine(),
+            evaluator=OrientationStabilityEvaluator(
+                threshold=config.eval.orientation_stability_threshold
+            ),
+            maintenance_runner=components["maintenance_runner"],
+        )
+        report = checker.run(
+            persona=persona,
+            self_state=self_state,
+            apply_mutations=args.orientation_maintenance_apply,
+        )
+        print("Nova 2.0 Orientation Maintenance Check")
+        print(f"stable: {report.stable}")
+        print(f"semantic_written: {report.semantic_written}")
+        print(f"autobiographical_written: {report.autobiographical_written}")
+        print(f"applied: {report.applied}")
+        print(f"apply_mutations: {report.apply_mutations}")
+        print(f"maintenance_summary: {report.maintenance_summary}")
+        print(f"evaluation: {report.evaluation}")
+        print(f"reasons: {report.reasons}")
         return 0
 
     runtime = build_runtime(config_override=args.config_override)

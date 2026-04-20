@@ -8,10 +8,12 @@ from uuid import uuid4
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
+from nova.agent.stability import MaintenanceOrientationStabilityChecker
 from nova.config import NovaConfig
 from nova.inference.base import InferenceBackend
 from nova.logging.traces import JsonlTraceLogger
 from nova.memory.policy import IdentityFirstRetrievalPolicy
+from nova.memory.maintenance import MemoryMaintenanceRunner
 from nova.memory.retrieval import BasicMemoryEventFactory, BasicMemoryRouter
 from nova.persona.store import JsonPersonaStore, JsonSelfStateStore
 from nova.prompt.composer import NovaPromptComposer
@@ -140,6 +142,37 @@ class NovaRuntime:
             evaluator=self.orientation_evaluator,
         )
         return analyzer.confidence_report(limit=limit)
+
+    def evaluate_orientation_after_maintenance(self, *, apply_mutations: bool = False):
+        self._ensure_state_loaded()
+        assert self.persona is not None
+        assert self.self_state is not None
+        stores = self.memory_router.stores
+        runner = MemoryMaintenanceRunner(
+            episodic=stores.get("episodic"),
+            engram=stores.get("engram"),
+            graph=stores.get("graph"),
+            autobiographical=stores.get("autobiographical"),
+            semantic=stores.get("semantic"),
+        )
+        checker = MaintenanceOrientationStabilityChecker(
+            orientation_engine=self.orientation_engine,
+            evaluator=self.orientation_evaluator,
+            maintenance_runner=runner,
+        )
+        report = checker.run(
+            persona=self.persona,
+            self_state=self.self_state,
+            apply_mutations=apply_mutations,
+        )
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        self.trace_logger.log_orientation(
+            session_id=self.session_id,
+            snapshot=report.after_snapshot,
+            evaluation=report.evaluation,
+        )
+        return report
 
     def respond(self, user_text: str) -> TurnRecord:
         if self.session_id is None:

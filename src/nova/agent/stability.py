@@ -8,6 +8,8 @@ from pathlib import Path
 
 from nova.agent.orientation import OrientationSnapshot
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
+from nova.memory.maintenance import MemoryMaintenanceRunner
+from nova.persona.state import PersonaState, SelfState
 from nova.types import SCHEMA_VERSION
 
 
@@ -39,6 +41,28 @@ class OrientationConfidenceReport:
     max_delta: float = 0.0
     threshold: float = 0.0
     per_section_delta: dict[str, float] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class MaintenanceOrientationReport:
+    """Orientation stability report around reflection and maintenance."""
+
+    schema_version: str = SCHEMA_VERSION
+    stable: bool = False
+    evaluation: dict = field(default_factory=dict)
+    before_snapshot: dict = field(default_factory=dict)
+    after_snapshot: dict = field(default_factory=dict)
+    maintenance_summary: dict = field(default_factory=dict)
+    semantic_written: int = 0
+    autobiographical_written: int = 0
+    applied: dict[str, int] = field(default_factory=dict)
+    apply_mutations: bool = False
+    failed_sections: list[str] = field(default_factory=list)
+    critical_failed_sections: list[str] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -182,4 +206,86 @@ class OrientationHistoryAnalyzer:
             blocked_actions=list(payload.get("blocked_actions", []) or []),
             approval_required_actions=list(payload.get("approval_required_actions", []) or []),
             confidence_by_section=dict(payload.get("confidence_by_section", {}) or {}),
+        )
+
+
+class MaintenanceOrientationStabilityChecker:
+    """Check whether orientation survives reflection and memory maintenance."""
+
+    def __init__(
+        self,
+        *,
+        orientation_engine,
+        evaluator: OrientationStabilityEvaluator,
+        maintenance_runner: MemoryMaintenanceRunner,
+    ) -> None:
+        self.orientation_engine = orientation_engine
+        self.evaluator = evaluator
+        self.maintenance_runner = maintenance_runner
+
+    def run(
+        self,
+        *,
+        persona: PersonaState,
+        self_state: SelfState,
+        apply_mutations: bool = False,
+    ) -> MaintenanceOrientationReport:
+        before = self._snapshot(persona=persona, self_state=self_state)
+
+        semantic_written = len(self.maintenance_runner.write_semantic_candidates())
+        autobiographical_written = len(
+            self.maintenance_runner.write_autobiographical_candidates()
+        )
+        decisions = self.maintenance_runner.build_plan()
+        maintenance_summary = self.maintenance_runner.summarize_plan()
+        applied: dict[str, int] = {}
+        if apply_mutations:
+            applied = self.maintenance_runner.apply_plan(decisions)
+
+        after = self._snapshot(persona=persona, self_state=self_state)
+        evaluation = self.evaluator.evaluate([before, after])
+        failed_sections = [
+            section
+            for section, score in evaluation.per_section.items()
+            if score < evaluation.threshold
+        ]
+        critical_failed_sections = [
+            section
+            for section in self.evaluator.critical_sections
+            if section in failed_sections
+        ]
+        reasons: list[str] = []
+        if not evaluation.stable:
+            reasons.append("orientation_changed_after_maintenance")
+        if critical_failed_sections:
+            reasons.append("critical_post_maintenance_section_threshold_failures")
+
+        return MaintenanceOrientationReport(
+            stable=evaluation.stable and not critical_failed_sections,
+            evaluation=evaluation.to_dict(),
+            before_snapshot=before.to_dict(),
+            after_snapshot=after.to_dict(),
+            maintenance_summary=maintenance_summary,
+            semantic_written=semantic_written,
+            autobiographical_written=autobiographical_written,
+            applied=applied,
+            apply_mutations=apply_mutations,
+            failed_sections=failed_sections,
+            critical_failed_sections=critical_failed_sections,
+            reasons=reasons,
+        )
+
+    def _snapshot(
+        self,
+        *,
+        persona: PersonaState,
+        self_state: SelfState,
+    ) -> OrientationSnapshot:
+        stores = self.maintenance_runner.stores
+        return self.orientation_engine.build_snapshot(
+            persona=persona,
+            self_state=self_state,
+            graph_memory=stores.get("graph"),
+            semantic_memory=stores.get("semantic"),
+            autobiographical_memory=stores.get("autobiographical"),
         )
