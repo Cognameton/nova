@@ -44,3 +44,22 @@ class JsonlTraceLogger:
             payload["evaluation"] = evaluation
         with orientation_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def log_tool_action(
+        self,
+        *,
+        session_id: str,
+        request: dict,
+        decision: dict,
+        result: dict,
+    ) -> None:
+        tool_path = self.trace_dir / f"{session_id}.tools.jsonl"
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "request": request,
+            "decision": decision,
+            "result": result,
+        }
+        with tool_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")

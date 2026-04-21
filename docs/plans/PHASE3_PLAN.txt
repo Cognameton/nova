@@ -313,6 +313,34 @@ Examples of early tools:
 - write approved notes
 - bounded file reads in approved locations
 
+Stage 3.3 implementation order:
+1. Define tool schemas before adding executable tools.
+2. Define tool permission levels:
+   - allowed
+   - approval_required
+   - blocked
+3. Define a tool registry.
+4. Define a tool request and tool result contract.
+5. Define a tool gate that checks orientation readiness before execution.
+6. Add action logging for every tool request and result.
+7. Add only non-destructive internal tools first.
+8. Add bounded file read only after internal tools are stable.
+
+Stage 3.3 first tool candidates:
+- orientation_snapshot
+- orientation_readiness
+- maintenance_plan
+- write_semantic_reflection
+- write_autobiographical_reflection
+
+Stage 3.3 restrictions:
+- no shell execution
+- no unrestricted file writes
+- no network access
+- no autonomous tool loop
+- no tool execution unless orientation readiness permits it
+- no destructive action without explicit approval
+
 
 STAGE 3.4: FEATURE EXPANSION
 ----------------------------

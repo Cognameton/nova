@@ -13,6 +13,10 @@ from nova.agent.stability import (
     OrientationHistoryAnalyzer,
     OrientationReadinessReport,
 )
+from nova.agent.tool_gate import ToolGate
+from nova.agent.tool_executor import InternalToolExecutor
+from nova.agent.tool_registry import ToolRegistry, default_tool_registry
+from nova.agent.tools import ToolGateDecision, ToolRequest, ToolResult, ToolSpec
 
 __all__ = [
     "AwarenessClassifier",
@@ -20,6 +24,7 @@ __all__ = [
     "BoundaryPolicy",
     "ContextPressureOrientationChecker",
     "ContextPressureOrientationReport",
+    "InternalToolExecutor",
     "MaintenanceOrientationReport",
     "MaintenanceOrientationStabilityChecker",
     "OperationalLatitude",
@@ -30,4 +35,11 @@ __all__ = [
     "OrientationSnapshot",
     "OrientationStabilityEvaluator",
     "SelfOrientationEngine",
+    "ToolGate",
+    "ToolGateDecision",
+    "ToolRegistry",
+    "ToolRequest",
+    "ToolResult",
+    "ToolSpec",
+    "default_tool_registry",
 ]

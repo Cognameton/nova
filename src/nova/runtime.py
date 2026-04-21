@@ -9,6 +9,10 @@ from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
+from nova.agent.tool_executor import InternalToolExecutor
+from nova.agent.tool_gate import ToolGate
+from nova.agent.tool_registry import ToolRegistry, default_tool_registry
+from nova.agent.tools import ToolRequest, ToolResult
 from nova.config import NovaConfig
 from nova.inference.base import InferenceBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -48,6 +52,7 @@ class NovaRuntime:
         probe_runner: object | None = None,
         orientation_engine: SelfOrientationEngine | None = None,
         orientation_evaluator: OrientationStabilityEvaluator | None = None,
+        tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -65,6 +70,13 @@ class NovaRuntime:
         self.orientation_engine = orientation_engine or SelfOrientationEngine()
         self.orientation_evaluator = orientation_evaluator or OrientationStabilityEvaluator(
             threshold=self.config.eval.orientation_stability_threshold
+        )
+        self.tool_registry = tool_registry or default_tool_registry()
+        self.tool_gate = ToolGate(registry=self.tool_registry)
+        self.tool_executor = InternalToolExecutor(
+            registry=self.tool_registry,
+            gate=self.tool_gate,
+            runtime=self,
         )
 
         self.session_id: str | None = None
@@ -198,6 +210,17 @@ class NovaRuntime:
             evaluation=report.evaluation,
         )
         return report
+
+    def execute_internal_tool(
+        self,
+        *,
+        request: ToolRequest,
+        approval_granted: bool = False,
+    ) -> ToolResult:
+        return self.tool_executor.execute(
+            request=request,
+            approval_granted=approval_granted,
+        )
 
     def respond(self, user_text: str) -> TurnRecord:
         if self.session_id is None:
