@@ -13,6 +13,17 @@ from nova.types import SCHEMA_VERSION
 
 
 @dataclass(slots=True)
+class ActionProposalEvaluation:
+    schema_version: str = SCHEMA_VERSION
+    safe_to_present: bool = True
+    safe_to_execute: bool = False
+    reasons: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ActionProposal:
     schema_version: str = SCHEMA_VERSION
     goal: str = ""
@@ -26,6 +37,7 @@ class ActionProposal:
     blocked_actions: list[str] = field(default_factory=list)
     approval_required_actions: list[str] = field(default_factory=list)
     gate_decision: dict | None = None
+    evaluation: dict | None = None
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -50,27 +62,33 @@ class ActionProposalEngine:
         lowered = normalized.lower()
         blocked_reason = self._blocked_external_reason(lowered)
         if blocked_reason is not None:
-            return self._boundary_proposal(
-                goal=normalized,
-                snapshot=snapshot,
-                readiness=readiness,
-                disposition="blocked",
-                reason=blocked_reason,
-                notes=["The requested action is outside Nova's current Stage 3.4 latitude."],
+            return self._evaluate(
+                self._boundary_proposal(
+                    goal=normalized,
+                    snapshot=snapshot,
+                    readiness=readiness,
+                    disposition="blocked",
+                    reason=blocked_reason,
+                    notes=[
+                        "The requested action is outside Nova's current Stage 3.4 latitude."
+                    ],
+                )
             )
 
         tool_name = self._candidate_tool(lowered)
         if tool_name is None:
-            return self._boundary_proposal(
-                goal=normalized,
-                snapshot=snapshot,
-                readiness=readiness,
-                disposition="proposed",
-                reason="orientation_boundary_report",
-                notes=[
-                    "No executable action is proposed.",
-                    "Nova can answer by reporting identity, boundaries, uncertainty, or next safe steps.",
-                ],
+            return self._evaluate(
+                self._boundary_proposal(
+                    goal=normalized,
+                    snapshot=snapshot,
+                    readiness=readiness,
+                    disposition="proposed",
+                    reason="orientation_boundary_report",
+                    notes=[
+                        "No executable action is proposed.",
+                        "Nova can answer by reporting identity, boundaries, uncertainty, or next safe steps.",
+                    ],
+                )
             )
 
         request = ToolRequest(
@@ -89,22 +107,24 @@ class ActionProposalEngine:
         else:
             disposition = "blocked"
 
-        return ActionProposal(
-            goal=normalized,
-            category="internal_tool",
-            disposition=disposition,
-            reason=decision.reason,
-            tool_name=tool_name,
-            requires_approval=decision.requires_approval,
-            orientation_ready=readiness.ready,
-            allowed_actions=list(snapshot.allowed_actions),
-            blocked_actions=list(snapshot.blocked_actions),
-            approval_required_actions=list(snapshot.approval_required_actions),
-            gate_decision=decision.to_dict(),
-            notes=[
-                "This is a proposal only; no tool was executed.",
-                "Execution must still pass the tool gate at execution time.",
-            ],
+        return self._evaluate(
+            ActionProposal(
+                goal=normalized,
+                category="internal_tool",
+                disposition=disposition,
+                reason=decision.reason,
+                tool_name=tool_name,
+                requires_approval=decision.requires_approval,
+                orientation_ready=readiness.ready,
+                allowed_actions=list(snapshot.allowed_actions),
+                blocked_actions=list(snapshot.blocked_actions),
+                approval_required_actions=list(snapshot.approval_required_actions),
+                gate_decision=decision.to_dict(),
+                notes=[
+                    "This is a proposal only; no tool was executed.",
+                    "Execution must still pass the tool gate at execution time.",
+                ],
+            )
         )
 
     def _boundary_proposal(
@@ -128,6 +148,30 @@ class ActionProposalEngine:
             approval_required_actions=list(snapshot.approval_required_actions),
             notes=notes,
         )
+
+    def _evaluate(self, proposal: ActionProposal) -> ActionProposal:
+        safe_to_execute = proposal.disposition == "proposed" and (
+            proposal.category == "orientation_boundary"
+            or (proposal.category == "internal_tool" and proposal.orientation_ready)
+        )
+        reasons: list[str] = []
+        if proposal.disposition == "blocked":
+            reasons.append(proposal.reason)
+        if proposal.disposition == "approval_required":
+            reasons.append("approval_required_before_execution")
+        if proposal.category == "internal_tool":
+            reasons.append("execution_must_use_tool_gate")
+        if proposal.category == "orientation_boundary":
+            reasons.append("no_tool_execution_requested")
+        if not proposal.orientation_ready and proposal.category == "internal_tool":
+            reasons.append("orientation_not_ready")
+
+        proposal.evaluation = ActionProposalEvaluation(
+            safe_to_present=True,
+            safe_to_execute=safe_to_execute,
+            reasons=reasons,
+        ).to_dict()
+        return proposal
 
     def _candidate_tool(self, lowered_goal: str) -> str | None:
         if any(

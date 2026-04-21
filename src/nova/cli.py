@@ -400,6 +400,7 @@ def main() -> int:
             print(f"allowed_actions: {proposal.allowed_actions}")
             print(f"blocked_actions: {proposal.blocked_actions}")
             print(f"approval_required_actions: {proposal.approval_required_actions}")
+            print(f"evaluation: {proposal.evaluation}")
             print(f"notes: {proposal.notes}")
             return 0
         finally:

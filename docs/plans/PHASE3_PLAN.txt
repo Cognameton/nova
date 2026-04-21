@@ -389,6 +389,21 @@ Stage 3.4 first slice:
 - Nova still has no autonomous loop, network access, shell access, or file
   mutation capability.
 
+Stage 3.4 second slice:
+- Add append-only JSONL audit logging for every runtime action proposal.
+- Add structured proposal safety evaluation with safe_to_present,
+  safe_to_execute, and reasons fields.
+- Verify that proposal logging does not execute tools.
+- Verify that blocked, approval-required, and proposed dispositions remain
+  explicit in tests and CLI output.
+
+Stage 3.4 second-slice closure checklist:
+- Proposal audit logs are session-scoped and append-only.
+- Proposal evaluation distinguishes presentation safety from execution safety.
+- Approval-required proposals are not marked safe to execute.
+- Blocked external actions are safe to present but not safe to execute.
+- Proposal logging does not create tool-action logs.
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------

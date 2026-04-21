@@ -228,11 +228,17 @@ class NovaRuntime:
         )
 
     def propose_action(self, *, goal: str) -> ActionProposal:
-        return self.action_proposal_engine.propose(
+        proposal = self.action_proposal_engine.propose(
             goal=goal,
             snapshot=self.orientation_snapshot(),
             readiness=self.orientation_readiness_report(),
         )
+        assert self.session_id is not None
+        self.trace_logger.log_action_proposal(
+            session_id=self.session_id,
+            proposal=proposal.to_dict(),
+        )
+        return proposal
 
     def respond(self, user_text: str) -> TurnRecord:
         if self.session_id is None:
