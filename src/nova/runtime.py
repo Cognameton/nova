@@ -10,6 +10,7 @@ from nova.agent.orientation_eval import OrientationEvaluationResult, Orientation
 from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
 from nova.agent.action import (
+    ActionApproval,
     ActionExecutionResult,
     ActionProposal,
     ActionProposalEngine,
@@ -249,7 +250,15 @@ class NovaRuntime:
         *,
         goal: str,
         approval_granted: bool = False,
+        approval: ActionApproval | None = None,
     ) -> ActionExecutionResult:
+        effective_approval = approval or ActionApproval(
+            granted=approval_granted,
+            approved_by="runtime_flag" if approval_granted else "",
+            reason="legacy_boolean_approval" if approval_granted else "",
+        )
+        approval_granted = effective_approval.granted
+        approval_data = effective_approval.to_dict()
         proposal = self.propose_action(goal=goal)
         proposal_data = proposal.to_dict()
         if proposal.category != "internal_tool" or proposal.tool_name is None:
@@ -261,6 +270,7 @@ class NovaRuntime:
                     reason="no_internal_tool_proposed",
                     proposal=proposal_data,
                     approval_granted=approval_granted,
+                    approval=approval_data,
                 )
             )
         if proposal.disposition == "blocked":
@@ -272,6 +282,7 @@ class NovaRuntime:
                     reason=proposal.reason,
                     proposal=proposal_data,
                     approval_granted=approval_granted,
+                    approval=approval_data,
                 )
             )
         if proposal.requires_approval and not approval_granted:
@@ -283,6 +294,7 @@ class NovaRuntime:
                     reason="approval_required_before_execution",
                     proposal=proposal_data,
                     approval_granted=False,
+                    approval=approval_data,
                 )
             )
 
@@ -308,6 +320,7 @@ class NovaRuntime:
                     rollback_applied=True,
                     snapshot_channels=sorted(snapshot),
                     approval_granted=approval_granted,
+                    approval=approval_data,
                 )
             )
         stability = None
@@ -330,6 +343,7 @@ class NovaRuntime:
                         rollback_applied=bool(snapshot),
                         snapshot_channels=sorted(snapshot),
                         approval_granted=approval_granted,
+                        approval=approval_data,
                     )
                 )
         return self._log_action_execution(
@@ -345,6 +359,7 @@ class NovaRuntime:
                 rollback_applied=False,
                 snapshot_channels=sorted(snapshot),
                 approval_granted=approval_granted,
+                approval=approval_data,
             )
         )
 

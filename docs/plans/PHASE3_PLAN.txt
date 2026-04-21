@@ -451,6 +451,19 @@ Stage 3.4 fifth-slice restrictions:
 - broader transactional rollback remains future work before autonomous tool
   chains
 
+Stage 3.4 sixth slice:
+- Replace anonymous approval-only execution with structured approval provenance.
+- Add ActionApproval with granted, approved_by, reason, and source fields.
+- Runtime action execution records approval details in every action result.
+- CLI approvals record source=cli and approved_by=cli with an approval reason.
+- Legacy boolean approval remains supported but is marked as runtime_flag
+  provenance.
+
+Stage 3.4 sixth-slice restrictions:
+- approval provenance is recorded, not authenticated
+- durable user/account identity and signed approvals remain future UI work
+- autonomous self-approval remains out of scope
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------

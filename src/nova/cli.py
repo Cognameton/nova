@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from nova.agent.action import ActionApproval
 from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
@@ -214,6 +215,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Grant explicit approval for an approval-required proposed action.",
     )
+    parser.add_argument(
+        "--approval-reason",
+        default="CLI approval",
+        help="Reason recorded when --approve-action is used.",
+    )
     return parser
 
 
@@ -419,9 +425,15 @@ def main() -> int:
     if args.execute_action_proposal:
         runtime = build_runtime(config_override=args.config_override)
         try:
+            approval = ActionApproval(
+                granted=args.approve_action,
+                approved_by="cli" if args.approve_action else "",
+                reason=args.approval_reason if args.approve_action else "",
+                source="cli",
+            )
             execution = runtime.execute_proposed_action(
                 goal=args.execute_action_proposal,
-                approval_granted=args.approve_action,
+                approval=approval,
             )
             print("Nova 2.0 Action Execution")
             print(f"goal: {execution.goal}")
@@ -433,6 +445,7 @@ def main() -> int:
             print(f"rollback_applied: {execution.rollback_applied}")
             print(f"snapshot_channels: {execution.snapshot_channels}")
             print(f"approval_granted: {execution.approval_granted}")
+            print(f"approval: {execution.approval}")
             print(f"proposal: {execution.proposal}")
             print(f"tool_result: {execution.tool_result}")
             return 0

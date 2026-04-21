@@ -13,6 +13,18 @@ from nova.types import SCHEMA_VERSION
 
 
 @dataclass(slots=True)
+class ActionApproval:
+    schema_version: str = SCHEMA_VERSION
+    granted: bool = False
+    approved_by: str = ""
+    reason: str = ""
+    source: str = "runtime"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ActionProposalEvaluation:
     schema_version: str = SCHEMA_VERSION
     safe_to_present: bool = True
@@ -58,6 +70,7 @@ class ActionExecutionResult:
     rollback_applied: bool = False
     snapshot_channels: list[str] = field(default_factory=list)
     approval_granted: bool = False
+    approval: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)

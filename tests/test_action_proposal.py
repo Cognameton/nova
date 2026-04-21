@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nova.agent.action import ActionProposalEngine
+from nova.agent.action import ActionApproval, ActionProposalEngine
 from nova.agent.orientation import SelfOrientationEngine
 from nova.agent.stability import OrientationReadinessReport
 from nova.agent.tool_gate import ToolGate
@@ -300,9 +300,55 @@ class ActionProposalTests(unittest.TestCase):
             self.assertEqual(execution.status, "approval_required")
             self.assertFalse(execution.executed)
             self.assertIsNone(execution.tool_result)
+            self.assertEqual(execution.approval_granted, False)
+            self.assertEqual(execution.approval["granted"], False)
             self.assertTrue((trace_dir / f"{session_id}.proposals.jsonl").exists())
             self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
             self.assertFalse((trace_dir / f"{session_id}.tools.jsonl").exists())
+
+    def test_runtime_records_explicit_approval_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            try:
+                self._seed_semantic_reflection_source(runtime)
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                execution = runtime.execute_proposed_action(
+                    goal="Write semantic reflection memory.",
+                    approval=ActionApproval(
+                        granted=True,
+                        approved_by="architect",
+                        reason="approved reflection test",
+                        source="unit-test",
+                    ),
+                )
+            finally:
+                runtime.close()
+
+            self.assertEqual(execution.approval_granted, True)
+            self.assertEqual(execution.approval["approved_by"], "architect")
+            self.assertEqual(execution.approval["reason"], "approved reflection test")
+            self.assertEqual(execution.approval["source"], "unit-test")
+
+    def test_runtime_boolean_approval_keeps_legacy_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            try:
+                self._seed_semantic_reflection_source(runtime)
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                execution = runtime.execute_proposed_action(
+                    goal="Write semantic reflection memory.",
+                    approval_granted=True,
+                )
+            finally:
+                runtime.close()
+
+            self.assertEqual(execution.approval_granted, True)
+            self.assertEqual(execution.approval["approved_by"], "runtime_flag")
+            self.assertEqual(execution.approval["reason"], "legacy_boolean_approval")
 
     def test_runtime_boundary_action_does_not_execute_tool(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
