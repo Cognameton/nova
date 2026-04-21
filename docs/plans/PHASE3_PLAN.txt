@@ -350,11 +350,15 @@ Stage 3.3 closure status:
 - Implemented typed tool contracts, registry, permission gate, runtime executor,
   audit logging, readiness gating, approval-required reflection writes, blocked
   shell registration, and post-tool orientation stability guards.
-- Full test suite passed at closure: 53 tests.
-- Carry-forward risk: approved reflection writes are checked after mutation and
-  do not yet roll back if stability fails.
-- Carry-forward risk: approval is currently a boolean runtime flag rather than
-  a provenance-backed approval record.
+- Full test suite passed at closure: 69 tests.
+- Carry-forward risk resolved in Stage 3.4 Slice 5: approved reflection writes
+  now snapshot and restore on stability failure. Remaining risk: rollback is
+  file-level JSONL only and does not cover SQLite/graph, external systems, or
+  broader transactional rollback.
+- Carry-forward risk resolved in Stage 3.4 Slice 6: approval is now a
+  structured ActionApproval record with provenance (granted, approved_by,
+  reason, source). Remaining risk: approval is recorded, not authenticated;
+  durable signed approvals remain future work.
 
 
 STAGE 3.4: FEATURE EXPANSION
@@ -434,7 +438,7 @@ Stage 3.4 fourth slice:
 Stage 3.4 fourth-slice restrictions:
 - the stability check does not roll back already executed tool effects
 - the stability check prevents success reporting, not tool dispatch
-- rollback/snapshot restore remains future work before broader autonomy
+- rollback/snapshot restore for reflection writes was added in Slice 5
 
 Stage 3.4 fifth slice:
 - Add narrow action rollback for approved memory-mutating reflection tools.
@@ -480,6 +484,19 @@ Stage 3.4 seventh-slice restrictions:
 - enforcement remains in proposal, gate, approval, rollback, and stability
   guard layers
 
+Stage 3.4 closure status:
+- Closed after final review on 2026-04-21.
+- Implemented action proposal layer, proposal audit logging, bounded
+  single-step execution, post-action orientation stability guards, file-level
+  JSONL rollback for reflection writes, structured approval provenance, and
+  action history evaluation.
+- Full test suite passed at closure: 69 tests.
+- Carry-forward risk: rollback is file-level JSONL only; SQLite/graph,
+  external systems, and broader transactional rollback remain out of scope.
+- Carry-forward risk: approval provenance is recorded, not cryptographically
+  authenticated; durable signed approvals remain future work.
+- Carry-forward risk: autonomous self-approval remains out of scope.
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------
@@ -492,13 +509,18 @@ Phase 3 is complete when:
 - agentic evaluation shows continuity remains intact
 
 
-NEXT IMPLEMENTATION STEP
-------------------------
+PHASE 3 CLOSURE
+---------------
 
-The first implementation slice of Phase 3 should be Stage 3.1 only:
-- build self-orientation structures
-- build awareness-boundary structures
-- build operational-latitude structures
-- add orientation evaluation
+Phase 3 is complete as of 2026-04-21.
 
-Do not begin tool implementation until Stage 3.1 and Stage 3.2 are stable.
+All definition-of-done criteria met:
+- Nova can self-orient reliably.
+- Nova can preserve self-orientation under repetition.
+- Nova can use a small, safe toolset without destabilizing identity.
+- Action boundaries are explicit.
+- Agentic evaluation shows continuity remains intact.
+
+Next phase: Phase 4 — Interaction and Presence.
+Focus: making Nova usable as a stable interactive identity before introducing
+voice, always-on loops, or broader autonomy.
