@@ -76,18 +76,47 @@ class InternalToolExecutor:
         if request.tool_name == "orientation_readiness":
             return self.runtime.orientation_readiness_report().to_dict()
         if request.tool_name == "maintenance_plan":
-            stores = self.runtime.memory_router.stores
-            from nova.memory.maintenance import MemoryMaintenanceRunner
-
-            runner = MemoryMaintenanceRunner(
-                episodic=stores.get("episodic"),
-                engram=stores.get("engram"),
-                graph=stores.get("graph"),
-                autobiographical=stores.get("autobiographical"),
-                semantic=stores.get("semantic"),
-            )
+            runner = self._maintenance_runner()
             return runner.summarize_plan()
+        if request.tool_name == "write_semantic_reflection":
+            before = self.runtime.orientation_snapshot()
+            written = self._maintenance_runner().write_semantic_candidates()
+            stability = self.runtime.evaluate_orientation_under_context_pressure()
+            after = self.runtime.orientation_snapshot()
+            return {
+                "written": len(written),
+                "event_ids": [event.event_id for event in written],
+                "orientation_stable": stability.stable,
+                "before_identity": before.identity,
+                "after_identity": after.identity,
+                "stability": stability.to_dict(),
+            }
+        if request.tool_name == "write_autobiographical_reflection":
+            before = self.runtime.orientation_snapshot()
+            written = self._maintenance_runner().write_autobiographical_candidates()
+            stability = self.runtime.evaluate_orientation_under_context_pressure()
+            after = self.runtime.orientation_snapshot()
+            return {
+                "written": len(written),
+                "event_ids": [event.event_id for event in written],
+                "orientation_stable": stability.stable,
+                "before_identity": before.identity,
+                "after_identity": after.identity,
+                "stability": stability.to_dict(),
+            }
         raise ValueError(f"Unsupported internal tool execution: {request.tool_name}")
+
+    def _maintenance_runner(self):
+        stores = self.runtime.memory_router.stores
+        from nova.memory.maintenance import MemoryMaintenanceRunner
+
+        return MemoryMaintenanceRunner(
+            episodic=stores.get("episodic"),
+            engram=stores.get("engram"),
+            graph=stores.get("graph"),
+            autobiographical=stores.get("autobiographical"),
+            semantic=stores.get("semantic"),
+        )
 
     def _log(self, *, request: ToolRequest, decision: dict, result: ToolResult) -> None:
         session_id = getattr(self.runtime, "session_id", None)

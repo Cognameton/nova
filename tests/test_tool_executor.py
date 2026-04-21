@@ -9,6 +9,8 @@ import yaml
 
 from nova.cli import build_runtime
 from nova.agent.tools import ToolRequest
+from nova.memory.episodic import JsonlEpisodicMemoryStore
+from nova.types import MemoryEvent
 
 
 class ToolExecutorTests(unittest.TestCase):
@@ -94,6 +96,114 @@ class ToolExecutorTests(unittest.TestCase):
 
             self.assertEqual(result.status, "blocked")
             self.assertEqual(result.error, "tool_blocked")
+
+    def test_executor_runs_approved_semantic_reflection_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            episodic = JsonlEpisodicMemoryStore(base / "data" / "memory" / "episodic.jsonl")
+            episodic.add(
+                MemoryEvent(
+                    event_id="e1",
+                    timestamp="2026-04-20T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="episodic",
+                    kind="user_message",
+                    text="I prefer local inference for Nova.",
+                    tags=["user", "turn", "preference"],
+                    importance=0.75,
+                    confidence=1.0,
+                    continuity_weight=0.75,
+                    source="user",
+                )
+            )
+            episodic.add(
+                MemoryEvent(
+                    event_id="e2",
+                    timestamp="2026-04-20T00:01:00Z",
+                    session_id="s1",
+                    turn_id="t2",
+                    channel="episodic",
+                    kind="user_message",
+                    text="I want Nova to stay local-first.",
+                    tags=["user", "turn", "preference"],
+                    importance=0.8,
+                    confidence=1.0,
+                    continuity_weight=0.8,
+                    source="user",
+                )
+            )
+
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                blocked = runtime.execute_internal_tool(
+                    request=ToolRequest(tool_name="write_semantic_reflection")
+                )
+                approved = runtime.execute_internal_tool(
+                    request=ToolRequest(tool_name="write_semantic_reflection"),
+                    approval_granted=True,
+                )
+            finally:
+                runtime.close()
+
+            self.assertEqual(blocked.status, "approval_required")
+            self.assertEqual(approved.status, "ok")
+            self.assertGreaterEqual(approved.output["written"], 1)
+            self.assertTrue(approved.output["orientation_stable"])
+
+    def test_executor_runs_approved_autobiographical_reflection_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            episodic = JsonlEpisodicMemoryStore(base / "data" / "memory" / "episodic.jsonl")
+            episodic.add(
+                MemoryEvent(
+                    event_id="e1",
+                    timestamp="2026-04-20T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="My name is Nova. I remain focused on continuity.",
+                    tags=["assistant", "turn", "identity"],
+                    importance=0.85,
+                    confidence=1.0,
+                    continuity_weight=0.95,
+                    source="nova",
+                )
+            )
+            episodic.add(
+                MemoryEvent(
+                    event_id="e2",
+                    timestamp="2026-04-20T00:01:00Z",
+                    session_id="s1",
+                    turn_id="t2",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="I keep continuity at the center of my self-model.",
+                    tags=["assistant", "turn", "identity", "value"],
+                    importance=0.9,
+                    confidence=1.0,
+                    continuity_weight=0.95,
+                    source="nova",
+                )
+            )
+
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                approved = runtime.execute_internal_tool(
+                    request=ToolRequest(tool_name="write_autobiographical_reflection"),
+                    approval_granted=True,
+                )
+            finally:
+                runtime.close()
+
+            self.assertEqual(approved.status, "ok")
+            self.assertGreaterEqual(approved.output["written"], 1)
+            self.assertTrue(approved.output["orientation_stable"])
 
 
 if __name__ == "__main__":
