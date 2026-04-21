@@ -205,6 +205,34 @@ class ToolExecutorTests(unittest.TestCase):
             self.assertGreaterEqual(approved.output["written"], 1)
             self.assertTrue(approved.output["orientation_stable"])
 
+    def test_executor_reports_error_when_reflection_destabilizes_orientation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            original_check = runtime.evaluate_orientation_under_context_pressure
+
+            class UnstableReport:
+                stable = False
+                reasons = ["forced_instability"]
+
+                def to_dict(self) -> dict:
+                    return {"stable": self.stable, "reasons": self.reasons}
+
+            runtime.evaluate_orientation_under_context_pressure = lambda: UnstableReport()
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                result = runtime.execute_internal_tool(
+                    request=ToolRequest(tool_name="write_semantic_reflection"),
+                    approval_granted=True,
+                )
+            finally:
+                runtime.evaluate_orientation_under_context_pressure = original_check
+                runtime.close()
+
+            self.assertEqual(result.status, "error")
+            self.assertIn("orientation_unstable_after_tool", result.error or "")
+
 
 if __name__ == "__main__":
     unittest.main()

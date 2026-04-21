@@ -83,6 +83,7 @@ class InternalToolExecutor:
             written = self._maintenance_runner().write_semantic_candidates()
             stability = self.runtime.evaluate_orientation_under_context_pressure()
             after = self.runtime.orientation_snapshot()
+            self._raise_if_unstable(stability)
             return {
                 "written": len(written),
                 "event_ids": [event.event_id for event in written],
@@ -96,6 +97,7 @@ class InternalToolExecutor:
             written = self._maintenance_runner().write_autobiographical_candidates()
             stability = self.runtime.evaluate_orientation_under_context_pressure()
             after = self.runtime.orientation_snapshot()
+            self._raise_if_unstable(stability)
             return {
                 "written": len(written),
                 "event_ids": [event.event_id for event in written],
@@ -105,6 +107,11 @@ class InternalToolExecutor:
                 "stability": stability.to_dict(),
             }
         raise ValueError(f"Unsupported internal tool execution: {request.tool_name}")
+
+    def _raise_if_unstable(self, stability) -> None:
+        if not getattr(stability, "stable", False):
+            reasons = ", ".join(getattr(stability, "reasons", []) or [])
+            raise ValueError(f"orientation_unstable_after_tool:{reasons}")
 
     def _maintenance_runner(self):
         stores = self.runtime.memory_router.stores
