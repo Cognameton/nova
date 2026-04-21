@@ -290,15 +290,33 @@ class NovaRuntime:
             tool_name=proposal.tool_name,
             reason=f"Stage 3.4 single-step execution for: {goal}",
         )
+        snapshot = self._snapshot_action_state(tool_name=proposal.tool_name)
         tool_result = self.execute_internal_tool(
             request=request,
             approval_granted=approval_granted,
         )
+        if snapshot and tool_result.status != "ok":
+            self._restore_action_state(snapshot)
+            return self._log_action_execution(
+                ActionExecutionResult(
+                    goal=goal,
+                    status=tool_result.status,
+                    executed=False,
+                    reason=tool_result.error or tool_result.status,
+                    proposal=proposal_data,
+                    tool_result=tool_result.to_dict(),
+                    rollback_applied=True,
+                    snapshot_channels=sorted(snapshot),
+                    approval_granted=approval_granted,
+                )
+            )
         stability = None
         if tool_result.status == "ok":
             stability = self.evaluate_orientation_under_context_pressure()
             if not getattr(stability, "stable", False):
                 reasons = ", ".join(getattr(stability, "reasons", []) or [])
+                if snapshot:
+                    self._restore_action_state(snapshot)
                 return self._log_action_execution(
                     ActionExecutionResult(
                         goal=goal,
@@ -309,6 +327,8 @@ class NovaRuntime:
                         tool_result=tool_result.to_dict(),
                         orientation_stable=False,
                         stability_report=stability.to_dict(),
+                        rollback_applied=bool(snapshot),
+                        snapshot_channels=sorted(snapshot),
                         approval_granted=approval_granted,
                     )
                 )
@@ -322,9 +342,33 @@ class NovaRuntime:
                 tool_result=tool_result.to_dict(),
                 orientation_stable=getattr(stability, "stable", None),
                 stability_report=stability.to_dict() if stability is not None else None,
+                rollback_applied=False,
+                snapshot_channels=sorted(snapshot),
                 approval_granted=approval_granted,
             )
         )
+
+    def _snapshot_action_state(self, *, tool_name: str) -> dict[str, bytes]:
+        snapshot_channels = {
+            "write_semantic_reflection": ("semantic",),
+            "write_autobiographical_reflection": ("autobiographical",),
+        }.get(tool_name, ())
+        snapshot: dict[str, bytes] = {}
+        for channel in snapshot_channels:
+            store = self.memory_router.stores.get(channel)
+            path = getattr(store, "path", None)
+            if path is None:
+                continue
+            snapshot[channel] = path.read_bytes()
+        return snapshot
+
+    def _restore_action_state(self, snapshot: dict[str, bytes]) -> None:
+        for channel, payload in snapshot.items():
+            store = self.memory_router.stores.get(channel)
+            path = getattr(store, "path", None)
+            if path is None:
+                continue
+            path.write_bytes(payload)
 
     def _log_action_execution(
         self,

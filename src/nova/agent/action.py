@@ -55,6 +55,8 @@ class ActionExecutionResult:
     tool_result: dict | None = None
     orientation_stable: bool | None = None
     stability_report: dict | None = None
+    rollback_applied: bool = False
+    snapshot_channels: list[str] = field(default_factory=list)
     approval_granted: bool = False
 
     def to_dict(self) -> dict:

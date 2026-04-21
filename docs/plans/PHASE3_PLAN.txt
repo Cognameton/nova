@@ -436,6 +436,21 @@ Stage 3.4 fourth-slice restrictions:
 - the stability check prevents success reporting, not tool dispatch
 - rollback/snapshot restore remains future work before broader autonomy
 
+Stage 3.4 fifth slice:
+- Add narrow action rollback for approved memory-mutating reflection tools.
+- Before executing write_semantic_reflection or
+  write_autobiographical_reflection, snapshot the affected memory file.
+- If the tool returns an error or post-action stability fails, restore the
+  affected memory file before logging the action result.
+- The action result records rollback_applied and snapshot_channels.
+
+Stage 3.4 fifth-slice restrictions:
+- rollback is file-level and limited to known JSONL reflection memory stores
+- rollback does not cover external systems, shell commands, network effects, or
+  SQLite graph mutation
+- broader transactional rollback remains future work before autonomous tool
+  chains
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------

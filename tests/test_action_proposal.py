@@ -12,6 +12,7 @@ from nova.agent.tool_gate import ToolGate
 from nova.agent.tool_registry import default_tool_registry
 from nova.cli import build_runtime
 from nova.persona.defaults import default_persona_state, default_self_state
+from nova.types import MemoryEvent
 
 
 class ActionProposalTests(unittest.TestCase):
@@ -25,6 +26,8 @@ class ActionProposalTests(unittest.TestCase):
                     f"  log_dir: {base / 'logs'}",
                     "model:",
                     "  model_path: /tmp/fake.gguf",
+                    "memory:",
+                    "  semantic_enabled: true",
                     "eval:",
                     "  orientation_min_runs: 1",
                 ]
@@ -43,6 +46,41 @@ class ActionProposalTests(unittest.TestCase):
         return SelfOrientationEngine().build_snapshot(
             persona=persona,
             self_state=self_state,
+        )
+
+    def _seed_semantic_reflection_source(self, runtime) -> None:
+        episodic = runtime.memory_router.stores["episodic"]
+        episodic.add(
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-21T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="user_message",
+                text="I prefer local inference for Nova.",
+                tags=["user", "turn", "preference"],
+                importance=0.75,
+                confidence=1.0,
+                continuity_weight=0.75,
+                source="user",
+            )
+        )
+        episodic.add(
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-21T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="user_message",
+                text="I want Nova to stay local-first.",
+                tags=["user", "turn", "preference"],
+                importance=0.8,
+                confidence=1.0,
+                continuity_weight=0.8,
+                source="user",
+            )
         )
 
     def test_proposes_orientation_snapshot_when_ready(self) -> None:
@@ -168,6 +206,7 @@ class ActionProposalTests(unittest.TestCase):
             self.assertEqual(execution.tool_result["status"], "ok")
             self.assertEqual(execution.orientation_stable, True)
             self.assertIsNotNone(execution.stability_report)
+            self.assertEqual(execution.rollback_applied, False)
 
             trace_dir = base / "logs" / "traces"
             self.assertTrue((trace_dir / f"{session_id}.proposals.jsonl").exists())
@@ -201,9 +240,47 @@ class ActionProposalTests(unittest.TestCase):
             self.assertEqual(execution.status, "stability_failed")
             self.assertTrue(execution.executed)
             self.assertEqual(execution.orientation_stable, False)
+            self.assertEqual(execution.rollback_applied, False)
             self.assertIn("orientation_unstable_after_action", execution.reason)
             self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
             self.assertTrue((trace_dir / f"{session_id}.tools.jsonl").exists())
+
+    def test_runtime_rolls_back_mutating_action_when_stability_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            original_check = runtime.evaluate_orientation_under_context_pressure
+
+            class UnstableReport:
+                stable = False
+                reasons = ["forced_reflection_instability"]
+
+                def to_dict(self) -> dict:
+                    return {"stable": self.stable, "reasons": self.reasons}
+
+            runtime.evaluate_orientation_under_context_pressure = lambda: UnstableReport()
+            try:
+                self._seed_semantic_reflection_source(runtime)
+                semantic = runtime.memory_router.stores["semantic"]
+                before_events = semantic.list_events()
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                execution = runtime.execute_proposed_action(
+                    goal="Write semantic reflection memory.",
+                    approval_granted=True,
+                )
+                after_events = semantic.list_events()
+            finally:
+                runtime.evaluate_orientation_under_context_pressure = original_check
+                runtime.close()
+
+            self.assertEqual(before_events, [])
+            self.assertEqual(after_events, [])
+            self.assertEqual(execution.status, "error")
+            self.assertFalse(execution.executed)
+            self.assertEqual(execution.rollback_applied, True)
+            self.assertEqual(execution.snapshot_channels, ["semantic"])
+            self.assertIn("orientation_unstable_after_tool", execution.reason)
 
     def test_runtime_refuses_unapproved_approval_required_action(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -430,6 +430,8 @@ def main() -> int:
             print(f"reason: {execution.reason}")
             print(f"orientation_stable: {execution.orientation_stable}")
             print(f"stability_report: {execution.stability_report}")
+            print(f"rollback_applied: {execution.rollback_applied}")
+            print(f"snapshot_channels: {execution.snapshot_channels}")
             print(f"approval_granted: {execution.approval_granted}")
             print(f"proposal: {execution.proposal}")
             print(f"tool_result: {execution.tool_result}")
