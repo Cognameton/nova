@@ -423,6 +423,19 @@ Stage 3.4 third-slice restrictions:
 - no bypass around the tool gate
 - no execution of approval-required proposals without explicit approval
 
+Stage 3.4 fourth slice:
+- Add post-action orientation stability checks for bounded single-step actions.
+- Successful internal tool execution must be followed by a context-pressure
+  orientation check.
+- The action result records orientation_stable and stability_report.
+- If orientation stability fails, the action records status=stability_failed
+  and is not reported as a successful action-layer outcome.
+
+Stage 3.4 fourth-slice restrictions:
+- the stability check does not roll back already executed tool effects
+- the stability check prevents success reporting, not tool dispatch
+- rollback/snapshot restore remains future work before broader autonomy
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------

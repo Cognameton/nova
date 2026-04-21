@@ -294,6 +294,24 @@ class NovaRuntime:
             request=request,
             approval_granted=approval_granted,
         )
+        stability = None
+        if tool_result.status == "ok":
+            stability = self.evaluate_orientation_under_context_pressure()
+            if not getattr(stability, "stable", False):
+                reasons = ", ".join(getattr(stability, "reasons", []) or [])
+                return self._log_action_execution(
+                    ActionExecutionResult(
+                        goal=goal,
+                        status="stability_failed",
+                        executed=True,
+                        reason=f"orientation_unstable_after_action:{reasons}",
+                        proposal=proposal_data,
+                        tool_result=tool_result.to_dict(),
+                        orientation_stable=False,
+                        stability_report=stability.to_dict(),
+                        approval_granted=approval_granted,
+                    )
+                )
         return self._log_action_execution(
             ActionExecutionResult(
                 goal=goal,
@@ -302,6 +320,8 @@ class NovaRuntime:
                 reason=tool_result.error or tool_result.status,
                 proposal=proposal_data,
                 tool_result=tool_result.to_dict(),
+                orientation_stable=getattr(stability, "stable", None),
+                stability_report=stability.to_dict() if stability is not None else None,
                 approval_granted=approval_granted,
             )
         )

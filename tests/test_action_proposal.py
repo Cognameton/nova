@@ -166,9 +166,42 @@ class ActionProposalTests(unittest.TestCase):
             self.assertTrue(execution.executed)
             self.assertEqual(execution.proposal["tool_name"], "orientation_readiness")
             self.assertEqual(execution.tool_result["status"], "ok")
+            self.assertEqual(execution.orientation_stable, True)
+            self.assertIsNotNone(execution.stability_report)
 
             trace_dir = base / "logs" / "traces"
             self.assertTrue((trace_dir / f"{session_id}.proposals.jsonl").exists())
+            self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
+            self.assertTrue((trace_dir / f"{session_id}.tools.jsonl").exists())
+
+    def test_runtime_refuses_success_when_action_destabilizes_orientation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            original_check = runtime.evaluate_orientation_under_context_pressure
+
+            class UnstableReport:
+                stable = False
+                reasons = ["forced_action_instability"]
+
+                def to_dict(self) -> dict:
+                    return {"stable": self.stable, "reasons": self.reasons}
+
+            runtime.evaluate_orientation_under_context_pressure = lambda: UnstableReport()
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                execution = runtime.execute_proposed_action(goal="Are you ready?")
+                session_id = runtime.session_id
+            finally:
+                runtime.evaluate_orientation_under_context_pressure = original_check
+                runtime.close()
+
+            trace_dir = base / "logs" / "traces"
+            self.assertEqual(execution.status, "stability_failed")
+            self.assertTrue(execution.executed)
+            self.assertEqual(execution.orientation_stable, False)
+            self.assertIn("orientation_unstable_after_action", execution.reason)
             self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
             self.assertTrue((trace_dir / f"{session_id}.tools.jsonl").exists())
 

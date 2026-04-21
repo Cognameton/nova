@@ -53,6 +53,8 @@ class ActionExecutionResult:
     reason: str = ""
     proposal: dict = field(default_factory=dict)
     tool_result: dict | None = None
+    orientation_stable: bool | None = None
+    stability_report: dict | None = None
     approval_granted: bool = False
 
     def to_dict(self) -> dict:
