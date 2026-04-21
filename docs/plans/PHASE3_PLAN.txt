@@ -404,6 +404,25 @@ Stage 3.4 second-slice closure checklist:
 - Blocked external actions are safe to present but not safe to execute.
 - Proposal logging does not create tool-action logs.
 
+Stage 3.4 third slice:
+- Add bounded single-step execution from an action proposal.
+- Execution must re-use the proposal layer before any action.
+- Execution must refuse boundary-only, blocked, or unapproved
+  approval-required proposals.
+- Execution must route internal tools through the Stage 3.3 tool executor and
+  tool gate.
+- Execution must log the proposal, action execution result, and any real tool
+  action separately.
+
+Stage 3.4 third-slice restrictions:
+- no autonomous loops
+- no repeated action chains
+- no shell execution
+- no network access
+- no file mutation path
+- no bypass around the tool gate
+- no execution of approval-required proposals without explicit approval
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------

@@ -78,3 +78,18 @@ class JsonlTraceLogger:
         }
         with proposal_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def log_action_execution(
+        self,
+        *,
+        session_id: str,
+        execution: dict,
+    ) -> None:
+        action_path = self.trace_dir / f"{session_id}.actions.jsonl"
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "execution": execution,
+        }
+        with action_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")

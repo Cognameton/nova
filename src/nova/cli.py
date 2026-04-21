@@ -204,6 +204,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="GOAL",
         help="Propose a bounded Stage 3.4 action for a goal without executing it.",
     )
+    parser.add_argument(
+        "--execute-action-proposal",
+        metavar="GOAL",
+        help="Execute one bounded internal action from a Stage 3.4 proposal.",
+    )
+    parser.add_argument(
+        "--approve-action",
+        action="store_true",
+        help="Grant explicit approval for an approval-required proposed action.",
+    )
     return parser
 
 
@@ -402,6 +412,25 @@ def main() -> int:
             print(f"approval_required_actions: {proposal.approval_required_actions}")
             print(f"evaluation: {proposal.evaluation}")
             print(f"notes: {proposal.notes}")
+            return 0
+        finally:
+            runtime.close()
+
+    if args.execute_action_proposal:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            execution = runtime.execute_proposed_action(
+                goal=args.execute_action_proposal,
+                approval_granted=args.approve_action,
+            )
+            print("Nova 2.0 Action Execution")
+            print(f"goal: {execution.goal}")
+            print(f"status: {execution.status}")
+            print(f"executed: {execution.executed}")
+            print(f"reason: {execution.reason}")
+            print(f"approval_granted: {execution.approval_granted}")
+            print(f"proposal: {execution.proposal}")
+            print(f"tool_result: {execution.tool_result}")
             return 0
         finally:
             runtime.close()

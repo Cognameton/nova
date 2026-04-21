@@ -44,6 +44,21 @@ class ActionProposal:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class ActionExecutionResult:
+    schema_version: str = SCHEMA_VERSION
+    goal: str = ""
+    status: str = "blocked"
+    executed: bool = False
+    reason: str = ""
+    proposal: dict = field(default_factory=dict)
+    tool_result: dict | None = None
+    approval_granted: bool = False
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 class ActionProposalEngine:
     """Classify a requested action without executing it."""
 

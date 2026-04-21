@@ -1,6 +1,7 @@
 """Agent-facing self-orientation components for Nova."""
 
 from nova.agent.action import (
+    ActionExecutionResult,
     ActionProposal,
     ActionProposalEngine,
     ActionProposalEvaluation,
@@ -24,6 +25,7 @@ from nova.agent.tool_registry import ToolRegistry, default_tool_registry
 from nova.agent.tools import ToolGateDecision, ToolRequest, ToolResult, ToolSpec
 
 __all__ = [
+    "ActionExecutionResult",
     "ActionProposal",
     "ActionProposalEngine",
     "ActionProposalEvaluation",

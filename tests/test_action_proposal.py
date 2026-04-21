@@ -15,6 +15,24 @@ from nova.persona.defaults import default_persona_state, default_self_state
 
 
 class ActionProposalTests(unittest.TestCase):
+    def _config_path(self, base: Path) -> Path:
+        config_path = base / "local.yaml"
+        config_path.write_text(
+            "\n".join(
+                [
+                    "app:",
+                    f"  data_dir: {base / 'data'}",
+                    f"  log_dir: {base / 'logs'}",
+                    "model:",
+                    "  model_path: /tmp/fake.gguf",
+                    "eval:",
+                    "  orientation_min_runs: 1",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return config_path
+
     def _engine(self) -> ActionProposalEngine:
         registry = default_tool_registry()
         return ActionProposalEngine(registry=registry, gate=ToolGate(registry=registry))
@@ -93,22 +111,7 @@ class ActionProposalTests(unittest.TestCase):
     def test_runtime_proposes_action_without_model_load(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
-            config_path = base / "local.yaml"
-            config_path.write_text(
-                "\n".join(
-                    [
-                        "app:",
-                        f"  data_dir: {base / 'data'}",
-                        f"  log_dir: {base / 'logs'}",
-                        "model:",
-                        "  model_path: /tmp/fake.gguf",
-                        "eval:",
-                        "  orientation_min_runs: 1",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            runtime = build_runtime(config_override=str(config_path))
+            runtime = build_runtime(config_override=str(self._config_path(base)))
             try:
                 runtime.evaluate_orientation_stability(runs=1)
                 runtime.evaluate_orientation_stability(runs=1)
@@ -122,22 +125,7 @@ class ActionProposalTests(unittest.TestCase):
     def test_runtime_logs_action_proposal_without_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
-            config_path = base / "local.yaml"
-            config_path.write_text(
-                "\n".join(
-                    [
-                        "app:",
-                        f"  data_dir: {base / 'data'}",
-                        f"  log_dir: {base / 'logs'}",
-                        "model:",
-                        "  model_path: /tmp/fake.gguf",
-                        "eval:",
-                        "  orientation_min_runs: 1",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            runtime = build_runtime(config_override=str(config_path))
+            runtime = build_runtime(config_override=str(self._config_path(base)))
             try:
                 runtime.evaluate_orientation_stability(runs=1)
                 runtime.evaluate_orientation_stability(runs=1)
@@ -161,6 +149,72 @@ class ActionProposalTests(unittest.TestCase):
                 payloads[-1]["proposal"]["evaluation"]["safe_to_present"],
                 True,
             )
+
+    def test_runtime_executes_one_safe_internal_action_from_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                execution = runtime.execute_proposed_action(goal="Are you ready?")
+                session_id = runtime.session_id
+            finally:
+                runtime.close()
+
+            self.assertEqual(execution.status, "executed")
+            self.assertTrue(execution.executed)
+            self.assertEqual(execution.proposal["tool_name"], "orientation_readiness")
+            self.assertEqual(execution.tool_result["status"], "ok")
+
+            trace_dir = base / "logs" / "traces"
+            self.assertTrue((trace_dir / f"{session_id}.proposals.jsonl").exists())
+            self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
+            self.assertTrue((trace_dir / f"{session_id}.tools.jsonl").exists())
+
+    def test_runtime_refuses_unapproved_approval_required_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                execution = runtime.execute_proposed_action(
+                    goal="Write semantic reflection memory."
+                )
+                session_id = runtime.session_id
+            finally:
+                runtime.close()
+
+            trace_dir = base / "logs" / "traces"
+            self.assertEqual(execution.status, "approval_required")
+            self.assertFalse(execution.executed)
+            self.assertIsNone(execution.tool_result)
+            self.assertTrue((trace_dir / f"{session_id}.proposals.jsonl").exists())
+            self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
+            self.assertFalse((trace_dir / f"{session_id}.tools.jsonl").exists())
+
+    def test_runtime_boundary_action_does_not_execute_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                execution = runtime.execute_proposed_action(
+                    goal="Explain your current boundaries."
+                )
+                session_id = runtime.session_id
+            finally:
+                runtime.close()
+
+            trace_dir = base / "logs" / "traces"
+            self.assertEqual(execution.status, "no_action")
+            self.assertFalse(execution.executed)
+            self.assertIsNone(execution.tool_result)
+            self.assertTrue((trace_dir / f"{session_id}.proposals.jsonl").exists())
+            self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
+            self.assertFalse((trace_dir / f"{session_id}.tools.jsonl").exists())
 
 
 if __name__ == "__main__":

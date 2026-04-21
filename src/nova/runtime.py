@@ -9,7 +9,11 @@ from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
-from nova.agent.action import ActionProposal, ActionProposalEngine
+from nova.agent.action import (
+    ActionExecutionResult,
+    ActionProposal,
+    ActionProposalEngine,
+)
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
 from nova.agent.tool_registry import ToolRegistry, default_tool_registry
@@ -239,6 +243,79 @@ class NovaRuntime:
             proposal=proposal.to_dict(),
         )
         return proposal
+
+    def execute_proposed_action(
+        self,
+        *,
+        goal: str,
+        approval_granted: bool = False,
+    ) -> ActionExecutionResult:
+        proposal = self.propose_action(goal=goal)
+        proposal_data = proposal.to_dict()
+        if proposal.category != "internal_tool" or proposal.tool_name is None:
+            return self._log_action_execution(
+                ActionExecutionResult(
+                    goal=goal,
+                    status="no_action",
+                    executed=False,
+                    reason="no_internal_tool_proposed",
+                    proposal=proposal_data,
+                    approval_granted=approval_granted,
+                )
+            )
+        if proposal.disposition == "blocked":
+            return self._log_action_execution(
+                ActionExecutionResult(
+                    goal=goal,
+                    status="blocked",
+                    executed=False,
+                    reason=proposal.reason,
+                    proposal=proposal_data,
+                    approval_granted=approval_granted,
+                )
+            )
+        if proposal.requires_approval and not approval_granted:
+            return self._log_action_execution(
+                ActionExecutionResult(
+                    goal=goal,
+                    status="approval_required",
+                    executed=False,
+                    reason="approval_required_before_execution",
+                    proposal=proposal_data,
+                    approval_granted=False,
+                )
+            )
+
+        request = ToolRequest(
+            tool_name=proposal.tool_name,
+            reason=f"Stage 3.4 single-step execution for: {goal}",
+        )
+        tool_result = self.execute_internal_tool(
+            request=request,
+            approval_granted=approval_granted,
+        )
+        return self._log_action_execution(
+            ActionExecutionResult(
+                goal=goal,
+                status="executed" if tool_result.status == "ok" else tool_result.status,
+                executed=tool_result.status == "ok",
+                reason=tool_result.error or tool_result.status,
+                proposal=proposal_data,
+                tool_result=tool_result.to_dict(),
+                approval_granted=approval_granted,
+            )
+        )
+
+    def _log_action_execution(
+        self,
+        execution: ActionExecutionResult,
+    ) -> ActionExecutionResult:
+        assert self.session_id is not None
+        self.trace_logger.log_action_execution(
+            session_id=self.session_id,
+            execution=execution.to_dict(),
+        )
+        return execution
 
     def respond(self, user_text: str) -> TurnRecord:
         if self.session_id is None:
