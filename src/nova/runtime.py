@@ -9,6 +9,7 @@ from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
+from nova.agent.action import ActionProposal, ActionProposalEngine
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
 from nova.agent.tool_registry import ToolRegistry, default_tool_registry
@@ -77,6 +78,10 @@ class NovaRuntime:
             registry=self.tool_registry,
             gate=self.tool_gate,
             runtime=self,
+        )
+        self.action_proposal_engine = ActionProposalEngine(
+            registry=self.tool_registry,
+            gate=self.tool_gate,
         )
 
         self.session_id: str | None = None
@@ -220,6 +225,13 @@ class NovaRuntime:
         return self.tool_executor.execute(
             request=request,
             approval_granted=approval_granted,
+        )
+
+    def propose_action(self, *, goal: str) -> ActionProposal:
+        return self.action_proposal_engine.propose(
+            goal=goal,
+            snapshot=self.orientation_snapshot(),
+            readiness=self.orientation_readiness_report(),
         )
 
     def respond(self, user_text: str) -> TurnRecord:

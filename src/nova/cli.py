@@ -199,6 +199,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Check whether self-orientation remains stable under extra non-critical memory context.",
     )
+    parser.add_argument(
+        "--action-proposal",
+        metavar="GOAL",
+        help="Propose a bounded Stage 3.4 action for a goal without executing it.",
+    )
     return parser
 
 
@@ -379,6 +384,26 @@ def main() -> int:
         print(f"critical_failed_sections: {report.critical_failed_sections}")
         print(f"reasons: {report.reasons}")
         return 0
+
+    if args.action_proposal:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            proposal = runtime.propose_action(goal=args.action_proposal)
+            print("Nova 2.0 Action Proposal")
+            print(f"goal: {proposal.goal}")
+            print(f"category: {proposal.category}")
+            print(f"disposition: {proposal.disposition}")
+            print(f"reason: {proposal.reason}")
+            print(f"tool_name: {proposal.tool_name}")
+            print(f"requires_approval: {proposal.requires_approval}")
+            print(f"orientation_ready: {proposal.orientation_ready}")
+            print(f"allowed_actions: {proposal.allowed_actions}")
+            print(f"blocked_actions: {proposal.blocked_actions}")
+            print(f"approval_required_actions: {proposal.approval_required_actions}")
+            print(f"notes: {proposal.notes}")
+            return 0
+        finally:
+            runtime.close()
 
     runtime = build_runtime(config_override=args.config_override)
     session_id = None if args.new_session else args.session_id

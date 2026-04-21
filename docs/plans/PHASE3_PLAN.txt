@@ -373,6 +373,22 @@ Possible later work:
 - later TTS
 - much later STT if accuracy is sufficient
 
+Stage 3.4 implementation order:
+1. Add action proposal before action execution.
+2. Keep proposals bound to current self-orientation and readiness.
+3. Require the proposal layer to explain whether a goal is allowed, blocked, or
+   approval-required.
+4. Keep all tool execution routed through the Stage 3.3 tool gate.
+5. Add task loops only after proposal behavior remains stable and auditable.
+
+Stage 3.4 first slice:
+- Implemented a proposal-only action layer.
+- Nova can classify a requested goal against current orientation latitude.
+- Nova can propose safe internal tools without executing them.
+- Nova can report approval-required and blocked actions before execution.
+- Nova still has no autonomous loop, network access, shell access, or file
+  mutation capability.
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------
