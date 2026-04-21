@@ -220,6 +220,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="CLI approval",
         help="Reason recorded when --approve-action is used.",
     )
+    parser.add_argument(
+        "--action-history",
+        type=int,
+        metavar="N",
+        help="Evaluate the most recent N bounded action execution records.",
+    )
     return parser
 
 
@@ -448,6 +454,25 @@ def main() -> int:
             print(f"approval: {execution.approval}")
             print(f"proposal: {execution.proposal}")
             print(f"tool_result: {execution.tool_result}")
+            return 0
+        finally:
+            runtime.close()
+
+    if args.action_history:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            report = runtime.action_history_report(limit=args.action_history)
+            print("Nova 2.0 Action History")
+            print(f"stable: {report.stable}")
+            print(f"total_actions: {report.total_actions}")
+            print(f"executed_actions: {report.executed_actions}")
+            print(f"blocked_actions: {report.blocked_actions}")
+            print(f"approval_required_actions: {report.approval_required_actions}")
+            print(f"stability_failures: {report.stability_failures}")
+            print(f"rollback_count: {report.rollback_count}")
+            print(f"unapproved_execution_count: {report.unapproved_execution_count}")
+            print(f"unsafe_status_count: {report.unsafe_status_count}")
+            print(f"reasons: {report.reasons}")
             return 0
         finally:
             runtime.close()

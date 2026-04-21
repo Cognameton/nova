@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nova.agent.action import ActionApproval, ActionProposalEngine
+from nova.agent.action import ActionApproval, ActionHistoryAnalyzer, ActionProposalEngine
 from nova.agent.orientation import SelfOrientationEngine
 from nova.agent.stability import OrientationReadinessReport
 from nova.agent.tool_gate import ToolGate
@@ -371,6 +371,86 @@ class ActionProposalTests(unittest.TestCase):
             self.assertTrue((trace_dir / f"{session_id}.proposals.jsonl").exists())
             self.assertTrue((trace_dir / f"{session_id}.actions.jsonl").exists())
             self.assertFalse((trace_dir / f"{session_id}.tools.jsonl").exists())
+
+    def test_action_history_reports_stable_bounded_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.execute_proposed_action(goal="Are you ready?")
+                runtime.execute_proposed_action(goal="Explain your current boundaries.")
+                report = runtime.action_history_report(limit=5)
+            finally:
+                runtime.close()
+
+            self.assertTrue(report.stable)
+            self.assertEqual(report.total_actions, 2)
+            self.assertEqual(report.executed_actions, 1)
+            self.assertEqual(report.unsafe_status_count, 0)
+            self.assertEqual(report.reasons, [])
+
+    def test_action_history_flags_stability_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_runtime(config_override=str(self._config_path(base)))
+            original_check = runtime.evaluate_orientation_under_context_pressure
+
+            class UnstableReport:
+                stable = False
+                reasons = ["forced_action_instability"]
+
+                def to_dict(self) -> dict:
+                    return {"stable": self.stable, "reasons": self.reasons}
+
+            runtime.evaluate_orientation_under_context_pressure = lambda: UnstableReport()
+            try:
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.evaluate_orientation_stability(runs=1)
+                runtime.execute_proposed_action(goal="Are you ready?")
+                report = runtime.action_history_report(limit=5)
+            finally:
+                runtime.evaluate_orientation_under_context_pressure = original_check
+                runtime.close()
+
+            self.assertFalse(report.stable)
+            self.assertEqual(report.stability_failures, 1)
+            self.assertEqual(report.unsafe_status_count, 1)
+            self.assertIn("action_stability_failures", report.reasons)
+
+    def test_action_history_analyzer_flags_unapproved_execution_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            trace_dir = base / "logs" / "traces"
+            trace_dir.mkdir(parents=True)
+            action_log = trace_dir / "session.actions.jsonl"
+            action_log.write_text(
+                json.dumps(
+                    {
+                        "timestamp": "2026-04-21T00:00:00Z",
+                        "session_id": "session",
+                        "execution": {
+                            "status": "executed",
+                            "executed": True,
+                            "proposal": {
+                                "requires_approval": True,
+                                "tool_name": "write_semantic_reflection",
+                            },
+                            "approval_granted": False,
+                            "approval": {"granted": False},
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            report = ActionHistoryAnalyzer(trace_dir=trace_dir).evaluate_recent()
+
+            self.assertFalse(report.stable)
+            self.assertEqual(report.unapproved_execution_count, 1)
+            self.assertIn("unapproved_action_execution", report.reasons)
 
 
 if __name__ == "__main__":

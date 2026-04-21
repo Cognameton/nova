@@ -12,6 +12,8 @@ from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceO
 from nova.agent.action import (
     ActionApproval,
     ActionExecutionResult,
+    ActionHistoryAnalyzer,
+    ActionHistoryReport,
     ActionProposal,
     ActionProposalEngine,
 )
@@ -164,6 +166,10 @@ class NovaRuntime:
             evaluator=self.orientation_evaluator,
         )
         return analyzer.confidence_report(limit=limit)
+
+    def action_history_report(self, *, limit: int | None = None) -> ActionHistoryReport:
+        analyzer = ActionHistoryAnalyzer(trace_dir=self.trace_logger.trace_dir)
+        return analyzer.evaluate_recent(limit=limit)
 
     def evaluate_orientation_after_maintenance(self, *, apply_mutations: bool = False):
         self._ensure_state_loaded()

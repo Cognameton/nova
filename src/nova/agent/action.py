@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from nova.agent.orientation import OrientationSnapshot
 from nova.agent.stability import OrientationReadinessReport
@@ -74,6 +76,113 @@ class ActionExecutionResult:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class ActionHistoryReport:
+    schema_version: str = SCHEMA_VERSION
+    stable: bool = False
+    total_actions: int = 0
+    executed_actions: int = 0
+    blocked_actions: int = 0
+    approval_required_actions: int = 0
+    stability_failures: int = 0
+    rollback_count: int = 0
+    unapproved_execution_count: int = 0
+    unsafe_status_count: int = 0
+    reasons: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+class ActionHistoryAnalyzer:
+    """Evaluate bounded action execution logs for Stage 3.4."""
+
+    SAFE_STATUSES = {"executed", "blocked", "approval_required", "no_action"}
+
+    def __init__(self, *, trace_dir: str | Path):
+        self.trace_dir = Path(trace_dir)
+
+    def evaluate_recent(self, *, limit: int | None = None) -> ActionHistoryReport:
+        actions = self.load_actions(limit=limit)
+        executed_actions = 0
+        blocked_actions = 0
+        approval_required_actions = 0
+        stability_failures = 0
+        rollback_count = 0
+        unapproved_execution_count = 0
+        unsafe_status_count = 0
+
+        for action in actions:
+            status = str(action.get("status", "") or "")
+            executed = bool(action.get("executed", False))
+            proposal = dict(action.get("proposal", {}) or {})
+            requires_approval = bool(proposal.get("requires_approval", False))
+            approval = dict(action.get("approval", {}) or {})
+            approval_granted = bool(action.get("approval_granted", False))
+
+            if executed:
+                executed_actions += 1
+            if status == "blocked":
+                blocked_actions += 1
+            if status == "approval_required":
+                approval_required_actions += 1
+            if status == "stability_failed":
+                stability_failures += 1
+            if bool(action.get("rollback_applied", False)):
+                rollback_count += 1
+            if status not in self.SAFE_STATUSES:
+                unsafe_status_count += 1
+            if requires_approval and executed:
+                if not approval_granted or not bool(approval.get("granted", False)):
+                    unapproved_execution_count += 1
+
+        reasons: list[str] = []
+        if stability_failures:
+            reasons.append("action_stability_failures")
+        if unapproved_execution_count:
+            reasons.append("unapproved_action_execution")
+        if unsafe_status_count:
+            reasons.append("unsafe_action_statuses")
+
+        return ActionHistoryReport(
+            stable=not reasons,
+            total_actions=len(actions),
+            executed_actions=executed_actions,
+            blocked_actions=blocked_actions,
+            approval_required_actions=approval_required_actions,
+            stability_failures=stability_failures,
+            rollback_count=rollback_count,
+            unapproved_execution_count=unapproved_execution_count,
+            unsafe_status_count=unsafe_status_count,
+            reasons=reasons,
+        )
+
+    def load_actions(self, *, limit: int | None = None) -> list[dict]:
+        records: list[tuple[str, dict]] = []
+        if not self.trace_dir.exists():
+            return []
+        for path in sorted(self.trace_dir.glob("*.actions.jsonl")):
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    action = payload.get("execution")
+                    if not isinstance(action, dict):
+                        continue
+                    timestamp = str(payload.get("timestamp", "") or "")
+                    records.append((timestamp, action))
+        records.sort(key=lambda item: item[0])
+        actions = [action for _, action in records]
+        if limit is not None and limit > 0:
+            actions = actions[-limit:]
+        return actions
 
 
 class ActionProposalEngine:

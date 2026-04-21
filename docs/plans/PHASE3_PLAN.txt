@@ -464,6 +464,22 @@ Stage 3.4 sixth-slice restrictions:
 - durable user/account identity and signed approvals remain future UI work
 - autonomous self-approval remains out of scope
 
+Stage 3.4 seventh slice:
+- Add action history evaluation over append-only action logs.
+- Action history evaluation reports total, executed, blocked,
+  approval-required, stability-failed, rollback, unapproved execution, and
+  unsafe status counts.
+- Runtime exposes action_history_report.
+- CLI exposes --action-history N.
+- Agentic evaluation now has an action-layer continuity signal beyond unit
+  mechanics.
+
+Stage 3.4 seventh-slice restrictions:
+- action history evaluates recorded logs only
+- it does not prevent execution at dispatch time
+- enforcement remains in proposal, gate, approval, rollback, and stability
+  guard layers
+
 
 PHASE 3 DEFINITION OF DONE
 --------------------------

@@ -2,6 +2,8 @@
 
 from nova.agent.action import (
     ActionApproval,
+    ActionHistoryAnalyzer,
+    ActionHistoryReport,
     ActionExecutionResult,
     ActionProposal,
     ActionProposalEngine,
@@ -27,6 +29,8 @@ from nova.agent.tools import ToolGateDecision, ToolRequest, ToolResult, ToolSpec
 
 __all__ = [
     "ActionApproval",
+    "ActionHistoryAnalyzer",
+    "ActionHistoryReport",
     "ActionExecutionResult",
     "ActionProposal",
     "ActionProposalEngine",
