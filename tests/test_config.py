@@ -29,6 +29,8 @@ class ConfigTests(unittest.TestCase):
                         "  max_tokens: 256",
                         "  temperature: 0.7",
                         "  top_p: 0.9",
+                        "console:",
+                        "  pending_proposal_max_age_seconds: 900",
                     ]
                 ),
                 encoding="utf-8",
@@ -40,6 +42,8 @@ class ConfigTests(unittest.TestCase):
                         "  model_path: /models/override.gguf",
                         "generation:",
                         "  max_tokens: 512",
+                        "console:",
+                        "  pending_proposal_max_age_seconds: 120",
                     ]
                 ),
                 encoding="utf-8",
@@ -51,6 +55,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.generation.max_tokens, 512)
             self.assertEqual(config.model.backend, "llama_cpp")
             self.assertEqual(config.model.n_ctx, 4096)
+            self.assertEqual(config.console.pending_proposal_max_age_seconds, 120)
 
 
 if __name__ == "__main__":

@@ -48,6 +48,9 @@ session:
   max_recent_turns: 12
   autosave: true
 
+console:
+  pending_proposal_max_age_seconds: 900
+
 eval:
   enable_probes: true
   orientation_stability_threshold: 0.72

@@ -214,17 +214,29 @@ should add a user-facing review flow:
 6. result updates presence state and action logs
 
 Stage 4.3 deliverables:
-- pending proposal persistence in PresenceState
-- approval/rejection commands
-- proposal expiration or replacement rules
-- explicit display of approval-required status
-- tests for pending proposal lifecycle
+- [x] pending proposal persistence in PresenceState
+- [x] approval/rejection commands
+- [x] proposal expiration or replacement rules
+- [x] explicit display of approval-required status
+- [x] tests for pending proposal lifecycle
 
 Stage 4.3 restrictions:
 - no execution without current proposal revalidation
 - no stale proposal execution
 - no self-approval
 - no multi-action chains
+
+Stage 4.3 implementation notes:
+- /propose stores only presentable proposals as pending; blocked proposals
+  update status without becoming pending.
+- New presentable proposals replace the previous pending proposal.
+- Pending proposals expire after the configured console max age, defaulting to
+  15 minutes, and must be proposed again before approval.
+- /approve consumes the current pending proposal, refuses mismatched goals, and
+  revalidates through NovaRuntime.execute_proposed_action before execution.
+- /reject clears the current pending proposal and records the rejection in
+  presence state.
+- Approval provenance uses ActionApproval with source interactive_cli.
 
 
 STAGE 4.4: SESSION CONTINUITY UX

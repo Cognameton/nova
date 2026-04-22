@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from nova.agent.action import ActionApproval
+
+
+DEFAULT_PENDING_PROPOSAL_MAX_AGE_SECONDS = 15 * 60
 
 
 @dataclass(slots=True)
@@ -38,8 +42,22 @@ def parse_console_command(text: str) -> ConsoleCommand | None:
 class InteractionConsole:
     """Dispatch slash commands without bypassing Nova runtime gates."""
 
-    def __init__(self, *, runtime):
+    def __init__(
+        self,
+        *,
+        runtime,
+        pending_proposal_max_age_seconds: int | None = None,
+    ):
         self.runtime = runtime
+        console_config = getattr(getattr(runtime, "config", None), "console", None)
+        configured_max_age = getattr(
+            console_config,
+            "pending_proposal_max_age_seconds",
+            DEFAULT_PENDING_PROPOSAL_MAX_AGE_SECONDS,
+        )
+        self.pending_proposal_max_age_seconds = (
+            pending_proposal_max_age_seconds or configured_max_age
+        )
 
     def handle(self, text: str) -> ConsoleResult:
         command = parse_console_command(text)
@@ -62,6 +80,8 @@ class InteractionConsole:
             return ConsoleResult(handled=True, output=self._propose(command.argument))
         if command.name == "approve":
             return ConsoleResult(handled=True, output=self._approve(command.argument))
+        if command.name == "reject":
+            return ConsoleResult(handled=True, output=self._reject(command.argument))
         if command.name == "actions":
             return ConsoleResult(handled=True, output=self._actions(command.argument))
         if command.name == "maintenance":
@@ -83,7 +103,8 @@ class InteractionConsole:
                 "/orientation - show current self-orientation snapshot",
                 "/ready - show orientation readiness",
                 "/propose <goal> - propose one bounded action without executing it",
-                "/approve <goal> - execute one bounded action with explicit CLI approval",
+                "/approve [goal] - approve and revalidate the current pending proposal",
+                "/reject [reason] - reject the current pending proposal",
                 "/actions [N] - show recent action history evaluation",
                 "/maintenance - request the gated maintenance-plan tool",
                 "/summary - show a bounded current-session summary",
@@ -169,6 +190,8 @@ class InteractionConsole:
         pending_proposal = None
         if proposal.disposition in {"proposed", "approval_required"}:
             pending_proposal = proposal.to_dict()
+            pending_proposal["review_state"] = "pending"
+            pending_proposal["created_at"] = _utc_now_iso()
             confirmations.append(f"Review proposal before execution: /approve {proposal.goal}")
         self.runtime.update_presence(
             mode="action_review",
@@ -194,18 +217,89 @@ class InteractionConsole:
         )
 
     def _approve(self, goal: str) -> str:
-        if not goal:
-            return "Usage: /approve <goal>"
+        presence = self.runtime.presence_status()
+        pending = dict(presence.pending_proposal or {})
+        if not pending:
+            self.runtime.update_presence(
+                mode="action_review",
+                last_action_status="approval_refused_no_pending_proposal",
+                interaction_summary="Approval refused because no pending proposal exists.",
+                user_confirmations_needed=[],
+            )
+            return "No pending action proposal to approve. Use /propose <goal> first."
+
+        pending_goal = str(pending.get("goal", "") or "").strip()
+        if _proposal_expired(
+            pending,
+            max_age_seconds=self.pending_proposal_max_age_seconds,
+        ):
+            self.runtime.update_presence(
+                mode="action_review",
+                current_focus=f"expired action proposal: {pending_goal}",
+                pending_proposal=None,
+                last_action_status="approval_refused_expired_proposal",
+                interaction_summary=(
+                    "Approval refused because the pending proposal expired before approval."
+                ),
+                user_confirmations_needed=[],
+            )
+            return "\n".join(
+                [
+                    "Approval refused: pending proposal expired.",
+                    f"goal: {pending_goal}",
+                    f"max_age_seconds: {self.pending_proposal_max_age_seconds}",
+                    "Use /propose again to review a fresh proposal.",
+                ]
+            )
+
+        requested_goal = goal.strip() or pending_goal
+        if _normalize_goal(requested_goal) != _normalize_goal(pending_goal):
+            self.runtime.update_presence(
+                mode="action_review",
+                last_action_status="approval_refused_goal_mismatch",
+                interaction_summary=(
+                    "Approval refused because the requested goal did not match "
+                    "the current pending proposal."
+                ),
+            )
+            return "\n".join(
+                [
+                    "Approval refused: goal does not match pending proposal.",
+                    f"pending_goal: {pending_goal}",
+                    f"requested_goal: {requested_goal}",
+                ]
+            )
+
+        current_proposal = self.runtime.propose_action(goal=pending_goal)
+        drift = _proposal_drift(pending=pending, current=current_proposal.to_dict())
+        if drift:
+            self.runtime.update_presence(
+                mode="action_review",
+                last_action_status="approval_refused_proposal_drift",
+                interaction_summary=(
+                    "Approval refused because revalidation changed the pending proposal."
+                ),
+                user_confirmations_needed=[f"Review a fresh proposal: /propose {pending_goal}"],
+            )
+            return "\n".join(
+                [
+                    "Approval refused: pending proposal changed during revalidation.",
+                    f"goal: {pending_goal}",
+                    f"changed_fields: {drift}",
+                    "Use /propose again to review the current proposal.",
+                ]
+            )
+
         approval = ActionApproval(
             granted=True,
             approved_by="interactive_cli",
-            reason=f"Interactive approval for: {goal}",
+            reason=f"Interactive approval for: {pending_goal}",
             source="interactive_cli",
         )
-        execution = self.runtime.execute_proposed_action(goal=goal, approval=approval)
+        execution = self.runtime.execute_proposed_action(goal=pending_goal, approval=approval)
         self.runtime.update_presence(
             mode="action_review",
-            current_focus=f"action execution: {goal}",
+            current_focus=f"action execution: {pending_goal}",
             pending_proposal=None,
             last_action_status=execution.status,
             interaction_summary=f"Action execution finished with status: {execution.status}",
@@ -221,6 +315,36 @@ class InteractionConsole:
                 f"orientation_stable: {execution.orientation_stable}",
                 f"rollback_applied: {execution.rollback_applied}",
                 f"approval_granted: {execution.approval_granted}",
+            ]
+        )
+
+    def _reject(self, reason: str) -> str:
+        presence = self.runtime.presence_status()
+        pending = dict(presence.pending_proposal or {})
+        if not pending:
+            self.runtime.update_presence(
+                mode="action_review",
+                last_action_status="rejection_refused_no_pending_proposal",
+                interaction_summary="Rejection ignored because no pending proposal exists.",
+                user_confirmations_needed=[],
+            )
+            return "No pending action proposal to reject."
+
+        pending_goal = str(pending.get("goal", "") or "").strip()
+        rejection_reason = reason.strip() or "User rejected pending proposal."
+        self.runtime.update_presence(
+            mode="action_review",
+            current_focus=f"rejected action proposal: {pending_goal}",
+            pending_proposal=None,
+            last_action_status="proposal_rejected",
+            interaction_summary=f"Pending proposal rejected: {rejection_reason}",
+            user_confirmations_needed=[],
+        )
+        return "\n".join(
+            [
+                "Nova Action Proposal Rejected",
+                f"goal: {pending_goal}",
+                f"reason: {rejection_reason}",
             ]
         )
 
@@ -297,3 +421,40 @@ def _parse_positive_int(value: str, *, default: int) -> int:
     except ValueError:
         return default
     return max(1, parsed)
+
+
+def _normalize_goal(goal: str) -> str:
+    return " ".join(goal.strip().lower().split())
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _proposal_expired(proposal: dict, *, max_age_seconds: int) -> bool:
+    created_at = str(proposal.get("created_at", "") or "")
+    if not created_at:
+        return True
+    try:
+        created = datetime.fromisoformat(created_at)
+    except ValueError:
+        return True
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    age_seconds = (datetime.now(timezone.utc) - created).total_seconds()
+    return age_seconds > max_age_seconds
+
+
+def _proposal_drift(*, pending: dict, current: dict) -> list[str]:
+    stable_fields = (
+        "goal",
+        "category",
+        "disposition",
+        "tool_name",
+        "requires_approval",
+    )
+    changed = []
+    for field in stable_fields:
+        if pending.get(field) != current.get(field):
+            changed.append(field)
+    return changed

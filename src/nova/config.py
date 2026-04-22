@@ -71,6 +71,11 @@ class SessionConfig:
 
 
 @dataclass(slots=True)
+class ConsoleConfig:
+    pending_proposal_max_age_seconds: int = 900
+
+
+@dataclass(slots=True)
 class EvalConfig:
     enable_probes: bool = True
     orientation_stability_threshold: float = 0.72
@@ -86,6 +91,7 @@ class NovaConfig:
     persona: PersonaConfig = field(default_factory=PersonaConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
+    console: ConsoleConfig = field(default_factory=ConsoleConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
 
     def validate(self) -> None:
@@ -105,6 +111,8 @@ class NovaConfig:
             raise ValueError("app.data_dir is required")
         if not self.app.log_dir:
             raise ValueError("app.log_dir is required")
+        if self.console.pending_proposal_max_age_seconds <= 0:
+            raise ValueError("console.pending_proposal_max_age_seconds must be positive")
         if not 0.0 <= self.eval.orientation_stability_threshold <= 1.0:
             raise ValueError("eval.orientation_stability_threshold must be between 0.0 and 1.0")
         if self.eval.orientation_min_runs <= 0:
@@ -169,6 +177,7 @@ def load_config(
         persona=_section(PersonaConfig, payload.get("persona")),
         memory=_section(MemoryConfig, payload.get("memory")),
         session=_section(SessionConfig, payload.get("session")),
+        console=_section(ConsoleConfig, payload.get("console")),
         eval=_section(EvalConfig, payload.get("eval")),
     )
     config.validate()

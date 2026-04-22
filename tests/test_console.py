@@ -5,13 +5,18 @@ import io
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import yaml
 
 from nova.cli import build_runtime, main
-from nova.console import InteractionConsole, parse_console_command
+from nova.console import (
+    DEFAULT_PENDING_PROPOSAL_MAX_AGE_SECONDS,
+    InteractionConsole,
+    parse_console_command,
+)
 
 
 class ConsoleTests(unittest.TestCase):
@@ -89,16 +94,184 @@ class ConsoleTests(unittest.TestCase):
             finally:
                 runtime.close()
 
-    def test_console_approve_requires_goal_argument(self) -> None:
+    def test_console_approve_refuses_without_pending_proposal(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
             runtime = build_runtime(config_override=str(config_path))
             console = InteractionConsole(runtime=runtime)
             try:
                 result = console.handle("/approve")
+                presence = runtime.presence_status()
 
                 self.assertTrue(result.handled)
-                self.assertEqual(result.output, "Usage: /approve <goal>")
+                self.assertIn("No pending action proposal", result.output)
+                self.assertEqual(presence.last_action_status, "approval_refused_no_pending_proposal")
+            finally:
+                runtime.close()
+
+    def test_console_approve_refuses_goal_mismatch_and_keeps_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                console.handle("/propose explain your current boundaries")
+                result = console.handle("/approve write semantic reflection")
+                presence = runtime.presence_status()
+
+                self.assertTrue(result.handled)
+                self.assertIn("Approval refused", result.output)
+                self.assertIsNotNone(presence.pending_proposal)
+                self.assertEqual(presence.last_action_status, "approval_refused_goal_mismatch")
+            finally:
+                runtime.close()
+
+    def test_console_approve_refuses_proposal_drift_before_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            original_propose = runtime.propose_action
+            executed = False
+
+            def drifted_propose(*, goal: str):
+                proposal = original_propose(goal=goal)
+                if runtime.presence_status().pending_proposal is not None:
+                    proposal.tool_name = "orientation_snapshot"
+                    proposal.category = "internal_tool"
+                return proposal
+
+            def execute_should_not_run(*args, **kwargs):
+                nonlocal executed
+                executed = True
+                raise AssertionError("execution should not run after proposal drift")
+
+            runtime.propose_action = drifted_propose
+            runtime.execute_proposed_action = execute_should_not_run
+            try:
+                console.handle("/propose explain your current boundaries")
+                result = console.handle("/approve")
+                presence = runtime.presence_status()
+
+                self.assertIn("Approval refused", result.output)
+                self.assertIn("changed_fields", result.output)
+                self.assertFalse(executed)
+                self.assertIsNotNone(presence.pending_proposal)
+                self.assertEqual(presence.last_action_status, "approval_refused_proposal_drift")
+            finally:
+                runtime.close()
+
+    def test_console_approve_refuses_expired_pending_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            executed = False
+
+            def execute_should_not_run(*args, **kwargs):
+                nonlocal executed
+                executed = True
+                raise AssertionError("execution should not run for expired proposals")
+
+            runtime.execute_proposed_action = execute_should_not_run
+            try:
+                console.handle("/propose explain your current boundaries")
+                presence = runtime.presence_status()
+                pending = dict(presence.pending_proposal or {})
+                pending["created_at"] = (
+                    datetime.now(timezone.utc)
+                    - timedelta(seconds=DEFAULT_PENDING_PROPOSAL_MAX_AGE_SECONDS + 1)
+                ).isoformat()
+                runtime.update_presence(pending_proposal=pending)
+
+                result = console.handle("/approve")
+                presence = runtime.presence_status()
+
+                self.assertIn("pending proposal expired", result.output)
+                self.assertFalse(executed)
+                self.assertIsNone(presence.pending_proposal)
+                self.assertEqual(presence.last_action_status, "approval_refused_expired_proposal")
+            finally:
+                runtime.close()
+
+    def test_console_uses_configured_pending_proposal_expiration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(
+                Path(tmpdir),
+                console={"pending_proposal_max_age_seconds": 1},
+            )
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                console.handle("/propose explain your current boundaries")
+                presence = runtime.presence_status()
+                pending = dict(presence.pending_proposal or {})
+                pending["created_at"] = (
+                    datetime.now(timezone.utc) - timedelta(seconds=2)
+                ).isoformat()
+                runtime.update_presence(pending_proposal=pending)
+
+                result = console.handle("/approve")
+
+                self.assertIn("max_age_seconds: 1", result.output)
+            finally:
+                runtime.close()
+
+    def test_console_approve_treats_missing_created_at_as_expired(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                console.handle("/propose explain your current boundaries")
+                presence = runtime.presence_status()
+                pending = dict(presence.pending_proposal or {})
+                pending.pop("created_at", None)
+                runtime.update_presence(pending_proposal=pending)
+
+                result = console.handle("/approve")
+                presence = runtime.presence_status()
+
+                self.assertIn("pending proposal expired", result.output)
+                self.assertIsNone(presence.pending_proposal)
+                self.assertEqual(presence.last_action_status, "approval_refused_expired_proposal")
+            finally:
+                runtime.close()
+
+    def test_console_reject_clears_pending_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                console.handle("/propose explain your current boundaries")
+                result = console.handle("/reject not needed")
+                presence = runtime.presence_status()
+
+                self.assertTrue(result.handled)
+                self.assertIn("Nova Action Proposal Rejected", result.output)
+                self.assertIsNone(presence.pending_proposal)
+                self.assertEqual(presence.last_action_status, "proposal_rejected")
+            finally:
+                runtime.close()
+
+    def test_console_new_proposal_replaces_existing_pending_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                console.handle("/propose explain your current boundaries")
+                first = runtime.presence_status().pending_proposal
+                console.handle("/propose summarize your current limits")
+                second = runtime.presence_status().pending_proposal
+
+                self.assertIsNotNone(first)
+                self.assertIsNotNone(second)
+                assert first is not None
+                assert second is not None
+                self.assertNotEqual(first["goal"], second["goal"])
+                self.assertEqual(second["review_state"], "pending")
             finally:
                 runtime.close()
 
@@ -119,7 +292,12 @@ class ConsoleTests(unittest.TestCase):
             self.assertFalse((data_dir / "self_state.json").exists())
             self.assertTrue((data_dir / "presence" / "console-session.presence.json").exists())
 
-    def _write_config(self, base: Path) -> tuple[Path, Path, Path]:
+    def _write_config(
+        self,
+        base: Path,
+        *,
+        console: dict | None = None,
+    ) -> tuple[Path, Path, Path]:
         data_dir = base / "data"
         log_dir = base / "logs"
         config_path = base / "local.yaml"
@@ -136,6 +314,7 @@ class ConsoleTests(unittest.TestCase):
                     "memory": {
                         "semantic_enabled": True,
                     },
+                    "console": console or {},
                 }
             ),
             encoding="utf-8",
