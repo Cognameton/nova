@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from nova.agent.action import ActionApproval
+from nova.agent.presence import JsonPresenceStore
 from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
@@ -56,6 +57,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
 
     persona_store = JsonPersonaStore(data_dir / "persona_state.json")
     self_state_store = JsonSelfStateStore(data_dir / "self_state.json")
+    presence_store = JsonPresenceStore(data_dir / "presence")
     session_store = JsonlSessionStore(sessions_dir)
     trace_logger = JsonlTraceLogger(traces_dir, probe_path=probes_path)
 
@@ -90,6 +92,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
         "log_dir": log_dir,
         "persona_store": persona_store,
         "self_state_store": self_state_store,
+        "presence_store": presence_store,
         "session_store": session_store,
         "trace_logger": trace_logger,
         "episodic_store": episodic_store,
@@ -109,6 +112,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     memory_router = components["memory_router"]
     persona_store = components["persona_store"]
     self_state_store = components["self_state_store"]
+    presence_store = components["presence_store"]
     session_store = components["session_store"]
 
     backend = LlamaCppBackend(config)
@@ -131,6 +135,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         retry_policy=retry_policy,
         persona_store=persona_store,
         self_state_store=self_state_store,
+        presence_store=presence_store,
         session_store=session_store,
         trace_logger=trace_logger,
         memory_router=memory_router,
@@ -225,6 +230,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         metavar="N",
         help="Evaluate the most recent N bounded action execution records.",
+    )
+    parser.add_argument(
+        "--presence",
+        action="store_true",
+        help="Print the current session-scoped Phase 4 presence state.",
     )
     return parser
 
@@ -473,6 +483,27 @@ def main() -> int:
             print(f"unapproved_execution_count: {report.unapproved_execution_count}")
             print(f"unsafe_status_count: {report.unsafe_status_count}")
             print(f"reasons: {report.reasons}")
+            return 0
+        finally:
+            runtime.close()
+
+    if args.presence:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.session_id
+        if session_id is not None:
+            runtime.session_id = runtime.session_store.start_session(session_id=session_id)
+        try:
+            presence = runtime.presence_status()
+            print("Nova 2.0 Presence")
+            print(f"session_id: {presence.session_id}")
+            print(f"mode: {presence.mode}")
+            print(f"current_focus: {presence.current_focus}")
+            print(f"interaction_summary: {presence.interaction_summary}")
+            print(f"pending_proposal: {presence.pending_proposal}")
+            print(f"last_action_status: {presence.last_action_status}")
+            print(f"visible_uncertainties: {presence.visible_uncertainties}")
+            print(f"user_confirmations_needed: {presence.user_confirmations_needed}")
+            print(f"updated_at: {presence.updated_at}")
             return 0
         finally:
             runtime.close()

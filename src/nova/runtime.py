@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
+from nova.agent.presence import JsonPresenceStore, PresenceState
 from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
 from nova.agent.action import (
@@ -40,6 +41,9 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_UNCHANGED = object()
+
+
 class NovaRuntime:
     """Phase 1 runtime orchestrator for Nova 2.0."""
 
@@ -52,6 +56,7 @@ class NovaRuntime:
         retry_policy: BasicRetryPolicy,
         persona_store: JsonPersonaStore,
         self_state_store: JsonSelfStateStore,
+        presence_store: JsonPresenceStore,
         session_store: JsonlSessionStore,
         trace_logger: JsonlTraceLogger,
         memory_router: BasicMemoryRouter,
@@ -69,6 +74,7 @@ class NovaRuntime:
         self.retry_policy = retry_policy
         self.persona_store = persona_store
         self.self_state_store = self_state_store
+        self.presence_store = presence_store
         self.session_store = session_store
         self.trace_logger = trace_logger
         self.memory_router = memory_router
@@ -94,12 +100,14 @@ class NovaRuntime:
         self.session_id: str | None = None
         self.persona = None
         self.self_state = None
+        self.presence_state: PresenceState | None = None
 
     def start(self, *, session_id: str | None = None) -> str:
         self.persona = self.persona_store.load()
         self.self_state = self.self_state_store.load(persona=self.persona)
         self.backend.load()
         self.session_id = self.session_store.start_session(session_id=session_id)
+        self.presence_state = self.presence_store.load(session_id=self.session_id)
         if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
             for probe in self.probe_runner.run_startup_probes(
                 model_id=self.backend.metadata().get("model_name", "nova-model"),
@@ -107,6 +115,43 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return self.session_id
+
+    def presence_status(self) -> PresenceState:
+        self._ensure_presence_loaded()
+        assert self.session_id is not None
+        if self.presence_state is None or self.presence_state.session_id != self.session_id:
+            self.presence_state = self.presence_store.load(session_id=self.session_id)
+        return self.presence_state
+
+    def update_presence(
+        self,
+        *,
+        mode: str | None = None,
+        current_focus: str | None = None,
+        interaction_summary: str | None = None,
+        pending_proposal: dict | None | object = _UNCHANGED,
+        last_action_status: str | None | object = _UNCHANGED,
+        visible_uncertainties: list[str] | None = None,
+        user_confirmations_needed: list[str] | None = None,
+    ) -> PresenceState:
+        presence = self.presence_status()
+        if mode is not None:
+            presence.mode = mode
+        if current_focus is not None:
+            presence.current_focus = current_focus
+        if interaction_summary is not None:
+            presence.interaction_summary = interaction_summary
+        if pending_proposal is not _UNCHANGED:
+            presence.pending_proposal = pending_proposal
+        if last_action_status is not _UNCHANGED:
+            presence.last_action_status = last_action_status
+        if visible_uncertainties is not None:
+            presence.visible_uncertainties = list(visible_uncertainties)
+        if user_confirmations_needed is not None:
+            presence.user_confirmations_needed = list(user_confirmations_needed)
+        self.presence_store.save(presence)
+        self.presence_state = presence
+        return presence
 
     def orientation_snapshot(self) -> OrientationSnapshot:
         self._ensure_state_loaded()
@@ -550,8 +595,13 @@ class NovaRuntime:
             self.persona = self.persona_store.load()
         if self.self_state is None:
             self.self_state = self.self_state_store.load(persona=self.persona)
+        self._ensure_presence_loaded()
+
+    def _ensure_presence_loaded(self) -> None:
         if self.session_id is None:
             self.session_id = self.session_store.start_session()
+        if self.presence_state is None or self.presence_state.session_id != self.session_id:
+            self.presence_state = self.presence_store.load(session_id=self.session_id)
 
     def _generation_request(self, *, prompt: str):
         from nova.types import GenerationRequest

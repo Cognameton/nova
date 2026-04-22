@@ -13,6 +13,7 @@ from nova.agent.awareness import AwarenessClassifier, AwarenessResult
 from nova.agent.boundaries import BoundaryPolicy, OperationalLatitude
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
+from nova.agent.presence import JsonPresenceStore, PresenceState
 from nova.agent.stability import (
     ContextPressureOrientationChecker,
     ContextPressureOrientationReport,
@@ -41,6 +42,7 @@ __all__ = [
     "ContextPressureOrientationChecker",
     "ContextPressureOrientationReport",
     "InternalToolExecutor",
+    "JsonPresenceStore",
     "MaintenanceOrientationReport",
     "MaintenanceOrientationStabilityChecker",
     "OperationalLatitude",
@@ -50,6 +52,7 @@ __all__ = [
     "OrientationReadinessReport",
     "OrientationSnapshot",
     "OrientationStabilityEvaluator",
+    "PresenceState",
     "SelfOrientationEngine",
     "ToolGate",
     "ToolGateDecision",

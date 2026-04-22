@@ -126,11 +126,11 @@ Allowed initial modes:
 - diagnostics
 
 Stage 4.1 deliverables:
-- PresenceState dataclass
-- JSON persistence for current session presence
-- runtime load/update helpers
-- CLI status surface for presence state
-- tests for persistence and separation from SelfState
+- [x] PresenceState dataclass
+- [x] JSON persistence for current session presence
+- [x] runtime load/update helpers
+- [x] CLI status surface for presence state
+- [x] tests for persistence and separation from SelfState
 
 Stage 4.1 restrictions:
 - no autonomous loop
@@ -304,3 +304,23 @@ The first implementation slice of Phase 4 should be Stage 4.1 only:
 - prove presence state does not mutate PersonaState or SelfState
 
 Do not begin command-console expansion until presence state is stable.
+
+
+STAGE 4.1 IMPLEMENTATION NOTES
+------------------------------
+
+Stage 4.1 adds session-scoped presence state without adding autonomy.
+
+Implemented:
+- PresenceState and JsonPresenceStore
+- runtime presence_status and update_presence helpers
+- CLI --presence diagnostic
+- presence persistence under data/presence
+- tests proving presence persistence, mode normalization, CLI no-model-load
+  diagnostics, and separation from SelfState
+
+Carry-forward notes:
+- pending_proposal is present in the schema but its lifecycle belongs to
+  Stage 4.3.
+- presence inspection is intentionally non-inferential and should not require
+  model load.

@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+import contextlib
+import io
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import yaml
+
+from nova.agent.presence import JsonPresenceStore, PresenceState
+from nova.cli import build_runtime, main
+
+
+class PresenceTests(unittest.TestCase):
+    def test_presence_store_creates_and_round_trips_session_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonPresenceStore(Path(tmpdir) / "presence")
+
+            presence = store.load(session_id="session-a")
+            self.assertEqual(presence.session_id, "session-a")
+            self.assertEqual(presence.mode, "conversation")
+            self.assertEqual(presence.current_focus, "open conversation")
+
+            presence.mode = "diagnostics"
+            presence.current_focus = "reviewing continuity"
+            presence.visible_uncertainties = ["whether context is complete"]
+            store.save(presence)
+
+            loaded = store.load(session_id="session-a")
+            self.assertEqual(loaded.mode, "diagnostics")
+            self.assertEqual(loaded.current_focus, "reviewing continuity")
+            self.assertEqual(loaded.visible_uncertainties, ["whether context is complete"])
+            self.assertTrue(store.get_presence_path(session_id="session-a").exists())
+
+    def test_presence_store_normalizes_unknown_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonPresenceStore(Path(tmpdir) / "presence")
+            presence = PresenceState(session_id="session-a", mode="unsupported")
+
+            store.save(presence)
+
+            self.assertEqual(store.load(session_id="session-a").mode, "conversation")
+
+    def test_runtime_presence_updates_do_not_mutate_self_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            try:
+                presence = runtime.presence_status()
+                self.assertEqual(presence.mode, "conversation")
+                runtime.orientation_snapshot()
+                assert runtime.self_state is not None
+                self_before = runtime.self_state.to_dict()
+
+                updated = runtime.update_presence(
+                    mode="diagnostics",
+                    current_focus="presence test",
+                    visible_uncertainties=["presence is session scoped"],
+                    user_confirmations_needed=["continue Stage 4.1"],
+                )
+
+                self.assertEqual(updated.mode, "diagnostics")
+                self.assertEqual(updated.current_focus, "presence test")
+                self.assertEqual(runtime.self_state.to_dict(), self_before)
+                self.assertTrue(
+                    (data_dir / "presence" / f"{runtime.session_id}.presence.json").exists()
+                )
+            finally:
+                runtime.close()
+
+    def test_runtime_presence_can_clear_nullable_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            try:
+                runtime.update_presence(
+                    pending_proposal={"goal": "review orientation"},
+                    last_action_status="proposed",
+                )
+
+                cleared = runtime.update_presence(
+                    pending_proposal=None,
+                    last_action_status=None,
+                )
+
+                self.assertIsNone(cleared.pending_proposal)
+                self.assertIsNone(cleared.last_action_status)
+            finally:
+                runtime.close()
+
+    def test_presence_cli_does_not_require_model_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            argv = [
+                "nova",
+                "--config",
+                str(config_path),
+                "--session-id",
+                "presence-cli",
+                "--presence",
+            ]
+            output = io.StringIO()
+
+            with patch.object(sys, "argv", argv):
+                with contextlib.redirect_stdout(output):
+                    exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Nova 2.0 Presence", output.getvalue())
+            self.assertIn("session_id: presence-cli", output.getvalue())
+            self.assertFalse((_data_dir / "persona_state.json").exists())
+            self.assertFalse((_data_dir / "self_state.json").exists())
+            self.assertTrue((_data_dir / "presence" / "presence-cli.presence.json").exists())
+
+    def _write_config(self, base: Path) -> tuple[Path, Path, Path]:
+        data_dir = base / "data"
+        log_dir = base / "logs"
+        config_path = base / "local.yaml"
+        config_path.write_text(
+            yaml.safe_dump(
+                {
+                    "app": {
+                        "data_dir": str(data_dir),
+                        "log_dir": str(log_dir),
+                    },
+                    "model": {
+                        "model_path": "/tmp/fake.gguf",
+                    },
+                    "memory": {
+                        "semantic_enabled": True,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return config_path, data_dir, log_dir
+
+
+if __name__ == "__main__":
+    unittest.main()

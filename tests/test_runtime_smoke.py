@@ -17,6 +17,7 @@ from nova.config import (
 )
 from nova.eval.probes import BasicProbeRunner
 from nova.logging.traces import JsonlTraceLogger
+from nova.agent.presence import JsonPresenceStore
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
 from nova.memory.engram import JsonEngramMemoryStore
 from nova.memory.episodic import JsonlEpisodicMemoryStore
@@ -85,6 +86,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 retry_policy=BasicRetryPolicy(),
                 persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
                 memory_router=BasicMemoryRouter(
