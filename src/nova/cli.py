@@ -8,6 +8,7 @@ from typing import Any
 
 from nova.agent.action import ActionApproval
 from nova.agent.presence import JsonPresenceStore
+from nova.console import InteractionConsole
 from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
@@ -510,13 +511,16 @@ def main() -> int:
 
     runtime = build_runtime(config_override=args.config_override)
     session_id = None if args.new_session else args.session_id
-    started_session = runtime.start(session_id=session_id)
+    started_session = runtime.session_store.start_session(session_id=session_id)
+    runtime.session_id = started_session
+    model_started = False
 
     print("Nova 2.0")
     print(f"Session: {started_session}")
-    print("Type 'exit' or 'quit' to stop.")
+    print("Type '/help' for commands or '/exit' to stop.")
 
     try:
+        console = InteractionConsole(runtime=runtime)
         while True:
             try:
                 user_text = input("You: ").strip()
@@ -528,7 +532,17 @@ def main() -> int:
                 continue
             if user_text.lower() in {"exit", "quit"}:
                 break
+            command_result = console.handle(user_text)
+            if command_result.handled:
+                if command_result.output:
+                    print(command_result.output)
+                if command_result.exit_requested:
+                    break
+                continue
 
+            if not model_started:
+                runtime.start(session_id=runtime.session_id)
+                model_started = True
             turn = runtime.respond(user_text)
             print(f"Nova: {turn.final_answer}")
             if args.debug:

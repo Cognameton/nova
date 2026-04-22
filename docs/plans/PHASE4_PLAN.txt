@@ -173,17 +173,29 @@ Example command direction:
 - /summary
 
 Stage 4.2 deliverables:
-- command parser for interactive CLI commands
-- command result formatting
-- no-model-load diagnostics where possible
-- explicit approval path for action execution
-- tests for command parsing and dispatch boundaries
+- [x] command parser for interactive CLI commands
+- [x] command result formatting
+- [x] no-model-load diagnostics where possible
+- [x] explicit approval path for action execution
+- [x] tests for command parsing and dispatch boundaries
 
 Stage 4.2 restrictions:
 - commands must not bypass runtime gates
 - approval commands must create ActionApproval records
 - no shell passthrough
 - no network commands
+
+Stage 4.2 implementation notes:
+- Added InteractionConsole as a separate console-command dispatcher.
+- Added slash commands: /help, /status, /presence, /orientation, /ready,
+  /propose, /approve, /actions, /maintenance, /summary, and /exit.
+- Normal chat still routes through NovaRuntime.respond.
+- Action proposals and approved executions route through existing runtime
+  proposal/execution APIs and retain Stage 3 gates.
+- /presence remains presence/session-only and does not initialize durable
+  identity files.
+- /summary is intentionally bounded and session-local; the richer continuity
+  summary remains Stage 4.4 work.
 
 
 STAGE 4.3: ACTION REVIEW WORKFLOW
