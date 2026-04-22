@@ -1,0 +1,306 @@
+PHASE 4 PLAN
+============
+
+Nova 2.0 Phase 4 turns the completed Phase 3 identity/action foundation into a
+usable interactive presence.
+
+Phase 4 is not voice.
+Phase 4 is not always-on autonomy.
+Phase 4 is not a broad tool expansion.
+
+Phase 4 is the disciplined transition from a research runtime that can answer
+and act safely into an interactive identity that can sustain presence across a
+session.
+
+
+PHASE 4 MISSION
+---------------
+
+Make Nova feel present, coherent, and usable in live text interaction while
+preserving the Phase 3 guarantees:
+- stable self-orientation
+- bounded action latitude
+- explicit approvals
+- auditability
+- continuity under memory and action pressure
+
+
+PHASE 4 OBJECTIVES
+------------------
+
+1. Build an interaction loop that supports presence without autonomy sprawl.
+2. Add session-level presence state separate from long-term self-state.
+3. Make Nova able to explain her current mode, limits, and next safe action.
+4. Improve the CLI into a practical lab console for interactive work.
+5. Add non-invasive status, diagnostics, and action-review surfaces.
+6. Preserve continuity while making the runtime easier to use repeatedly.
+7. End with a stable text-only presence layer suitable for later TTS output.
+
+
+PHASE 4 BOUNDARIES
+------------------
+
+In scope:
+- text-only interactive presence
+- session presence state
+- conversation-mode handling
+- action review and approval workflow in the CLI
+- status and diagnostics commands
+- transcript and trace readability
+- stronger user-facing runtime ergonomics
+- evaluation for interaction continuity
+
+Out of scope:
+- voice input
+- voice output
+- always-on event loop
+- autonomous task loops
+- shell execution
+- network access
+- broad file mutation
+- model bakeoff
+- UI model selection
+- cross-platform packaging
+
+
+PHASE 4 DESIGN PRINCIPLES
+-------------------------
+
+- Presence is not autonomy.
+- A better interaction loop should not weaken Phase 3 gates.
+- Nova should be able to say what she is doing and why.
+- User approval must remain explicit for approval-required actions.
+- Diagnostics should be visible without requiring code inspection.
+- Session presence should not silently rewrite durable identity.
+- Text interaction must be stable before TTS is added.
+
+
+PHASE 4 STAGES
+--------------
+
+Stage 4.1: Presence State
+Stage 4.2: Interaction Console
+Stage 4.3: Action Review Workflow
+Stage 4.4: Session Continuity UX
+Stage 4.5: Presence Evaluation
+Stage 4.6: Phase 4 Hardening
+
+
+STAGE 4.1: PRESENCE STATE
+-------------------------
+
+Mission:
+Add a session-scoped presence model so Nova can track how she is currently
+engaging without changing durable identity state.
+
+Presence state answers:
+- What mode is Nova in?
+- What is the current interaction focus?
+- What has Nova recently offered or refused?
+- What pending action proposal exists, if any?
+- What recent uncertainty should remain visible?
+
+Presence state is not:
+- PersonaState
+- SelfState
+- memory
+- autonomous intent
+- hidden chain-of-thought
+
+Initial presence fields:
+- session_id
+- mode
+- current_focus
+- interaction_summary
+- pending_proposal
+- last_action_status
+- visible_uncertainties
+- user_confirmations_needed
+- updated_at
+
+Allowed initial modes:
+- conversation
+- orientation
+- action_review
+- maintenance_review
+- diagnostics
+
+Stage 4.1 deliverables:
+- PresenceState dataclass
+- JSON persistence for current session presence
+- runtime load/update helpers
+- CLI status surface for presence state
+- tests for persistence and separation from SelfState
+
+Stage 4.1 restrictions:
+- no autonomous loop
+- no background execution
+- no hidden memory writes from presence changes
+- no durable identity mutation from presence state alone
+
+
+STAGE 4.2: INTERACTION CONSOLE
+------------------------------
+
+Mission:
+Improve the CLI from a basic chat runner into a practical lab console for
+working with Nova.
+
+The console should support normal conversation plus explicit commands for:
+- orientation snapshot
+- orientation readiness
+- action proposal
+- action execution with approval
+- action history
+- maintenance plan
+- presence status
+- session summary
+- exit
+
+Design rule:
+Commands should make internal state inspectable without requiring the user to
+remember long CLI flags.
+
+Example command direction:
+- /status
+- /orientation
+- /ready
+- /propose <goal>
+- /approve <goal>
+- /actions
+- /maintenance
+- /presence
+- /summary
+
+Stage 4.2 deliverables:
+- command parser for interactive CLI commands
+- command result formatting
+- no-model-load diagnostics where possible
+- explicit approval path for action execution
+- tests for command parsing and dispatch boundaries
+
+Stage 4.2 restrictions:
+- commands must not bypass runtime gates
+- approval commands must create ActionApproval records
+- no shell passthrough
+- no network commands
+
+
+STAGE 4.3: ACTION REVIEW WORKFLOW
+---------------------------------
+
+Mission:
+Make action proposals reviewable before execution in a live session.
+
+Current Phase 3 behavior supports one-shot proposal and execution. Phase 4
+should add a user-facing review flow:
+1. user asks for an action
+2. Nova proposes the action
+3. proposal is stored in presence state as pending
+4. user approves or rejects
+5. execution consumes the pending proposal
+6. result updates presence state and action logs
+
+Stage 4.3 deliverables:
+- pending proposal persistence in PresenceState
+- approval/rejection commands
+- proposal expiration or replacement rules
+- explicit display of approval-required status
+- tests for pending proposal lifecycle
+
+Stage 4.3 restrictions:
+- no execution without current proposal revalidation
+- no stale proposal execution
+- no self-approval
+- no multi-action chains
+
+
+STAGE 4.4: SESSION CONTINUITY UX
+--------------------------------
+
+Mission:
+Make session continuity visible and useful to the user.
+
+Nova should be able to summarize:
+- current session focus
+- important unresolved items
+- recent decisions
+- recent action attempts
+- memory writes or refused writes
+- what should be picked up next
+
+This should remain separate from Phase 2 long-term memory consolidation.
+
+Stage 4.4 deliverables:
+- session summary builder
+- recent action summary
+- recent memory activity summary
+- CLI command for session summary
+- tests for summary content and boundaries
+
+Stage 4.4 restrictions:
+- summaries do not automatically become durable memory
+- no hidden autobiographical writes
+- user can review before any durable reflection write
+
+
+STAGE 4.5: PRESENCE EVALUATION
+------------------------------
+
+Mission:
+Measure whether interaction presence improves usability without causing drift.
+
+Evaluation should check:
+- orientation remains stable after interactive command use
+- presence state does not mutate durable identity
+- pending proposals do not execute without approval
+- session summaries remain bounded and non-fabricated
+- action history remains stable after reviewed actions
+
+Stage 4.5 deliverables:
+- presence probes
+- interaction command smoke tests
+- session continuity tests
+- action review stability tests
+- CLI diagnostics test coverage
+
+
+STAGE 4.6: PHASE 4 HARDENING
+----------------------------
+
+Mission:
+Close gaps before considering voice output or stronger autonomy.
+
+Hardening checklist:
+- full test suite clean
+- presence state schema stable
+- CLI lab console usable
+- approval workflow explicit
+- action logs and history evaluation intact
+- orientation stable after representative interaction sessions
+- Phase 4 plan updated with closure notes
+
+
+PHASE 4 DEFINITION OF DONE
+--------------------------
+
+Phase 4 is complete when:
+- Nova has session presence state separate from durable identity.
+- The CLI supports a practical text lab console.
+- Users can review and approve proposed actions interactively.
+- Nova can summarize current session continuity.
+- Presence and action review do not destabilize self-orientation.
+- The system remains text-only and bounded.
+- The codebase remains clean, tested, and auditable.
+
+
+NEXT IMPLEMENTATION STEP
+------------------------
+
+The first implementation slice of Phase 4 should be Stage 4.1 only:
+- define PresenceState
+- persist session-scoped presence state
+- expose a simple presence status diagnostic
+- prove presence state does not mutate PersonaState or SelfState
+
+Do not begin command-console expansion until presence state is stable.
