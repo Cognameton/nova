@@ -256,16 +256,25 @@ Nova should be able to summarize:
 This should remain separate from Phase 2 long-term memory consolidation.
 
 Stage 4.4 deliverables:
-- session summary builder
-- recent action summary
-- recent memory activity summary
-- CLI command for session summary
-- tests for summary content and boundaries
+- [x] session summary builder
+- [x] recent action summary
+- [x] recent memory activity summary
+- [x] CLI command for session summary
+- [x] tests for summary content and boundaries
 
 Stage 4.4 restrictions:
 - summaries do not automatically become durable memory
 - no hidden autobiographical writes
 - user can review before any durable reflection write
+
+Stage 4.4 implementation notes:
+- Added SessionContinuityBuilder for read-only session continuity summaries.
+- /summary now reports current focus, unresolved items, recent turns, recent
+  action attempts, recent memory activity, and next pickup items.
+- Summary building reads session, presence, trace, action, and memory-write
+  logs without writing semantic or autobiographical memory.
+- Richer long-term reflection remains governed by existing proposal and
+  approval workflow.
 
 
 STAGE 4.5: PRESENCE EVALUATION

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from nova.agent.action import ActionApproval
+from nova.continuity import SessionContinuityBuilder
 
 
 DEFAULT_PENDING_PROPOSAL_MAX_AGE_SECONDS = 15 * 60
@@ -393,22 +394,19 @@ class InteractionConsole:
         )
 
     def _summary(self) -> str:
-        presence = self.runtime.presence_status()
-        recent_turns = self.runtime.session_store.recent_turns(
-            session_id=presence.session_id,
-            limit=5,
-        )
-        recent_inputs = [turn.user_text for turn in recent_turns]
+        summary = SessionContinuityBuilder(runtime=self.runtime).build()
         return "\n".join(
             [
                 "Nova Session Summary",
-                f"session_id: {presence.session_id}",
-                f"current_focus: {presence.current_focus}",
-                f"interaction_summary: {presence.interaction_summary}",
-                f"last_action_status: {presence.last_action_status}",
-                f"confirmations_needed: {presence.user_confirmations_needed}",
-                f"recent_turn_count: {len(recent_turns)}",
-                f"recent_user_inputs: {recent_inputs}",
+                f"session_id: {summary.session_id}",
+                f"current_focus: {summary.current_focus}",
+                f"interaction_summary: {summary.interaction_summary}",
+                f"last_action_status: {summary.last_action_status}",
+                f"unresolved_items: {summary.unresolved_items}",
+                f"recent_user_inputs: {summary.recent_user_inputs}",
+                f"recent_action_attempts: {summary.recent_action_attempts}",
+                f"recent_memory_activity: {summary.recent_memory_activity}",
+                f"next_pickup: {summary.next_pickup}",
             ]
         )
 
