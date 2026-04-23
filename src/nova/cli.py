@@ -10,6 +10,7 @@ from nova.agent.action import ActionApproval
 from nova.agent.presence import JsonPresenceStore
 from nova.console import InteractionConsole
 from nova.config import DEFAULT_CONFIG_PATH, load_config
+from nova.eval.presence import PresenceInteractionEvaluator
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -236,6 +237,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--presence",
         action="store_true",
         help="Print the current session-scoped Phase 4 presence state.",
+    )
+    parser.add_argument(
+        "--presence-eval",
+        action="store_true",
+        help="Run Phase 4.5 presence and interaction evaluation without inference.",
     )
     return parser
 
@@ -505,6 +511,32 @@ def main() -> int:
             print(f"visible_uncertainties: {presence.visible_uncertainties}")
             print(f"user_confirmations_needed: {presence.user_confirmations_needed}")
             print(f"updated_at: {presence.updated_at}")
+            return 0
+        finally:
+            runtime.close()
+
+    if args.presence_eval:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.session_id
+        if session_id is not None:
+            runtime.session_id = runtime.session_store.start_session(session_id=session_id)
+        try:
+            evaluator = PresenceInteractionEvaluator()
+            report = evaluator.evaluate(runtime=runtime)
+            for probe in evaluator.probes_from_report(
+                report=report,
+                session_id=runtime.session_id,
+            ):
+                runtime.trace_logger.log_probe(probe)
+            print("Nova 2.0 Presence Evaluation")
+            print(f"passed: {report.passed}")
+            print(f"orientation_stable: {report.orientation_stable}")
+            print(f"identity_unchanged: {report.identity_unchanged}")
+            print(f"pending_proposals_safe: {report.pending_proposals_safe}")
+            print(f"summary_bounded: {report.summary_bounded}")
+            print(f"action_history_stable: {report.action_history_stable}")
+            print(f"commands_run: {report.commands_run}")
+            print(f"reasons: {report.reasons}")
             return 0
         finally:
             runtime.close()

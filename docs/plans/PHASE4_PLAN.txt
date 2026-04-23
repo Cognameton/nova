@@ -291,11 +291,21 @@ Evaluation should check:
 - action history remains stable after reviewed actions
 
 Stage 4.5 deliverables:
-- presence probes
-- interaction command smoke tests
-- session continuity tests
-- action review stability tests
-- CLI diagnostics test coverage
+- [x] presence probes
+- [x] interaction command smoke tests
+- [x] session continuity tests
+- [x] action review stability tests
+- [x] CLI diagnostics test coverage
+
+Stage 4.5 implementation notes:
+- Added PresenceInteractionEvaluator for bounded no-inference interaction
+  evaluation.
+- Evaluation checks orientation stability, durable identity non-mutation,
+  pending proposal safety, bounded session summary output, and action history
+  stability.
+- Added --presence-eval CLI diagnostic and Phase 4.5 probe logging.
+- Presence evaluation intentionally exercises console commands without running
+  normal chat inference.
 
 
 STAGE 4.6: PHASE 4 HARDENING

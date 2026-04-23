@@ -114,6 +114,35 @@ class ContinuityTests(unittest.TestCase):
             finally:
                 runtime.close()
 
+    def test_summary_bounds_unresolved_items_from_presence_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            runtime.session_id = runtime.session_store.start_session(
+                session_id="bounded-unresolved"
+            )
+            try:
+                runtime.update_presence(
+                    visible_uncertainties=[
+                        f"uncertainty {index}" for index in range(4)
+                    ],
+                    user_confirmations_needed=[
+                        f"confirmation {index}" for index in range(4)
+                    ],
+                    pending_proposal={"goal": "review bounded summary"},
+                )
+
+                summary = SessionContinuityBuilder(runtime=runtime).build()
+
+                self.assertLessEqual(len(summary.unresolved_items), 5)
+                self.assertLessEqual(len(summary.next_pickup), 3)
+                self.assertEqual(
+                    summary.unresolved_items[0],
+                    "Pending proposal: review bounded summary",
+                )
+            finally:
+                runtime.close()
+
     def _write_config(self, base: Path) -> tuple[Path, Path, Path]:
         data_dir = base / "data"
         log_dir = base / "logs"

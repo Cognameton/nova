@@ -10,6 +10,9 @@ from typing import Any
 from nova.types import SCHEMA_VERSION
 
 
+DEFAULT_UNRESOLVED_ITEM_LIMIT = 5
+
+
 @dataclass(slots=True)
 class SessionContinuitySummary:
     schema_version: str = SCHEMA_VERSION
@@ -41,6 +44,7 @@ class SessionContinuityBuilder:
         recent_turn_limit: int = 5,
         recent_action_limit: int = 5,
         recent_memory_limit: int = 5,
+        unresolved_item_limit: int = DEFAULT_UNRESOLVED_ITEM_LIMIT,
     ) -> SessionContinuitySummary:
         presence = self.runtime.presence_status()
         recent_turns = self.runtime.session_store.recent_turns(
@@ -59,6 +63,7 @@ class SessionContinuityBuilder:
             pending_proposal=presence.pending_proposal,
             visible_uncertainties=presence.visible_uncertainties,
             confirmations=presence.user_confirmations_needed,
+            limit=unresolved_item_limit,
         )
         return SessionContinuitySummary(
             session_id=presence.session_id,
@@ -143,13 +148,16 @@ class SessionContinuityBuilder:
         pending_proposal: dict[str, Any] | None,
         visible_uncertainties: list[str],
         confirmations: list[str],
+        limit: int,
     ) -> list[str]:
-        items = list(visible_uncertainties) + list(confirmations)
+        items = []
         if pending_proposal:
             goal = str(pending_proposal.get("goal", "") or "").strip()
             if goal:
                 items.append(f"Pending proposal: {goal}")
-        return items
+        items.extend(visible_uncertainties)
+        items.extend(confirmations)
+        return items[:max(0, limit)]
 
     def _next_pickup(self, *, current_focus: str, unresolved_items: list[str]) -> list[str]:
         if unresolved_items:
