@@ -537,7 +537,7 @@ def main() -> int:
             print(f"action_history_stable: {report.action_history_stable}")
             print(f"commands_run: {report.commands_run}")
             print(f"reasons: {report.reasons}")
-            return 0
+            return 0 if report.passed else 1
         finally:
             runtime.close()
 

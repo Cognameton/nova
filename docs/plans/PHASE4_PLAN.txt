@@ -315,13 +315,24 @@ Mission:
 Close gaps before considering voice output or stronger autonomy.
 
 Hardening checklist:
-- full test suite clean
-- presence state schema stable
-- CLI lab console usable
-- approval workflow explicit
-- action logs and history evaluation intact
-- orientation stable after representative interaction sessions
-- Phase 4 plan updated with closure notes
+- [x] full test suite clean
+- [x] presence state schema stable
+- [x] CLI lab console usable
+- [x] approval workflow explicit
+- [x] action logs and history evaluation intact
+- [x] orientation stable after representative interaction sessions
+- [x] Phase 4 plan updated with closure notes
+
+Stage 4.6 implementation notes:
+- Hardened --presence-eval so failed presence evaluations return a nonzero
+  process status for CLI automation.
+- Hardened JsonPresenceStore loading so persisted presence files tolerate minor
+  schema changes, unknown future fields, missing fields, invalid list fields,
+  and mismatched embedded session ids.
+- Phase 4 closure is backed by full-suite tests plus targeted coverage for
+  presence persistence, CLI commands, explicit approval/rejection, pending
+  proposal expiration, action history stability, session summaries, and
+  presence evaluation probes.
 
 
 PHASE 4 DEFINITION OF DONE
@@ -337,16 +348,23 @@ Phase 4 is complete when:
 - The codebase remains clean, tested, and auditable.
 
 
-NEXT IMPLEMENTATION STEP
-------------------------
+PHASE 4 CLOSURE NOTES
+---------------------
 
-The first implementation slice of Phase 4 should be Stage 4.1 only:
-- define PresenceState
-- persist session-scoped presence state
-- expose a simple presence status diagnostic
-- prove presence state does not mutate PersonaState or SelfState
+Phase 4 is closed when the Stage 4.6 hardening commit is reviewed, committed,
+and pushed.
 
-Do not begin command-console expansion until presence state is stable.
+Closure evidence:
+- Session presence state is separate from PersonaState, SelfState, and durable
+  memory.
+- The lab console remains text-only and routes actions through runtime gates.
+- Approval-required actions require explicit user approval and proposal
+  revalidation.
+- Pending proposals expire and are replaced or rejected explicitly.
+- Session summaries are read-only, bounded, and keep pending proposals visible.
+- Presence evaluation exercises representative interaction commands without
+  normal chat inference and returns a failing process status when diagnostics
+  fail.
 
 
 STAGE 4.1 IMPLEMENTATION NOTES

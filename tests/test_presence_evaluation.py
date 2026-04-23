@@ -11,7 +11,7 @@ from unittest.mock import patch
 import yaml
 
 from nova.cli import build_runtime, main
-from nova.eval.presence import PresenceInteractionEvaluator
+from nova.eval.presence import PresenceEvaluationReport, PresenceInteractionEvaluator
 
 
 class PresenceEvaluationTests(unittest.TestCase):
@@ -108,6 +108,43 @@ class PresenceEvaluationTests(unittest.TestCase):
             self.assertIn("Nova 2.0 Presence Evaluation", output.getvalue())
             self.assertIn("passed: True", output.getvalue())
             self.assertTrue((log_dir / "probes.jsonl").exists())
+
+    def test_presence_eval_cli_returns_nonzero_on_failed_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            argv = [
+                "nova",
+                "--config",
+                str(config_path),
+                "--session-id",
+                "presence-eval-failed-cli",
+                "--presence-eval",
+            ]
+            failed_report = PresenceEvaluationReport(
+                passed=False,
+                orientation_stable=False,
+                identity_unchanged=True,
+                pending_proposals_safe=True,
+                summary_bounded=True,
+                action_history_stable=True,
+                reasons=["orientation_unstable_after_interaction_eval"],
+            )
+            output = io.StringIO()
+
+            with patch.object(sys, "argv", argv):
+                with patch("nova.cli.PresenceInteractionEvaluator") as evaluator_class:
+                    evaluator = evaluator_class.return_value
+                    evaluator.evaluate.return_value = failed_report
+                    evaluator.probes_from_report.return_value = []
+                    with contextlib.redirect_stdout(output):
+                        exit_code = main()
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("passed: False", output.getvalue())
+            self.assertIn(
+                "orientation_unstable_after_interaction_eval",
+                output.getvalue(),
+            )
 
     def _write_config(self, base: Path) -> tuple[Path, Path, Path]:
         data_dir = base / "data"

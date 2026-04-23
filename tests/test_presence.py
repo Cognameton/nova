@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -43,6 +44,51 @@ class PresenceTests(unittest.TestCase):
             store.save(presence)
 
             self.assertEqual(store.load(session_id="session-a").mode, "conversation")
+
+    def test_presence_store_loads_across_minor_schema_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonPresenceStore(Path(tmpdir) / "presence")
+            path = store.get_presence_path(session_id="session-a")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "0.9",
+                        "session_id": "wrong-session",
+                        "mode": "unsupported",
+                        "current_focus": "schema check",
+                        "pending_proposal": "invalid",
+                        "visible_uncertainties": "invalid",
+                        "user_confirmations_needed": [1, "confirm"],
+                        "future_field": "ignored",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            presence = store.load(session_id="session-a")
+
+            self.assertEqual(presence.session_id, "session-a")
+            self.assertEqual(presence.mode, "conversation")
+            self.assertEqual(presence.current_focus, "schema check")
+            self.assertIsNone(presence.pending_proposal)
+            self.assertEqual(presence.visible_uncertainties, [])
+            self.assertEqual(presence.user_confirmations_needed, ["1", "confirm"])
+            self.assertEqual(presence.interaction_summary, "")
+
+    def test_presence_store_recovers_from_malformed_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonPresenceStore(Path(tmpdir) / "presence")
+            path = store.get_presence_path(session_id="session-a")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{not valid json", encoding="utf-8")
+
+            presence = store.load(session_id="session-a")
+
+            self.assertEqual(presence.session_id, "session-a")
+            self.assertEqual(presence.mode, "conversation")
+            self.assertEqual(presence.current_focus, "open conversation")
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["session_id"], "session-a")
 
     def test_runtime_presence_updates_do_not_mutate_self_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

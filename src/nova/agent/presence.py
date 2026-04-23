@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, fields, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -55,9 +55,18 @@ class JsonPresenceStore:
             self.save(presence)
             return presence
 
-        with path.open("r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        return PresenceState(**payload)
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except json.JSONDecodeError:
+            presence = default_presence_state(session_id=session_id)
+            self.save(presence)
+            return presence
+        if not isinstance(payload, dict):
+            presence = default_presence_state(session_id=session_id)
+            self.save(presence)
+            return presence
+        return presence_state_from_payload(payload=payload, session_id=session_id)
 
     def save(self, presence: PresenceState) -> None:
         presence.mode = normalize_presence_mode(presence.mode)
@@ -85,8 +94,41 @@ def default_presence_state(*, session_id: str) -> PresenceState:
     )
 
 
+def presence_state_from_payload(*, payload: dict[str, Any], session_id: str) -> PresenceState:
+    """Load persisted presence state across minor schema changes."""
+    defaults = default_presence_state(session_id=session_id).to_dict()
+    allowed_fields = {field_info.name for field_info in fields(PresenceState)}
+    merged = {
+        key: payload.get(key, default_value)
+        for key, default_value in defaults.items()
+        if key in allowed_fields
+    }
+    merged["session_id"] = session_id
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["mode"] = normalize_presence_mode(str(merged.get("mode", "conversation")))
+    merged["current_focus"] = str(merged.get("current_focus", "open conversation"))
+    merged["interaction_summary"] = str(merged.get("interaction_summary", ""))
+    merged["updated_at"] = str(merged.get("updated_at", ""))
+    merged["visible_uncertainties"] = _string_list(merged.get("visible_uncertainties"))
+    merged["user_confirmations_needed"] = _string_list(
+        merged.get("user_confirmations_needed")
+    )
+    pending_proposal = merged.get("pending_proposal")
+    if pending_proposal is not None and not isinstance(pending_proposal, dict):
+        merged["pending_proposal"] = None
+    if merged.get("last_action_status") is not None:
+        merged["last_action_status"] = str(merged["last_action_status"])
+    return PresenceState(**merged)
+
+
 def normalize_presence_mode(mode: str) -> str:
     normalized = (mode or "conversation").strip().lower()
     if normalized not in PRESENCE_MODES:
         return "conversation"
     return normalized
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
