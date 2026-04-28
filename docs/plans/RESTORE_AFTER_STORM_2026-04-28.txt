@@ -1,0 +1,149 @@
+RESTORE POINT
+=============
+
+Date:
+- 2026-04-28
+
+Purpose:
+- Clean handoff point before shutdown due to storm risk.
+- Restore the exact Nova phase/stage context and git state without re-deriving it.
+
+
+CURRENT GIT / PHASE STATE
+-------------------------
+
+Branch:
+- `main`
+
+Latest committed progression:
+- `cb69c39` Close Phase 5 runtime validation and model bakeoff
+- `c8e7bb9` Add Phase 6 continuity and private cognition plan
+- `7c70068` Enable governed default-path semantic memory
+- `e5a85c5` Strengthen autobiographical continuity synthesis
+
+Worktree status at shutdown point:
+- clean
+
+Current phase:
+- Phase 6
+
+Current stage:
+- Stage 6.3: Higher-Order Memory Governance
+
+
+WHAT IS ALREADY DONE
+--------------------
+
+Phase 5:
+- closed and committed separately
+
+Phase 6 Stage 6.1:
+- semantic memory enabled by default
+- default-path semantic consolidation wired
+- validated and committed separately
+
+Phase 6 Stage 6.2:
+- autobiographical synthesis strengthened
+- milestone / shift / tension / continuity-note classification added
+- generic explanatory prose rejected from autobiographical synthesis
+- direct validated-answer autobiographical writes tightened
+- relationship-context semantic contamination removed from autobiographical synthesis
+- live validation completed
+- committed separately
+
+
+STAGE 6.2 VALIDATION ANCHORS
+----------------------------
+
+Validation note:
+- `docs/plans/PHASE6_STAGE62_AUTOBIOGRAPHICAL_SYNTHESIS.txt`
+
+Live rerun configs:
+- `configs/nova.phase6.autobioeval.yaml`
+- `configs/nova.phase6.autobioeval.rerun.yaml`
+- `configs/nova.phase6.autobioeval.rerun2.yaml`
+
+Final clean live evidence:
+- `data/phase6-autobio-eval-rerun2/memory/autobiographical.jsonl`
+- `data/phase6-autobio-eval-rerun2/memory/semantic.jsonl`
+
+Important final live result:
+- final autobiographical output was one synthesized `developmental_milestone`
+- no raw direct `identity_note` clutter in the final rerun
+- no `relationship-context` contamination in the final autobiographical note
+
+Latest full test status before shutdown:
+- `126 tests OK`
+
+
+CURRENT DISCUSSION / DECISION POINT
+-----------------------------------
+
+We explicitly paused before implementing Stage 6.3 code.
+
+Stage 6.3 accountability standard already established:
+- this stage is about higher-order memory trustworthiness
+- not style tuning
+- not private cognition
+- not broad “awareness” claims
+
+Working definition of Stage 6.3:
+- make higher-order memory governable, auditable, and conflict-aware
+
+The standard agreed in discussion:
+- no vague continuity upgrades without explicit provenance effect
+- no conflict-handling claims without tests and inspectable state transitions
+- no retrieval claims unless retrieval behavior actually changes in governed scenarios
+- no drift into Stage 6.4
+- no unrelated cleanup bundled into the stage
+
+
+NEXT STAGE TARGET
+-----------------
+
+Phase 6, Stage 6.3:
+- Higher-Order Memory Governance
+
+Expected focus:
+1. provenance upgrades on semantic/autobiographical records
+2. contradiction detection for preference, value, identity, and relationship continuity
+3. supersession / active-state rules for higher-order memory
+4. tests for conflicting updates
+5. one live validation pass showing newer, better-supported continuity records are preferred
+
+Restrictions:
+- do not start Stage 6.4 private cognition work
+- do not mix prompt/runtime style tuning into this stage
+- keep git cycle clean and stage-bounded
+
+
+RECOMMENDED FIRST ACTION AFTER RESTORE
+--------------------------------------
+
+1. Confirm clean worktree:
+- `git status --short`
+
+2. Reconfirm recent progression:
+- `git log --oneline -4`
+
+3. Re-open Stage 6 plan and Stage 6.2 note:
+- `docs/plans/PHASE6_PLAN.txt`
+- `docs/plans/PHASE6_STAGE62_AUTOBIOGRAPHICAL_SYNTHESIS.txt`
+
+4. Begin Stage 6.3 by inspecting:
+- `src/nova/memory/consolidation.py`
+- `src/nova/memory/autobiographical.py`
+- `src/nova/memory/semantic.py`
+- `src/nova/memory/graph.py`
+- `src/nova/memory/maintenance.py`
+- retrieval/ranking paths that consume higher-order memory
+
+
+RESUME SENTENCE
+---------------
+
+Resume from:
+- “Phase 6, Stage 6.3: Higher-Order Memory Governance”
+
+Immediate objective:
+- make higher-order memory provenance, conflict handling, and supersession behavior explicit and testable without spilling into Stage 6.4.
