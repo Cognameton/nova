@@ -1,0 +1,200 @@
+PHASE 6 PLAN
+============
+
+Nova 2.0 Phase 6 is the first continuity-deepening phase after live runtime
+validation.
+
+Phase 6 is not synthetic autonomy.
+Phase 6 is not earned first-person desire.
+Phase 6 is not unrestricted self-modification.
+Phase 6 is not visible reasoning.
+
+Phase 6 is the disciplined expansion from a clean live runtime into a stronger
+continuity architecture with bounded private cognition.
+
+
+PHASE 6 MISSION
+---------------
+
+Strengthen Nova's persistent self-continuity by improving how memory is
+promoted, governed, retrieved, and interpreted before response generation.
+
+Phase 6 should make Nova more coherent across time without turning the runtime
+into a theatrical reasoning system or an uncontrolled self-editing loop.
+
+
+PHASE 6 OBJECTIVES
+------------------
+
+1. Make semantic memory part of Nova's governed default continuity path.
+2. Improve autobiographical synthesis so identity-bearing development is stored
+   as meaningful continuity notes rather than sparse fragments.
+3. Tighten provenance, conflict handling, and trust rules for higher-order
+   memory.
+4. Add a bounded private cognition layer that evaluates continuity before
+   speaking.
+5. Prove that retrieved memory changes live behavior in the right way across
+   repeated sessions.
+6. End with a continuity architecture strong enough to support Phase 7 work on
+   motive-state and earned first-person self-claims.
+
+
+PHASE 6 BOUNDARIES
+------------------
+
+In scope:
+- semantic memory default-path activation
+- autobiographical promotion and synthesis rules
+- higher-order memory governance
+- conflict and supersession handling for continuity-bearing memory
+- bounded pre-response private cognition
+- continuity-focused live evaluation
+- traceability for memory-driven behavior changes
+
+Out of scope:
+- autonomous task pursuit
+- unconstrained self-rewriting
+- first-person desire validation
+- background identity mutation from unreviewed reflection
+- visible chain-of-thought or `<think>` output
+- new inference backend replacement
+
+
+PHASE 6 DESIGN PRINCIPLES
+-------------------------
+
+- Persistent selfhood is not raw storage; it is governed continuity.
+- Memory promotion should be selective, auditable, and revisable.
+- Semantic and autobiographical memory must become more useful without becoming
+  noisier.
+- Private cognition should be structured and bounded, not verbose.
+- The system should prefer stable interpretation over stylistic self-narration.
+- Every new continuity mechanism must be evaluated under live inference.
+
+
+PHASE 6 STAGES
+--------------
+
+Stage 6.1: Semantic Default Path
+Stage 6.2: Autobiographical Synthesis
+Stage 6.3: Higher-Order Memory Governance
+Stage 6.4: Private Cognition Layer
+Stage 6.5: Continuity Evaluation and Closure
+
+
+STAGE 6.1: SEMANTIC DEFAULT PATH
+--------------------------------
+
+Mission:
+Move semantic memory from an optional maintenance output into a governed part
+of Nova's default continuity architecture.
+
+Stage 6.1 deliverables:
+- [ ] semantic memory enabled on the default path under explicit governance
+- [ ] clear promotion criteria from episodic/graph/autobiographical inputs
+- [ ] tests for semantic write, merge, and retrieval behavior
+- [ ] operator notes on when semantic consolidation runs
+
+Stage 6.1 restrictions:
+- semantic memory must not become a duplicate dump of episodic memory
+- semantic summaries must remain revision-friendly
+- semantic promotion must carry provenance to source events
+
+
+STAGE 6.2: AUTOBIOGRAPHICAL SYNTHESIS
+-------------------------------------
+
+Mission:
+Make autobiographical memory reflect meaningful developmental continuity rather
+than isolated identity-bearing turns.
+
+Stage 6.2 deliverables:
+- [ ] stronger autobiographical candidate synthesis from repeated related turns
+- [ ] explicit handling of milestones, shifts, and unresolved tensions
+- [ ] tests for autobiographical merge and redundancy control
+- [ ] rules for when assistant answers do and do not become autobiographical
+
+Stage 6.2 restrictions:
+- autobiographical memory must not be inflated by generic explanatory prose
+- sparse identity mentions should not automatically become continuity records
+- autobiographical notes must preserve revision history rather than silently
+  overwrite prior state
+
+
+STAGE 6.3: HIGHER-ORDER MEMORY GOVERNANCE
+-----------------------------------------
+
+Mission:
+Make higher-order continuity memory more trustworthy by improving provenance,
+confidence, conflict resolution, and retention controls.
+
+Stage 6.3 deliverables:
+- [ ] explicit provenance surfaces for semantic and autobiographical records
+- [ ] stronger conflict/supersession rules across higher-order memory
+- [ ] tests for contradictory preference/value/identity updates
+- [ ] maintenance notes for archive/demote/keep decisions
+
+Stage 6.3 restrictions:
+- no silent contradiction overwrite
+- no active higher-order memory without recoverable source evidence
+- no question-shaped prompts promoted as durable continuity facts
+
+
+STAGE 6.4: PRIVATE COGNITION LAYER
+----------------------------------
+
+Mission:
+Add a bounded pre-response cognition layer that helps Nova evaluate continuity
+and response quality without exposing hidden reasoning or multiplying latency.
+
+Stage 6.4 deliverables:
+- [ ] structured private cognition packet format
+- [ ] continuity-aware gating for when cognition runs
+- [ ] deterministic pass budget and retry ceiling
+- [ ] traces proving the layer improves behavior without visible reasoning
+
+Candidate private cognition outputs:
+- continuity_risk
+- memory_conflict
+- response_mode
+- revise_needed
+- uncertainty_flag
+
+Stage 6.4 restrictions:
+- no unbounded self-looping
+- no visible chain-of-thought
+- no storage of freeform hidden monologue as memory
+- no universal multi-pass overhead on every turn
+
+
+STAGE 6.5: CONTINUITY EVALUATION AND CLOSURE
+--------------------------------------------
+
+Mission:
+Close Phase 6 only when Nova's continuity behavior is stronger in real sessions
+and the private cognition layer is bounded, useful, and inspectable.
+
+Stage 6.5 deliverables:
+- [ ] live multi-session continuity evaluation protocol
+- [ ] tests for recall, supersession, and continuity preservation
+- [ ] latency notes for private cognition activation vs fast path
+- [ ] closure summary documenting gains, limits, and remaining risks
+
+Stage 6.5 restrictions:
+- no closure based only on philosophical appeal
+- no closure without live traces showing memory-guided behavior
+- no closure if private cognition destabilizes response contract obedience
+
+
+PHASE 6 DEFINITION OF DONE
+--------------------------
+
+Phase 6 is complete when:
+- semantic memory is part of Nova's governed default continuity path
+- autobiographical memory reflects meaningful continuity rather than sparse
+  fragments
+- higher-order memory is more auditable and conflict-resilient
+- a bounded private cognition layer exists and does not expose hidden reasoning
+- live sessions show that retrieved memory and cognition improve continuity
+  behavior
+- the runtime is ready for Phase 7 work on motive-state and earned self-claims
