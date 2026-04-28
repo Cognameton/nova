@@ -1,0 +1,44 @@
+Phase 6.1: Semantic Default Path
+
+Status
+- Complete
+
+Primary model under test
+- Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+
+Configs used
+- configs/nova.phase6.semanticeval.yaml
+- configs/nova.phase6.semanticeval.rerun.yaml
+
+What was changed
+- semantic memory enabled by default in config
+- valid turns now trigger governed post-turn semantic consolidation
+- semantic consolidation was tightened so generic assistant relationship turns
+  do not create default-path semantic summaries
+
+Validation result
+- The default-path semantic write created a useful `user-preferences` summary
+  from repeated user preference turns.
+- The fresh rerun semantic file contained only the useful user-preference
+  summary and no noisy assistant-side relationship-context summary.
+- The rerun recall trace showed the clean semantic summary being injected into
+  the prompt for the follow-up recall turn.
+- The follow-up answer correctly recalled:
+  - local-first configuration
+  - direct answers without hidden reasoning
+  - stability and memory safety over novelty
+
+Important artifacts
+- data/phase6-semantic-eval-rerun/memory/semantic.jsonl
+- data/phase6-semantic-eval-rerun/logs/traces/phase6-semantic-b-rerun.jsonl
+
+Residual observation
+- Relationship facts in graph memory remain broad and can still be revised by
+  question-shaped relationship prompts. That is a higher-order governance issue
+  and belongs to Phase 6.3 rather than blocking Stage 6.1 closure.
+
+Acceptance result
+- Stage 6.1 is accepted.
+
+Next stage
+- Stage 6.2: Autobiographical Synthesis

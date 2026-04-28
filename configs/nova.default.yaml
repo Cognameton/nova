@@ -40,7 +40,7 @@ persona:
 memory:
   episodic_enabled: true
   engram_enabled: true
-  semantic_enabled: false
+  semantic_enabled: true
   graph_enabled: true
   autobiographical_enabled: true
 

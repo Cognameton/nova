@@ -45,9 +45,15 @@ class SemanticConsolidator:
             return False
         if "turn" not in event.tags:
             return False
+        if "preference" in event.tags or "value" in event.tags:
+            return True
+        if event.source == "nova" and "identity" in event.tags:
+            return True
+        if event.source == "nova" and "relationship" in event.tags:
+            return False
         if event.importance >= 0.7 or event.continuity_weight >= 0.7:
             return True
-        return any(tag in event.tags for tag in ("preference", "value", "identity", "relationship"))
+        return False
 
     def _theme_key(self, event: MemoryEvent) -> str:
         if "preference" in event.tags:

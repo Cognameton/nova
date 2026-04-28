@@ -589,6 +589,8 @@ class NovaRuntime:
             )
             self.memory_router.add_events(memory_events)
             persisted_memory_events = [event.to_dict() for event in memory_events]
+            semantic_events = self._write_semantic_candidates()
+            persisted_memory_events.extend(event.to_dict() for event in semantic_events)
 
         trace = TraceRecord(
             session_id=self.session_id,
@@ -613,6 +615,21 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return turn
+
+    def _write_semantic_candidates(self) -> list:
+        if not getattr(self.config.memory, "semantic_enabled", False):
+            return []
+        stores = self.memory_router.stores
+        if "semantic" not in stores or "episodic" not in stores:
+            return []
+        runner = MemoryMaintenanceRunner(
+            episodic=stores.get("episodic"),
+            engram=stores.get("engram"),
+            graph=stores.get("graph"),
+            autobiographical=stores.get("autobiographical"),
+            semantic=stores.get("semantic"),
+        )
+        return runner.write_semantic_candidates()
 
     def close(self) -> None:
         self.backend.unload()

@@ -59,7 +59,7 @@ class PersonaConfig:
 class MemoryConfig:
     episodic_enabled: bool = True
     engram_enabled: bool = True
-    semantic_enabled: bool = False
+    semantic_enabled: bool = True
     graph_enabled: bool = True
     autobiographical_enabled: bool = True
 

@@ -241,6 +241,42 @@ class MemoryMaintenanceTests(unittest.TestCase):
         self.assertEqual(candidate.source, "reflection")
         self.assertEqual(set(candidate.supersedes), {"e1", "e2"})
 
+    def test_semantic_consolidator_ignores_generic_relationship_turns(self) -> None:
+        consolidator = SemanticConsolidator()
+        events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="assistant_message",
+                text="I understand your preference for a local-first approach with direct answers. How can I assist you today?",
+                tags=["assistant", "relationship", "turn"],
+                importance=0.6,
+                confidence=1.0,
+                continuity_weight=0.7,
+                source="nova",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="assistant_message",
+                text="I'll prioritize stability and memory safety in model choices over novelty. How would you like me to proceed?",
+                tags=["assistant", "relationship", "turn"],
+                importance=0.6,
+                confidence=1.0,
+                continuity_weight=0.7,
+                source="nova",
+            ),
+        ]
+
+        candidates = consolidator.build_candidates(events)
+        self.assertEqual(candidates, [])
+
     def test_runner_can_write_semantic_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
