@@ -156,6 +156,24 @@ class SessionAndMemoryTests(unittest.TestCase):
         graph_events = [event for event in events if event.channel == "graph" and event.source == "nova"]
         self.assertFalse(any(event.kind == "relationship_fact" for event in graph_events))
 
+    def test_memory_event_factory_does_not_directly_write_analytic_identity_answer_to_autobiographical(self) -> None:
+        factory = BasicMemoryEventFactory()
+        events = factory.from_turn(
+            session_id="s1",
+            turn_id="t1",
+            user_text="What tension do you still have to balance between being direct and preserving nuance?",
+            final_answer=(
+                "The tension lies in maintaining clarity through direct responses while preserving "
+                "the depth of nuance in complex topics. I balance this by focusing on the core "
+                "message while ensuring the context remains intact for continuity."
+            ),
+            persona=PersonaState(name="Nova"),
+            self_state=SelfState(identity_summary="Nova is continuity-focused."),
+        )
+
+        autobiographical = [event for event in events if event.channel == "autobiographical"]
+        self.assertEqual(autobiographical, [])
+
     def test_semantic_memory_returns_summary_hits(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             store = JsonlSemanticMemoryStore(Path(tmpdir) / "semantic.jsonl")

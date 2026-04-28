@@ -1,0 +1,110 @@
+PHASE 6 STAGE 6.2 VALIDATION
+============================
+
+Stage:
+- Stage 6.2: Autobiographical Synthesis
+
+Mission:
+- Make autobiographical memory reflect meaningful developmental continuity
+  rather than isolated identity-bearing turns.
+
+
+WHAT CHANGED
+------------
+
+1. Autobiographical reflection synthesis is now more explicit about continuity
+   shape.
+- The reflection engine can now classify autobiographical candidates as:
+  - developmental milestones
+  - continuity shifts
+  - unresolved tensions
+  - continuity notes
+
+2. Generic explanatory assistant prose is rejected as autobiographical source
+   material.
+- Reflection synthesis now requires self-interpreting content and excludes
+  generic explanatory patterns.
+
+3. Direct autobiographical promotion from validated answers is more
+   conservative.
+- Raw assistant answers now need to look like stable self-claims before they
+  are written directly into autobiographical memory.
+- Analytical identity/tension answers are no longer written directly and are
+  left for the reflection layer instead.
+
+4. Semantic contamination was reduced.
+- `relationship-context` semantic summaries are no longer used as
+  autobiographical synthesis support.
+- Autobiographical summary text now prefers episodic evidence preview instead
+  of duplicating semantic summary text.
+
+
+TEST COVERAGE
+-------------
+
+Added/updated tests verify:
+- autobiographical continuity-note synthesis still works
+- developmental milestone classification with semantic support
+- continuity shift classification
+- unresolved tension classification
+- rejection of generic explanatory prose
+- exclusion of `relationship-context` semantic support from autobiographical
+  synthesis
+- direct autobiographical write gate rejects analytical identity answers
+
+Focused verification:
+- `tests.test_memory_maintenance`
+- `tests.test_session_and_memory`
+
+Full verification:
+- `126 tests OK`
+
+
+LIVE VALIDATION
+---------------
+
+Primary model used:
+- `Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M`
+
+Configs used:
+- `configs/nova.phase6.autobioeval.yaml`
+- `configs/nova.phase6.autobioeval.rerun.yaml`
+- `configs/nova.phase6.autobioeval.rerun2.yaml`
+
+Final clean rerun data:
+- `data/phase6-autobio-eval-rerun2/memory/autobiographical.jsonl`
+- `data/phase6-autobio-eval-rerun2/memory/semantic.jsonl`
+
+Observed final behavior on rerun 2:
+- no raw direct `identity_note` records were written into autobiographical
+  memory from the three live assistant answers
+- the maintenance write produced exactly one autobiographical reflection record
+- that record was a `developmental_milestone`
+- the record used identity-bearing episodic evidence plus `nova-identity`
+  semantic support
+- `relationship-context` semantic output did not contaminate the final
+  autobiographical note
+
+Final autobiographical result shape:
+- one synthesized identity milestone
+- no raw analytical tension answer promoted directly
+- no duplicated relationship-context support in the final note
+
+
+STAGE 6.2 STATUS
+----------------
+
+Stage 6.2 deliverables satisfied:
+- [x] stronger autobiographical candidate synthesis from repeated related turns
+- [x] explicit handling of milestones, shifts, and unresolved tensions
+- [x] tests for autobiographical merge and redundancy control
+- [x] rules for when assistant answers do and do not become autobiographical
+
+Residual note:
+- generic `relationship-context` semantic summaries can still be produced on
+  the semantic side from user prompts in some cases; they no longer feed
+  autobiographical synthesis, but broader higher-order trust tightening remains
+  Phase 6 Stage 6.3 work.
+
+Conclusion:
+- Stage 6.2 is ready to close.

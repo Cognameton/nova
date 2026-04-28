@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/phase6-autobio-eval-rerun
+  log_dir: ./data/phase6-autobio-eval-rerun/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/models/Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+
+generation:
+  max_tokens: 192

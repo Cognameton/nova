@@ -71,6 +71,26 @@ class MemoryPolicy:
         "i relate to this user",
         "i relate to you",
     )
+    STABLE_SELF_CLAIM_CUES = (
+        "i am ",
+        "i remain ",
+        "i keep ",
+        "i stay ",
+        "i value ",
+        "i focus on ",
+        "my name is ",
+        "my core principles",
+        "i orient ",
+    )
+    ANALYTIC_SELF_DESCRIPTION_CUES = (
+        "the tension lies",
+        "the central elements",
+        "the main challenge",
+        "the balance is",
+        "one way to think",
+        "you can think of",
+        "here are",
+    )
 
     def classify_user_text(self, text: str) -> tuple[list[str], float, float]:
         lowered = text.lower()
@@ -156,9 +176,22 @@ class MemoryPolicy:
         assistant_tags: list[str],
         assistant_continuity_weight: float,
     ) -> bool:
-        return self.is_high_quality_self_memory_candidate(final_answer) and (
+        return (
+            self.is_high_quality_self_memory_candidate(final_answer)
+            and self._looks_stable_self_claim(final_answer)
+            and not self._looks_analytic_self_description(final_answer)
+            and (
             "identity" in assistant_tags or assistant_continuity_weight >= 0.9
         )
+        )
+
+    def _looks_stable_self_claim(self, text: str) -> bool:
+        lowered = f" {self._normalize_memory_candidate(text)} "
+        return any(cue in lowered for cue in self.STABLE_SELF_CLAIM_CUES)
+
+    def _looks_analytic_self_description(self, text: str) -> bool:
+        lowered = self._normalize_memory_candidate(text)
+        return any(cue in lowered for cue in self.ANALYTIC_SELF_DESCRIPTION_CUES)
 
     def extract_graph_events(
         self,

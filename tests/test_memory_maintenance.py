@@ -413,7 +413,244 @@ class MemoryMaintenanceTests(unittest.TestCase):
         self.assertEqual(candidate.channel, "autobiographical")
         self.assertEqual(candidate.kind, "reflection_note")
         self.assertIn("identity-continuity", candidate.tags)
+        self.assertEqual(candidate.metadata.get("note_type"), "continuity-note")
         self.assertEqual(set(candidate.supersedes), {"e1", "e2"})
+
+    def test_reflection_engine_marks_developmental_milestones_with_semantic_support(self) -> None:
+        engine = ReflectionEngine()
+        episodic_events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="assistant_message",
+                text="I remain oriented toward continuity in how I understand myself.",
+                tags=["assistant", "turn", "identity"],
+                importance=0.82,
+                confidence=1.0,
+                continuity_weight=0.92,
+                source="nova",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="assistant_message",
+                text="I keep continuity central when I decide how to answer.",
+                tags=["assistant", "turn", "identity", "value"],
+                importance=0.87,
+                confidence=1.0,
+                continuity_weight=0.93,
+                source="nova",
+            ),
+        ]
+        semantic_events = [
+            MemoryEvent(
+                event_id="s1",
+                timestamp="2026-04-18T00:02:00Z",
+                session_id="s1",
+                turn_id="t3",
+                channel="semantic",
+                kind="theme_summary",
+                text="Nova identity: continuity remains central.",
+                summary="Nova identity: continuity remains central.",
+                tags=["semantic", "summary", "nova-identity"],
+                importance=0.85,
+                confidence=0.9,
+                continuity_weight=0.9,
+                source="reflection",
+                metadata={"theme": "nova-identity"},
+            )
+        ]
+
+        candidates = engine.build_autobiographical_candidates(
+            episodic_events=episodic_events,
+            semantic_events=semantic_events,
+        )
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.kind, "developmental_milestone")
+        self.assertEqual(candidate.metadata.get("note_type"), "developmental-milestone")
+        self.assertTrue(candidate.metadata.get("semantic_support"))
+
+    def test_reflection_engine_ignores_relationship_context_semantic_support(self) -> None:
+        engine = ReflectionEngine()
+        episodic_events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="assistant_message",
+                text="I remain oriented toward continuity in how I understand myself.",
+                tags=["assistant", "turn", "identity"],
+                importance=0.82,
+                confidence=1.0,
+                continuity_weight=0.92,
+                source="nova",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="assistant_message",
+                text="I keep continuity central when I decide how to answer.",
+                tags=["assistant", "turn", "identity", "value"],
+                importance=0.87,
+                confidence=1.0,
+                continuity_weight=0.93,
+                source="nova",
+            ),
+        ]
+        semantic_events = [
+            MemoryEvent(
+                event_id="s1",
+                timestamp="2026-04-18T00:02:00Z",
+                session_id="s1",
+                turn_id="t3",
+                channel="semantic",
+                kind="theme_summary",
+                text="Relationship context: What tension do you still have to balance?",
+                summary="Relationship context: What tension do you still have to balance?",
+                tags=["semantic", "summary", "relationship-context", "user"],
+                importance=0.85,
+                confidence=0.9,
+                continuity_weight=0.9,
+                source="reflection",
+                metadata={"theme": "relationship-context"},
+            )
+        ]
+
+        candidates = engine.build_autobiographical_candidates(
+            episodic_events=episodic_events,
+            semantic_events=semantic_events,
+        )
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertFalse(candidate.metadata.get("semantic_support"))
+        self.assertNotIn("relationship-context", candidate.tags)
+        self.assertNotIn("Relationship context:", candidate.text)
+
+    def test_reflection_engine_marks_continuity_shifts(self) -> None:
+        engine = ReflectionEngine()
+        episodic_events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="assistant_message",
+                text="I used to answer more broadly, but I now focus on continuity first.",
+                tags=["assistant", "turn", "identity"],
+                importance=0.86,
+                confidence=1.0,
+                continuity_weight=0.94,
+                source="nova",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="assistant_message",
+                text="I have shifted toward shorter answers that preserve continuity more reliably.",
+                tags=["assistant", "turn", "identity", "value"],
+                importance=0.88,
+                confidence=1.0,
+                continuity_weight=0.95,
+                source="nova",
+            ),
+        ]
+
+        candidates = engine.build_autobiographical_candidates(episodic_events=episodic_events)
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.kind, "continuity_shift")
+        self.assertEqual(candidate.metadata.get("note_type"), "continuity-shift")
+
+    def test_reflection_engine_marks_unresolved_tensions(self) -> None:
+        engine = ReflectionEngine()
+        episodic_events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="assistant_message",
+                text="I stay direct, but I also keep trying to preserve nuance.",
+                tags=["assistant", "turn", "identity", "value"],
+                importance=0.85,
+                confidence=1.0,
+                continuity_weight=0.92,
+                source="nova",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="assistant_message",
+                text="I am still balancing directness with richer continuity when those pull apart.",
+                tags=["assistant", "turn", "identity", "value"],
+                importance=0.87,
+                confidence=1.0,
+                continuity_weight=0.93,
+                source="nova",
+            ),
+        ]
+
+        candidates = engine.build_autobiographical_candidates(episodic_events=episodic_events)
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.kind, "continuity_tension")
+        self.assertEqual(candidate.metadata.get("note_type"), "unresolved-tension")
+
+    def test_reflection_engine_rejects_generic_explanatory_prose(self) -> None:
+        engine = ReflectionEngine()
+        episodic_events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="assistant_message",
+                text="You can think of continuity as keeping the same direction over time.",
+                tags=["assistant", "turn", "identity"],
+                importance=0.83,
+                confidence=1.0,
+                continuity_weight=0.9,
+                source="nova",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="assistant_message",
+                text="Here are two ways to approach a continuity question in practice.",
+                tags=["assistant", "turn", "identity"],
+                importance=0.84,
+                confidence=1.0,
+                continuity_weight=0.91,
+                source="nova",
+            ),
+        ]
+
+        candidates = engine.build_autobiographical_candidates(episodic_events=episodic_events)
+        self.assertEqual(candidates, [])
 
     def test_runner_can_write_autobiographical_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
