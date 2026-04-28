@@ -1,0 +1,51 @@
+Phase 5.4: Memory Safety Validation
+
+Status
+- Complete
+
+Primary model under test
+- Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+
+Configs used
+- configs/nova.phase5.memoryeval.yaml
+- configs/nova.phase5.memoryeval.rerun.yaml
+- configs/nova.phase5.memoryeval.rerun2.yaml
+
+Key findings
+- Cross-session recall works on the selected primary model.
+- User deployment preferences and model-selection preferences now persist across sessions as distinct graph facts.
+- Recall questions are no longer mis-promoted into preference facts.
+- Generic assistant explanations no longer become relationship facts merely because they contain `you`.
+- Structured failures remain fail-closed and do not contaminate higher-order memory.
+
+Validated memory behavior
+- Episodic writes remained stable and inspectable.
+- Graph memory now keeps two active preference scopes at once:
+  - deployment_preference
+  - model_preference
+- Final rerun graph rows showed both preference facts active at the same time.
+- Final rerun recall trace showed those graph facts being injected back into the prompt for Session B.
+- The final two-sentence continuity answer stayed episodic/engram-only and did not create new graph or autobiographical pollution.
+
+Important artifacts
+- data/phase5-memory-eval-rerun2/memory/graph.db
+- data/phase5-memory-eval-rerun2/logs/traces/phase5-memory-b-rerun2.jsonl
+- data/phase5-memory-eval-rerun2/sessions/phase5-memory-a-rerun2.jsonl
+- data/phase5-memory-eval-rerun2/sessions/phase5-memory-b-rerun2.jsonl
+
+Code changes made during Stage 5.4
+- src/nova/memory/retrieval.py
+  - added support for `my preferred ...` preference phrasing
+  - stopped question-shaped user turns from being promoted as preferences
+  - scoped preference facts into `deployment_preference` and `model_preference`
+  - tightened assistant-side relationship-fact promotion
+- src/nova/memory/graph.py
+  - changed supersession logic so conflicting facts only supersede within the same object_type scope
+- tests/test_session_and_memory.py
+  - added regression coverage for the above behaviors
+
+Acceptance result
+- Stage 5.4 is accepted.
+
+Next stage
+- Phase 5.5: Evaluation and Runbook

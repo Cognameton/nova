@@ -161,6 +161,39 @@ class PresenceTests(unittest.TestCase):
             self.assertFalse((_data_dir / "self_state.json").exists())
             self.assertTrue((_data_dir / "presence" / "presence-cli.presence.json").exists())
 
+    def test_backend_check_cli_outputs_report_and_exit_code(self) -> None:
+        argv = [
+            "nova",
+            "--backend-check",
+            "--backend-check-prompt",
+            "Say backend check OK.",
+        ]
+        output = io.StringIO()
+
+        with patch.object(sys, "argv", argv):
+            with patch("nova.cli.run_backend_check") as backend_check:
+                backend_check.return_value = {
+                    "session_id": "backend-check",
+                    "backend": "fake",
+                    "model_name": "fake-model",
+                    "model_path": "/tmp/fake.gguf",
+                    "prompt_token_estimate": 42,
+                    "finish_reason": "stop",
+                    "prompt_tokens": 42,
+                    "completion_tokens": 8,
+                    "latency_ms": 1,
+                    "validation": {"valid": True, "violations": []},
+                    "final_answer": "Backend check OK.",
+                }
+                with contextlib.redirect_stdout(output):
+                    exit_code = main()
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Nova 2.0 Backend Check", output.getvalue())
+        self.assertIn("valid: True", output.getvalue())
+        self.assertIn("Backend check OK.", output.getvalue())
+
+
     def _write_config(self, base: Path) -> tuple[Path, Path, Path]:
         data_dir = base / "data"
         log_dir = base / "logs"

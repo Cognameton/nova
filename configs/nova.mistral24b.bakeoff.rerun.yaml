@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/bakeoff/mistral24b-rerun
+  log_dir: ./data/bakeoff/mistral24b-rerun/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/model/Mistral-Small-24B-Instruct-2501-continued.Q5_K_M.gguf
+
+generation:
+  max_tokens: 192

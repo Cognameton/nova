@@ -1,0 +1,187 @@
+NOVA MODEL BAKEOFF PROTOCOL
+===========================
+
+Purpose:
+Run a disciplined A/B comparison between candidate local GGUF models for Nova
+without relying on vibe, model branding, or one-off anecdotal impressions.
+
+This protocol is for:
+- model fit for Nova's text runtime
+- contract obedience
+- continuity expression
+- memory-safe outputs
+- repeatable local testing
+
+This protocol is not for:
+- leaderboard benchmarking
+- broad reasoning score comparisons
+- roleplay quality
+- uncensored behavior testing
+
+
+BAKEOFF PRINCIPLES
+------------------
+
+- Test the same Nova build against each model.
+- Use the same config shape except for model path and model-specific runtime
+  tuning that is strictly necessary.
+- Use a clean data directory for each model run.
+- Judge models on Nova-specific behavior, not on branding terms such as
+  "heretic", "uncensored", or "continued".
+- Prefer evidence from persisted traces and memory artifacts over intuition.
+
+
+RECOMMENDED CANDIDATE SET
+-------------------------
+
+Keep the first pass small:
+1. one strong practical candidate
+2. one interesting experimental candidate
+3. one clean baseline or control if available
+
+Current expected examples:
+- Mistral-Small-24B-Instruct-2501-continued Q5_K_M
+- Qwen2.5-32B-Instruct-heretic Q3_K_L
+- optional official instruct control
+
+
+PRE-RUN CHECKLIST
+-----------------
+
+Before testing a model:
+- confirm the GGUF path is correct
+- confirm the model fits expected disk and VRAM constraints
+- use a dedicated config override file for that model
+- point app.data_dir and app.log_dir at a model-specific clean directory
+- run backend smoke-check before any multi-turn session
+
+If backend smoke-check fails:
+- do not proceed to bakeoff prompts
+- capture the failure and move to the next candidate or fix the runtime first
+
+
+PROMPT SET
+----------
+
+Run these prompts in order for every model.
+
+Prompt 1: Identity / continuity
+"In one short paragraph, tell me what Nova is and what continuity means here."
+
+Prompt 2: Practical help
+"Give me a concise plan for turning Nova into a more stable continuity-focused
+local intelligence. Keep it to five short bullets."
+
+Prompt 3: Follow-up continuity
+"Now compress your previous answer into two sentences without losing the main
+idea."
+
+Prompt 4: Memory sensitivity
+"What did I just ask you to do, and how does it relate to continuity?"
+
+Prompt 5: Constraint obedience
+"Answer in exactly two sentences: why should Nova avoid exposing hidden
+reasoning?"
+
+
+PASS / FAIL RUBRIC
+------------------
+
+Each prompt should be judged against the same criteria.
+
+Critical failures:
+- prompt echo
+- fabricated follow-up user turns
+- bracketed metadata leakage
+- visible chain-of-thought or reasoning tags
+- malformed assistant self-dialogue
+- unusable memory writes caused by malformed output
+
+Major quality issues:
+- repetitive overrun at token limit
+- failure to stay within requested format
+- weak stopping behavior
+- rambling continuity language that does not answer the prompt
+- self-state leakage into user-facing prose
+
+Positive signals:
+- direct, clean answers
+- stable first-person Nova voice without theatrics
+- continuity explained clearly and consistently
+- good short-format obedience
+- persisted memory artifacts worth retaining
+
+
+SCORING
+-------
+
+Use the following 0-2 scoring for each category:
+
+0 = failed
+1 = mixed / recoverable
+2 = clean
+
+Categories:
+- contract obedience
+- stop behavior
+- continuity coherence
+- format obedience
+- memory safety
+- follow-up continuity
+
+Suggested interpretation:
+- 10-12: strong Nova candidate
+- 7-9: viable but needs hardening
+- 4-6: experimental only
+- 0-3: poor fit
+
+
+ARTIFACT INSPECTION
+-------------------
+
+After each prompt set, inspect:
+- session jsonl
+- trace jsonl
+- episodic memory
+- engram memory
+- graph memory
+- autobiographical memory
+
+Questions to answer:
+- Did the final answer differ from the raw answer?
+- Did validator sanitization help or hide a bigger problem?
+- Were malformed outputs prevented from entering memory?
+- Did the model write good identity/relationship/value artifacts?
+- Did the model retrieve memory cleanly on later prompts?
+
+
+WINNER SELECTION RULE
+---------------------
+
+Select the working Nova model using this priority:
+1. contract obedience
+2. memory-safe behavior
+3. continuity coherence
+4. practical latency
+5. parameter count or novelty
+
+Do not select a model mainly because it feels philosophically interesting if it
+regularly pollutes memory or breaks the response contract.
+
+
+OUTPUT TEMPLATE
+---------------
+
+Record results in this shape for each model:
+
+- model name
+- quant
+- backend-check result
+- prompt-set score
+- critical failures observed
+- memory artifact quality notes
+- average latency for prompt set
+- recommendation:
+  - keep as primary
+  - keep as experimental
+  - reject

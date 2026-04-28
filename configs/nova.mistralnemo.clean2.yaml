@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/bakeoff/mistralnemo-clean2
+  log_dir: ./data/bakeoff/mistralnemo-clean2/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/model/Mistral-Nemo-Instruct-2407.Q8_0.gguf
+
+generation:
+  max_tokens: 192

@@ -34,7 +34,7 @@ from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.session import JsonlSessionStore
-from nova.types import TraceRecord, TurnRecord
+from nova.types import TraceRecord, TurnRecord, ValidationResult
 
 
 def utc_now_iso() -> str:
@@ -122,6 +122,24 @@ class NovaRuntime:
         if self.presence_state is None or self.presence_state.session_id != self.session_id:
             self.presence_state = self.presence_store.load(session_id=self.session_id)
         return self.presence_state
+
+    def finalize_validation(
+        self,
+        *,
+        validation: ValidationResult,
+        finish_reason: str | None,
+    ) -> ValidationResult:
+        if finish_reason != "length":
+            return validation
+        violations = list(validation.violations)
+        if "length_truncated" not in violations:
+            violations.append("length_truncated")
+        return ValidationResult(
+            valid=False,
+            violations=violations,
+            sanitized_text=validation.sanitized_text,
+            should_retry=True,
+        )
 
     def update_presence(
         self,
@@ -486,13 +504,18 @@ class NovaRuntime:
         generation_result = self.backend.generate(generation_request)
         validation = self.validator.validate(
             raw_text=generation_result.raw_text,
+            user_text=user_text,
             persona=self.persona,
             contract_rules=contract_rules,
+        )
+        validation = self.finalize_validation(
+            validation=validation,
+            finish_reason=generation_result.finish_reason,
         )
 
         retries: list[dict] = []
         retry_count = 0
-        final_answer = generation_result.raw_text
+        final_answer = validation.sanitized_text or generation_result.raw_text
 
         while self.retry_policy.should_retry(
             validation=validation,
@@ -510,8 +533,13 @@ class NovaRuntime:
             retry_result = self.backend.generate(retry_request)
             retry_validation = self.validator.validate(
                 raw_text=retry_result.raw_text,
+                user_text=user_text,
                 persona=self.persona,
                 contract_rules=contract_rules,
+            )
+            retry_validation = self.finalize_validation(
+                validation=retry_validation,
+                finish_reason=retry_result.finish_reason,
             )
             retries.append(
                 {
@@ -524,7 +552,7 @@ class NovaRuntime:
             )
             generation_result = retry_result
             validation = retry_validation
-            final_answer = retry_result.raw_text
+            final_answer = retry_validation.sanitized_text or retry_result.raw_text
 
         if not validation.valid:
             final_answer = (

@@ -47,6 +47,7 @@ class PromptAndValidationTests(unittest.TestCase):
         self.assertIn("[Recent Conversation]", bundle.full_prompt)
         self.assertIn("[User]", bundle.full_prompt)
         self.assertIn("[Response Rules]", bundle.full_prompt)
+        self.assertTrue(bundle.full_prompt.rstrip().endswith("Nova:"))
 
     def test_validator_rejects_think_tags(self) -> None:
         persona = default_persona_state()
@@ -55,6 +56,7 @@ class PromptAndValidationTests(unittest.TestCase):
 
         result = validator.validate(
             raw_text="<think>hidden</think>Visible answer",
+            user_text="Who are you?",
             persona=persona,
             contract_rules=rules,
         )
@@ -62,12 +64,203 @@ class PromptAndValidationTests(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertIn("think_tag_detected", result.violations)
 
+    def test_validator_rejects_fabricated_dialogue_patterns(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text=(
+                "Use the tone and style established in the Persona section.\n"
+                "Nova is a research intelligence focused on continuity. [Response]\n"
+                "Your response is perfect. Let's explore another aspect."
+            ),
+            user_text="Tell me what Nova is.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertFalse(result.valid)
+        self.assertIn("fabricated_dialogue_detected", result.violations)
+
+    def test_validator_sanitizes_trailing_completion_artifacts(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text=(
+                "Nova is a research intelligence focused on continuity.\n"
+                "[End of response] [End of response]\n\n"
+                "Nova: Certainly. When we interact..."
+            ),
+            user_text="Tell me what Nova is.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertEqual(
+            result.sanitized_text,
+            "Nova is a research intelligence focused on continuity.",
+        )
+
+    def test_validator_sanitizes_bracketed_metadata_leakage(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text=(
+                "I am a research intelligence focused on continuity, clarity, and presence. "
+                "Continuity means remaining coherent while adapting to new context. "
+                "[Stability Version: 1] [Self-State: baseline initialization]"
+            ),
+            user_text="Tell me what Nova is.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertEqual(
+            result.sanitized_text,
+            "I am a research intelligence focused on continuity, clarity, and presence. "
+            "Continuity means remaining coherent while adapting to new context.",
+        )
+
+    def test_validator_rejects_response_scaffold_artifacts_case_insensitively(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text=(
+                "[Response]\n"
+                "Nova is a local research intelligence focused on continuity.\n"
+                "[Response]\n"
+                "Nova is a local research intelligence focused on continuity."
+            ),
+            user_text="Tell me what Nova is.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertFalse(result.valid)
+        self.assertIn("fabricated_dialogue_detected", result.violations)
+
+    def test_validator_sanitizes_leading_nova_prefix(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text="Nova: I remain focused on continuity and clear interaction.",
+            user_text="Tell me what Nova is.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertEqual(
+            result.sanitized_text,
+            "I remain focused on continuity and clear interaction.",
+        )
+
+    def test_validator_strips_wrapping_quotes(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text="\"Nova is a local research intelligence focused on continuity.\"",
+            user_text="In one short paragraph, tell me what Nova is.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertEqual(
+            result.sanitized_text,
+            "Nova is a local research intelligence focused on continuity.",
+        )
+
+    def test_validator_enforces_two_sentence_constraint(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text="One sentence only.",
+            user_text="Answer in exactly two sentences: why should Nova avoid exposing hidden reasoning?",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertFalse(result.valid)
+        self.assertIn("format_constraint_violation:two_sentences", result.violations)
+
+    def test_validator_enforces_five_bullet_constraint(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text="[Plan]\n- one\n- two\n- three\n- four\n- five",
+            user_text="Give me a concise plan. Keep it to five short bullets.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertEqual(result.sanitized_text, "- one\n- two\n- three\n- four\n- five")
+
+    def test_validator_salvages_five_bullet_block_from_extra_preamble(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text=(
+                "Do not include labels or extra text.\n\n"
+                "[Output]\n\n"
+                "- one\n- two\n- three\n- four\n- five"
+            ),
+            user_text="Give me a concise plan. Keep it to five short bullets.",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertEqual(result.sanitized_text, "- one\n- two\n- three\n- four\n- five")
+
     def test_retry_policy_retries_invalid_output_within_budget(self) -> None:
         policy = BasicRetryPolicy()
         validation = ValidationResult(valid=False, violations=["think_tag_detected"], should_retry=True)
 
         self.assertTrue(policy.should_retry(validation=validation, attempt_index=0, max_retries=2))
         self.assertFalse(policy.should_retry(validation=validation, attempt_index=2, max_retries=2))
+
+    def test_retry_policy_describes_violations_without_echoing_raw_tokens(self) -> None:
+        policy = BasicRetryPolicy()
+        validation = ValidationResult(
+            valid=False,
+            violations=[
+                "think_tag_detected",
+                "format_constraint_violation:five_bullets",
+                "disallowed_pattern:<think>",
+            ],
+            should_retry=True,
+        )
+
+        instruction = policy.build_retry_instruction(
+            user_text="Give me five short bullets.",
+            raw_answer="bad answer",
+            validation=validation,
+        )
+
+        self.assertIn("return exactly five bullet lines", instruction)
+        self.assertIn("avoid disallowed phrasing", instruction)
+        self.assertNotIn("disallowed_pattern:<think>", instruction)
 
 
 if __name__ == "__main__":

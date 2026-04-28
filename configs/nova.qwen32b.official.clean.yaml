@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/bakeoff/qwen32b-official-clean
+  log_dir: ./data/bakeoff/qwen32b-official-clean/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/model/Qwen2.5-32B-Instruct-Q4_K_M.gguf
+
+generation:
+  max_tokens: 192

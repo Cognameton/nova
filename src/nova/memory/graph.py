@@ -274,7 +274,7 @@ class SqliteGraphMemoryStore:
             return
         rows = conn.execute(
             """
-            SELECT fact_id, object_key, metadata_json
+            SELECT fact_id, object_key, object_type, metadata_json
             FROM graph_facts
             WHERE subject_key = ? AND relation = ? AND active = 1
             """,
@@ -290,6 +290,9 @@ class SqliteGraphMemoryStore:
                 continue
             prior_object_key = str(row["object_key"] or "")
             if prior_object_key == fact.object_key:
+                continue
+            prior_object_type = str(row["object_type"] or "")
+            if prior_object_type != fact.object_type:
                 continue
             prior_metadata["retention"] = "archived"
             prior_metadata["superseded_by"] = fact.fact_id

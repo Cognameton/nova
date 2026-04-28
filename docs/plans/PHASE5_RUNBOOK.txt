@@ -1,0 +1,84 @@
+Phase 5 Runbook
+===============
+
+Purpose
+- Provide the standard operator workflow for the validated Phase 5 runtime.
+
+Current baseline
+- Primary always-on candidate:
+  - Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+- Higher-quality alternate:
+  - Mistral-Small-3.2-24B-Instruct-2506-Q6_K.gguf
+- Fallback baseline:
+  - Mistral-Nemo-Instruct-2407.Q8_0.gguf
+
+Primary config
+- configs/nova.local.yaml
+
+Standard backend smoke-check
+- `.venv/bin/python -m nova.cli --config configs/nova.local.yaml --backend-check`
+
+Expected clean result
+- `finish_reason: stop`
+- `valid: True`
+- `final_answer: backend check OK.`
+
+Standard interactive start
+- `.venv/bin/python -m nova.cli --config configs/nova.local.yaml`
+
+Model bakeoff workflow
+1. Create a clean model-specific config with:
+   - model.model_path
+   - app.data_dir
+   - app.log_dir
+2. Run backend-check.
+3. If backend-check passes, run the five-prompt bakeoff from:
+   - docs/plans/MODEL_BAKEOFF_PROTOCOL.txt
+4. Inspect:
+   - sessions
+   - logs/traces
+   - memory/episodic.jsonl
+   - memory/engram.json
+   - memory/graph.db
+   - memory/autobiographical.jsonl
+5. Record outcome in:
+   - docs/plans/MODEL_EVAL_SUMMARY.txt
+
+Memory validation workflow
+1. Use an isolated Phase 5 config.
+2. Run Session A:
+   - deployment preference
+   - model-selection preference
+   - summary request
+3. Run Session B:
+   - recall request
+   - two-sentence continuity question
+4. Confirm:
+   - cross-session recall works
+   - deployment_preference remains active
+   - model_preference remains active
+   - recall questions are not promoted as preference facts
+   - malformed outputs do not enter higher-order memory
+
+Phase 5 artifact references
+- docs/plans/PHASE5_PLAN.txt
+- docs/plans/MODEL_BAKEOFF_PROTOCOL.txt
+- docs/plans/MODEL_EVAL_SUMMARY.txt
+- docs/plans/PHASE5_STAGE54_MEMORY_VALIDATION.txt
+
+Phase 5 closure criteria
+- backend-check is clean on the primary model
+- bakeoff winner is documented
+- malformed completions are blocked from higher-order memory
+- memory validation is accepted on live traces and persisted artifacts
+- runtime is ready for Phase 6 continuity/private-cognition work
+
+Current Phase 5 closure status
+- backend-check: complete
+- bakeoff selection: complete
+- live turn hardening: complete
+- memory safety validation: complete
+- closure/runbook: complete
+
+Next phase
+- Phase 6

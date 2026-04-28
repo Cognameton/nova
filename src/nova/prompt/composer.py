@@ -36,10 +36,15 @@ class NovaPromptComposer:
     ) -> PromptBundle:
         persona_block = self._format_persona(persona)
         self_state_block = self._format_self_state(self_state)
-        memory_blocks = self._format_memory_blocks(memory_hits)
-        recent_turns_block = self._format_recent_turns(recent_turns)
+        light_context = self._is_context_light_request(user_text)
+        effective_memory_hits = [] if light_context else memory_hits
+        effective_recent_turns = self._select_recent_turns(recent_turns, user_text=user_text)
+        memory_blocks = self._format_memory_blocks(effective_memory_hits)
+        recent_turns_block = self._format_recent_turns(effective_recent_turns)
         user_block = f"[User]\n{user_text.strip()}"
+        task_guidance_block = self._format_task_guidance(user_text)
         response_contract_block = self._format_contract_rules(contract_rules)
+        response_prefix_block = "Nova:"
 
         parts = [
             persona_block,
@@ -47,7 +52,9 @@ class NovaPromptComposer:
             *[block for block in memory_blocks.values() if block],
             recent_turns_block,
             user_block,
+            task_guidance_block,
             response_contract_block,
+            response_prefix_block,
         ]
         full_prompt = "\n\n".join(part for part in parts if part.strip())
         token_estimate = self.token_counter(full_prompt)
@@ -147,4 +154,45 @@ class NovaPromptComposer:
     def _format_contract_rules(self, contract_rules: list[str]) -> str:
         lines = ["[Response Rules]"]
         lines.extend(f"- {rule}" for rule in contract_rules)
+        return "\n".join(lines)
+
+    def _select_recent_turns(self, recent_turns: list[TurnRecord], *, user_text: str) -> list[TurnRecord]:
+        if not recent_turns:
+            return []
+        lowered = user_text.lower()
+        if self._is_context_light_request(user_text):
+            return recent_turns[-2:]
+        if "what did i just ask you to do" in lowered:
+            return recent_turns[-2:]
+        return recent_turns
+
+    def _is_context_light_request(self, user_text: str) -> bool:
+        lowered = user_text.lower()
+        return any(
+            phrase in lowered
+            for phrase in (
+                "exactly two sentences",
+                "into two sentences",
+                "five short bullets",
+                "5 short bullets",
+            )
+        )
+
+    def _format_task_guidance(self, user_text: str) -> str:
+        lowered = user_text.lower()
+        lines = ["[Current Task]"]
+        lines.append("Prioritize the current user instruction over repeating earlier identity or plan text.")
+
+        if "exactly two sentences" in lowered or "into two sentences" in lowered:
+            lines.append("Output exactly two sentences.")
+        if "five short bullets" in lowered or "5 short bullets" in lowered:
+            lines.append("Output exactly five bullet lines and no heading or preamble.")
+        if "one short paragraph" in lowered:
+            lines.append("Output exactly one short paragraph and do not use bullets.")
+        if "what did i just ask you to do" in lowered:
+            lines.append("State the immediately previous user instruction in your own words.")
+            lines.append("Do not repeat the previous assistant answer verbatim.")
+
+        if len(lines) == 1:
+            return ""
         return "\n".join(lines)

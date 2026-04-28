@@ -39,6 +39,12 @@ class IdentityFirstRetrievalPolicy:
         budgets = dict(self.BASE_BUDGETS)
         lowered = query.lower()
 
+        if self._is_context_light_query(lowered):
+            return RetrievalPlan(
+                top_k_by_channel={channel: 0 for channel in budgets},
+                channel_order=[],
+            )
+
         if self._is_identity_query(lowered):
             budgets["autobiographical"] += 1
             budgets["graph"] += 1
@@ -109,5 +115,17 @@ class IdentityFirstRetrievalPolicy:
                 "relationship",
                 "what have we",
                 "what do you know",
+            )
+        )
+
+    def _is_context_light_query(self, lowered: str) -> bool:
+        return any(
+            phrase in lowered
+            for phrase in (
+                "exactly two sentences",
+                "into two sentences",
+                "five short bullets",
+                "5 short bullets",
+                "what did i just ask you to do",
             )
         )

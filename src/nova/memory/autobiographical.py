@@ -208,5 +208,9 @@ class JsonlAutobiographicalMemoryStore:
             metadata=dict(payload.get("metadata", {}) or {}),
         )
 
-    def _tokens(self, text: str) -> list[str]:
-        return [token for token in text.replace("\n", " ").lower().split() if token.strip()]
+    def _tokens(self, text: str) -> set[str]:
+        return {
+            token
+            for token in text.replace("\n", " ").lower().split()
+            if token.strip()
+        }

@@ -6,8 +6,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from llama_cpp import Llama
-
 from nova.config import NovaConfig
 from nova.types import GenerationRequest, GenerationResult
 
@@ -17,7 +15,7 @@ class LlamaCppBackend:
 
     def __init__(self, config: NovaConfig):
         self.config = config
-        self._llm: Llama | None = None
+        self._llm: Any | None = None
 
     @property
     def model_path(self) -> Path:
@@ -26,6 +24,8 @@ class LlamaCppBackend:
     def load(self) -> None:
         if self._llm is not None:
             return
+
+        from llama_cpp import Llama
 
         model_path = self.model_path
         if not model_path.exists():

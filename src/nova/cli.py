@@ -28,6 +28,7 @@ from nova.memory.retrieval import BasicMemoryEventFactory, BasicMemoryRouter
 from nova.memory.semantic import JsonlSemanticMemoryStore
 from nova.persona.store import JsonPersonaStore, JsonSelfStateStore
 from nova.prompt.composer import NovaPromptComposer
+from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.runtime import NovaRuntime
@@ -171,6 +172,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print extra runtime details after each reply.",
     )
     parser.add_argument(
+        "--backend-check",
+        action="store_true",
+        help="Load the configured backend and run one non-persistent Nova prompt smoke-check.",
+    )
+    parser.add_argument(
+        "--backend-check-prompt",
+        default="In one short sentence, say backend check OK in Nova's voice.",
+        help="Prompt used by --backend-check.",
+    )
+    parser.add_argument(
         "--maintenance-action",
         choices=("plan", "write-semantic", "write-autobiographical", "apply", "full"),
         help="Run a maintenance/reflection action instead of interactive chat.",
@@ -290,9 +301,91 @@ def run_maintenance_action(*, config_override: str | None = None, action: str) -
     raise ValueError(f"Unsupported maintenance action: {action}")
 
 
+def run_backend_check_with_runtime(
+    *,
+    runtime: NovaRuntime,
+    prompt: str,
+) -> dict[str, Any]:
+    runtime.persona = runtime.persona_store.load()
+    runtime.self_state = runtime.self_state_store.load(persona=runtime.persona)
+    runtime.backend.load()
+    session_id = "backend-check"
+    assert runtime.persona is not None
+    assert runtime.self_state is not None
+
+    contract_rules = build_contract_rules(runtime.persona, runtime.config.contract)
+    prompt_bundle = runtime.composer.compose(
+        persona=runtime.persona,
+        self_state=runtime.self_state,
+        memory_hits=[],
+        recent_turns=[],
+        user_text=prompt,
+        contract_rules=contract_rules,
+        session_id=session_id,
+        turn_id="backend-check",
+    )
+    generation_request = runtime._generation_request(prompt=prompt_bundle.full_prompt)
+    generation_result = runtime.backend.generate(generation_request)
+    validation = runtime.validator.validate(
+        raw_text=generation_result.raw_text,
+        user_text=prompt,
+        persona=runtime.persona,
+        contract_rules=contract_rules,
+    )
+    validation = runtime.finalize_validation(
+        validation=validation,
+        finish_reason=generation_result.finish_reason,
+    )
+    final_answer = validation.sanitized_text or generation_result.raw_text
+
+    return {
+        "session_id": session_id,
+        "backend": runtime.backend.metadata().get("backend"),
+        "model_name": runtime.backend.metadata().get("model_name"),
+        "model_path": runtime.backend.metadata().get("model_path"),
+        "prompt": prompt,
+        "prompt_token_estimate": prompt_bundle.token_estimate,
+        "raw_answer": generation_result.raw_text,
+        "final_answer": final_answer,
+        "validation": validation.to_dict(),
+        "finish_reason": generation_result.finish_reason,
+        "prompt_tokens": generation_result.prompt_tokens,
+        "completion_tokens": generation_result.completion_tokens,
+        "latency_ms": generation_result.latency_ms,
+    }
+
+
+def run_backend_check(*, config_override: str | None = None, prompt: str) -> dict[str, Any]:
+    runtime = build_runtime(config_override=config_override)
+    try:
+        return run_backend_check_with_runtime(runtime=runtime, prompt=prompt)
+    finally:
+        runtime.close()
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.backend_check:
+        result = run_backend_check(
+            config_override=args.config_override,
+            prompt=args.backend_check_prompt,
+        )
+        print("Nova 2.0 Backend Check")
+        print(f"session_id: {result['session_id']}")
+        print(f"backend: {result['backend']}")
+        print(f"model_name: {result['model_name']}")
+        print(f"model_path: {result['model_path']}")
+        print(f"prompt_token_estimate: {result['prompt_token_estimate']}")
+        print(f"finish_reason: {result['finish_reason']}")
+        print(f"prompt_tokens: {result['prompt_tokens']}")
+        print(f"completion_tokens: {result['completion_tokens']}")
+        print(f"latency_ms: {result['latency_ms']}")
+        print(f"valid: {result['validation']['valid']}")
+        print(f"violations: {result['validation']['violations']}")
+        print(f"final_answer: {result['final_answer']}")
+        return 0 if result["validation"]["valid"] else 1
 
     if args.maintenance_action:
         result = run_maintenance_action(

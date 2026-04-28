@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/phase5-memory-eval-rerun2
+  log_dir: ./data/phase5-memory-eval-rerun2/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/models/Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+
+generation:
+  max_tokens: 192

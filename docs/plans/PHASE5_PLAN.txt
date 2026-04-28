@@ -1,0 +1,194 @@
+PHASE 5 PLAN
+============
+
+Nova 2.0 Phase 5 is the first live backend integration phase.
+
+Phase 5 is not synthetic autonomy.
+Phase 5 is not earned first-person desire.
+Phase 5 is not voice.
+
+Phase 5 is the disciplined transition from a fully scaffolded research runtime
+into a live GGUF-backed system that can be evaluated honestly under real model
+behavior.
+
+
+PHASE 5 MISSION
+---------------
+
+Validate Nova against real local GGUF models while preserving the architectural
+priorities that matter for later self-state and continuity work:
+- contract obedience
+- memory-safe outputs
+- stable persistence
+- inspectable traces
+- continuity-aware behavior
+
+
+PHASE 5 OBJECTIVES
+------------------
+
+1. Make backend/model swaps fast, explicit, and testable.
+2. Prove Nova can complete clean live turns on real GGUF backends.
+3. Prevent malformed live outputs from polluting memory.
+4. Establish a repeatable bakeoff workflow for candidate models.
+5. Harden prompt, validation, and smoke-check infrastructure before deeper
+   cognition work.
+6. End with a trustworthy baseline runtime for Phase 6 continuity and private
+   cognition development.
+
+
+PHASE 5 BOUNDARIES
+------------------
+
+In scope:
+- real GGUF backend validation
+- model bakeoff workflow
+- backend smoke-checks
+- prompt/validator hardening for live models
+- memory write safety under live inference
+- trace and session inspection
+- model-specific runtime tuning when justified
+
+Out of scope:
+- autonomous task loops
+- unrestricted self-modification
+- earned first-person desire claims
+- background reflection loops for self-governance
+- voice input or output
+- mythos-style backend replacement
+
+
+PHASE 5 DESIGN PRINCIPLES
+-------------------------
+
+- Live inference is evidence, not theory.
+- A model that writes unsafe memory is not a fit for Nova, even if it feels
+  philosophically interesting.
+- Contract obedience outranks novelty.
+- Memory layers must be protected from malformed completions.
+- Bakeoff results should be reproducible from configs, traces, and prompts.
+- Phase 5 should prepare the ground for stronger continuity and private
+  cognition work, not jump ahead to synthetic selfhood claims.
+
+
+PHASE 5 STAGES
+--------------
+
+Stage 5.1: Backend Readiness
+Stage 5.2: Model Bakeoff Workflow
+Stage 5.3: Live Turn Hardening
+Stage 5.4: Memory Safety Validation
+Stage 5.5: Phase 5 Closure
+
+
+STAGE 5.1: BACKEND READINESS
+----------------------------
+
+Mission:
+Make model swaps and first-run validation fast enough that Nova can be tested
+ against multiple candidate GGUF models without ad hoc manual steps.
+
+Stage 5.1 deliverables:
+- [ ] backend smoke-check command
+- [ ] model-specific config override workflow
+- [ ] cleaner backend failure messages
+- [ ] tests for non-persistent backend-check behavior
+
+Stage 5.1 restrictions:
+- no persistent memory writes during backend smoke-check
+- no hidden mutation of session history
+- no assumption that one model family's prompt behavior generalizes
+
+
+STAGE 5.2: MODEL BAKEOFF WORKFLOW
+---------------------------------
+
+Mission:
+Standardize how Nova compares candidate local models.
+
+Stage 5.2 deliverables:
+- [ ] bakeoff protocol document
+- [ ] fixed prompt set for A/B testing
+- [ ] pass/fail rubric for contract obedience and memory safety
+- [ ] model result template for recording evidence
+
+Stage 5.2 restrictions:
+- no winner chosen by vibe alone
+- no scoring based only on generic benchmark reputation
+- no mixing dirty historical memory into first-pass model comparisons
+
+
+STAGE 5.3: LIVE TURN HARDENING
+------------------------------
+
+Mission:
+Harden Nova's prompt and validation path against live-model artifacts observed
+under real GGUF inference.
+
+Known failure classes already seen:
+- prompt/rubric echo
+- fabricated follow-up dialogue
+- bracketed metadata leakage
+- overrun completions at token limit
+- memory contamination from malformed answers
+
+Stage 5.3 deliverables:
+- [ ] stricter live-output validator
+- [ ] sanitization for recoverable completion tails
+- [ ] prompt refinements for instruct-model fit
+- [ ] regression tests for observed failure classes
+
+Stage 5.3 restrictions:
+- sanitization must not hide severe invalidity
+- malformed outputs should not enter durable memory
+- prompt changes should stay auditable and minimal
+
+
+STAGE 5.4: MEMORY SAFETY VALIDATION
+-----------------------------------
+
+Mission:
+Verify that live inference writes useful persistent memory and rejects malformed
+records before they become continuity-bearing artifacts.
+
+Stage 5.4 deliverables:
+- [ ] live memory inspection checklist
+- [ ] verification of episodic, engram, graph, and autobiographical writes
+- [ ] regression coverage for memory-path bugs discovered under live runs
+- [ ] explicit notes on semantic memory default path and readiness
+
+Stage 5.4 restrictions:
+- no acceptance of malformed autobiographical or graph facts as continuity
+  evidence
+- no silent promotion of bad completions
+- no closure without checking persisted artifacts directly
+
+
+STAGE 5.5: PHASE 5 CLOSURE
+--------------------------
+
+Mission:
+Close Phase 5 only when Nova has a trustworthy live backend baseline and a
+repeatable model evaluation workflow.
+
+Stage 5.5 deliverables:
+- [ ] documented winning model or narrowed finalist set
+- [ ] repeatable backend-check and bakeoff workflow
+- [ ] live-run closure notes with failure classes and mitigations
+- [ ] phase completion criteria reviewed against real traces
+
+
+PHASE 5 DEFINITION OF DONE
+--------------------------
+
+Phase 5 is complete when:
+- Nova can run clean backend smoke-checks against candidate GGUF models.
+- Nova can complete short live sessions without common artifact classes
+  polluting memory.
+- Prompt, validator, and runtime hardening are backed by tests for observed
+  live failures.
+- The bakeoff workflow is documented and repeatable.
+- A primary candidate model or narrow finalist set has been selected based on
+  Nova-specific evidence.
+- The runtime is ready for Phase 6 work on stronger continuity and private
+  cognition.

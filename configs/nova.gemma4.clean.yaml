@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/bakeoff/gemma4-clean
+  log_dir: ./data/bakeoff/gemma4-clean/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/models/gemma-4-31B-it-Q4_1.gguf
+
+generation:
+  max_tokens: 192

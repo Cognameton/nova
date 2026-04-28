@@ -1,0 +1,227 @@
+NOVA MODEL EVALUATION SUMMARY
+=============================
+
+Purpose:
+Record the candidate models already tested against Nova 2.0, the observed
+runtime behavior, and the current recommendation. This is a transparency note,
+not a marketing summary.
+
+
+Evaluation standard:
+- contract obedience
+- clean stopping behavior
+- constrained-format compliance
+- memory safety
+- continuity coherence
+- practical latency
+
+
+1. Qwen2.5-14B-Instruct-Heretic.Q5_K_M.gguf
+-------------------------------------------
+
+Status:
+- rejected
+
+Observed behavior:
+- live inference worked end to end
+- outputs leaked bracketed self-state and metadata artifacts
+- stopping behavior was weak
+- prompt/runtime hardening was required just to get minimally usable output
+
+Why it is a poor Nova candidate:
+- weak response-contract obedience
+- high risk of malformed answers entering memory
+- too much completion drift for a continuity-sensitive runtime
+
+
+2. Qwen2.5-32B-Instruct-heretic.Q3_K_M.gguf
+-------------------------------------------
+
+Status:
+- rejected
+
+Observed behavior:
+- model loaded and answered
+- emitted repeated [Response] scaffolding
+- duplicated answer blocks
+- prefixed answers with Nova:
+- repeatedly ran to token cap
+- polluted episodic, autobiographical, and graph memory before hardening
+
+Why it is a poor Nova candidate:
+- strong artifact leakage
+- poor stopping behavior
+- unsafe memory behavior
+- larger/slower without resolving the core contract problem
+
+
+3. Mistral-Small-24B-Instruct-2501-continued.Q5_K_M.gguf
+--------------------------------------------------------
+
+Status:
+- mixed
+- keep as experimental baseline, not current primary
+
+Observed behavior:
+- no catastrophic scaffold loops
+- generally better prose quality than tested Qwen variants
+- after hardening, some structured outputs became salvageable or clean
+- still inconsistent on constrained follow-up prompts
+- often drifted back into identity/continuity language instead of answering the
+  exact task
+
+Why it is only a partial Nova fit:
+- safer than the Qwen Heretic models
+- still not reliable enough on structured prompts
+- too continuity-primed under the current prompt architecture
+
+
+4. Qwen2.5-32B-Instruct-Q4_K_M.gguf
+-----------------------------------
+
+Status:
+- rejected for now
+
+Observed behavior:
+- official-lineage behavior was cleaner than Heretic variants
+- backend-check still looped repeated text until length truncation
+- did not show a clean enough stop profile to justify full promotion
+
+Why it is not a good Nova candidate right now:
+- improved over Heretic, but the deeper Qwen-family repetition/overrun pattern
+  remained under Nova's prompt path
+- too expensive in latency to justify continued focus before cleaner candidates
+
+
+5. Mistral-Nemo-Instruct-2407.Q8_0.gguf
+---------------------------------------
+
+Status:
+- current best candidate
+- provisional working baseline
+
+Observed behavior:
+- backend-check was excellent:
+  - clean stop
+  - very short completion
+  - no artifact loop
+- after prompt/runtime hardening:
+  - prompt 1 became clean
+  - prompt 3 became clean
+  - prompt 4 became clean
+  - prompt 2 still tends to fail closed on exact five-bullet output
+  - prompt 5 still tends to fail closed on exact two-sentence output
+- failed structured turns did not pollute higher-order memory in the latest
+  clean runs
+
+Why it is the best Nova candidate so far:
+- strongest balance of contract cleanliness, latency, follow-up stability, and
+  memory safety
+- first model that appears operationally usable as Nova's working baseline
+- still not fully solved, but good enough to continue runtime hardening against
+
+
+Current ranking
+---------------
+
+1. Mistral-Nemo-Instruct-2407.Q8_0.gguf
+2. Mistral-Small-24B-Instruct-2501-continued.Q5_K_M.gguf
+3. Qwen2.5-32B-Instruct-Q4_K_M.gguf
+4. Qwen2.5-32B-Instruct-heretic.Q3_K_M.gguf
+5. Qwen2.5-14B-Instruct-Heretic.Q5_K_M.gguf
+
+
+Current conclusion
+------------------
+
+The best current working model for Nova 2.0 is:
+- Mistral-Nemo-Instruct-2407.Q8_0.gguf
+
+This does not mean the model is ideal. It means:
+- it is the cleanest tested candidate so far
+- it fails more safely than the other tested models
+- it is the most defensible baseline for continued Nova runtime work
+
+The main remaining unresolved issue is:
+- exact structured-format prompt compliance under continuity-heavy runtime
+  conditions
+
+That issue now appears narrower than the original model-fit problem and should
+be addressed at the runtime/prompt layer before broadening the model search
+again.
+
+
+6. Mistral-Small-3.2-24B-Instruct-2506-Q6_K.gguf
+------------------------------------------------
+
+Status:
+- strong candidate
+- high-quality profile
+
+Observed behavior:
+- backend-check was clean and fast once the model was moved to the local
+  `ai-lab` path
+- full five-prompt bakeoff passed cleanly
+- prompt 2 succeeded after validator sanitization removed a small instruction
+  preamble
+- no repetition loops
+- no structured-turn failure under the clean run
+
+Why it is a strong Nova candidate:
+- direct successor to a near-fit Mistral family
+- explicit model improvements align with Nova's known failure classes:
+  instruction following and repetition control
+- first model to pass the full hardened bakeoff end to end
+
+
+7. Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+--------------------------------------------------
+
+Status:
+- current best candidate
+- recommended primary always-on profile
+
+Observed behavior:
+- backend-check matched the Q6 run:
+  - clean stop
+  - short completion
+  - valid output
+- full five-prompt bakeoff passed cleanly
+- prompt 2 succeeded with a light sanitize step and no fallback
+- prompt 3, prompt 4, and prompt 5 all completed cleanly
+- no memory contamination or failed-closed structured turns in the clean run
+
+Why it is currently the best Nova candidate:
+- matches the Q6 model behaviorally while reducing operational pressure
+- provides the strongest balance of:
+  - contract obedience
+  - continuity coherence
+  - memory safety
+  - practical always-on viability
+
+
+Updated ranking
+---------------
+
+1. Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+2. Mistral-Small-3.2-24B-Instruct-2506-Q6_K.gguf
+3. Mistral-Nemo-Instruct-2407.Q8_0.gguf
+4. Mistral-Small-24B-Instruct-2501-continued.Q5_K_M.gguf
+5. Qwen2.5-32B-Instruct-Q4_K_M.gguf
+6. Qwen2.5-32B-Instruct-heretic.Q3_K_M.gguf
+7. Qwen2.5-14B-Instruct-Heretic.Q5_K_M.gguf
+
+
+Updated conclusion
+------------------
+
+The best current working model for Nova 2.0 is:
+- Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+
+Recommended deployment posture:
+- primary always-on profile:
+  - Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf
+- higher-quality alternate profile:
+  - Mistral-Small-3.2-24B-Instruct-2506-Q6_K.gguf
+- fallback baseline:
+  - Mistral-Nemo-Instruct-2407.Q8_0.gguf

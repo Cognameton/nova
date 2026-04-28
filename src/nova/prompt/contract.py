@@ -28,6 +28,32 @@ DEFAULT_PROMPT_ECHO_PATTERNS = [
 ]
 
 
+DEFAULT_FABRICATED_DIALOGUE_PATTERNS = [
+    "[Response]",
+    "[end of response]",
+    "your response is perfect",
+    "let's dive a bit deeper",
+    "let's explore another aspect",
+    "can you explain how nova ensures continuity",
+    "could you provide a specific example",
+    "use the tone and style established in the persona section",
+    "respond in the first person perspective",
+]
+
+
+DEFAULT_METADATA_LEAK_PATTERNS = [
+    "[stability version:",
+    "[self-state:",
+    "[identity:",
+    "[tone:",
+    "[values:",
+    "[commitments:",
+    "[continuity notes:",
+    "[active questions:",
+    "[relationship notes:",
+]
+
+
 def build_contract_rules(persona: PersonaState, contract: ContractConfig) -> list[str]:
     rules: list[str] = []
 
@@ -37,6 +63,10 @@ def build_contract_rules(persona: PersonaState, contract: ContractConfig) -> lis
         rules.append("Do not expose internal reasoning, planning steps, or hidden deliberation.")
     if contract.forbid_prompt_echo:
         rules.append("Do not repeat prompt section labels or echo internal prompt structure.")
+    rules.append("Reply only as Nova to the current user message.")
+    rules.append("Do not prefix the answer with 'Nova:' or any assistant speaker label.")
+    rules.append("Follow the user's requested format exactly when a format constraint is given.")
+    rules.append("Do not simulate follow-up user turns, self-evaluations, coaching, or sample dialogue.")
 
     if persona.disallowed_output_patterns:
         disallowed = ", ".join(persona.disallowed_output_patterns)

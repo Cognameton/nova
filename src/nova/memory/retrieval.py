@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -43,6 +44,9 @@ class MemoryPolicy:
     }
     PREFERENCE_CUES = (
         "i prefer ",
+        "my preferred ",
+        "my preference is ",
+        "my preference for ",
         "i want ",
         "i need ",
         "i like ",
@@ -57,12 +61,23 @@ class MemoryPolicy:
         "focused on",
         "care about",
     )
+    ASSISTANT_RELATIONSHIP_CUES = (
+        "with you",
+        "our relationship",
+        "between us",
+        "together",
+        "you and i",
+        "i remember you",
+        "i relate to this user",
+        "i relate to you",
+    )
 
     def classify_user_text(self, text: str) -> tuple[list[str], float, float]:
         lowered = text.lower()
         tags = ["user", "turn"]
         importance = 0.4
         continuity_weight = 0.2
+        question_like = self._is_question_like(text)
 
         if self._contains_any(lowered, self.IDENTITY_TOKENS):
             tags.append("identity")
@@ -72,7 +87,7 @@ class MemoryPolicy:
             tags.append("relationship")
             importance = max(importance, 0.6)
             continuity_weight = max(continuity_weight, 0.7)
-        if self._contains_preference_cue(lowered):
+        if not question_like and self._contains_preference_cue(lowered):
             tags.append("preference")
             importance = max(importance, 0.7)
             continuity_weight = max(continuity_weight, 0.75)
@@ -104,6 +119,23 @@ class MemoryPolicy:
 
         return sorted(set(tags)), importance, continuity_weight
 
+    def is_high_quality_self_memory_candidate(self, text: str) -> bool:
+        lowered = self._normalize_memory_candidate(text)
+        if not lowered:
+            return False
+        if lowered.startswith("[") or lowered.startswith("plan:") or lowered.startswith("summary:"):
+            return False
+        if lowered.startswith("you asked me to"):
+            return False
+        if "previous answer" in lowered or "previous reply" in lowered:
+            return False
+        if text.count("\n- ") >= 2:
+            return False
+        return (
+            self._contains_any(lowered, self.IDENTITY_TOKENS | self.RELATIONSHIP_TOKENS)
+            and ("i " in f"{lowered} " or " my " in f" {lowered} " or "nova" in lowered)
+        )
+
     def should_write_engram(self, text: str, *, tags: list[str]) -> bool:
         lowered = text.lower()
         return (
@@ -120,10 +152,13 @@ class MemoryPolicy:
     def should_write_autobiographical(
         self,
         *,
+        final_answer: str,
         assistant_tags: list[str],
         assistant_continuity_weight: float,
     ) -> bool:
-        return "identity" in assistant_tags or assistant_continuity_weight >= 0.9
+        return self.is_high_quality_self_memory_candidate(final_answer) and (
+            "identity" in assistant_tags or assistant_continuity_weight >= 0.9
+        )
 
     def extract_graph_events(
         self,
@@ -139,8 +174,9 @@ class MemoryPolicy:
         user_lower = user_text.lower()
         answer_lower = final_answer.lower()
 
-        if self._contains_preference_cue(user_lower):
+        if not self._is_question_like(user_text) and self._contains_preference_cue(user_lower):
             preference = user_text.strip()
+            object_type = self._preference_object_type(user_lower)
             events.append(
                 MemoryEvent(
                     event_id=uuid4().hex,
@@ -164,7 +200,7 @@ class MemoryPolicy:
                         "subject_key": "user",
                         "subject_name": "User",
                         "relation": "prefers",
-                        "object_type": "preference",
+                        "object_type": object_type,
                         "object_key": self._slugify(preference[:96]),
                         "object_name": preference,
                         "weight": 0.75,
@@ -218,6 +254,8 @@ class MemoryPolicy:
             )
 
         if (
+            self.is_high_quality_self_memory_candidate(final_answer)
+            and
             persona is not None
             and persona.name
             and persona.name.lower() in answer_lower
@@ -261,7 +299,7 @@ class MemoryPolicy:
                 )
             )
 
-        if self._contains_value_cue(answer_lower):
+        if self.is_high_quality_self_memory_candidate(final_answer) and self._contains_value_cue(answer_lower):
             value_text = final_answer.strip()
             events.append(
                 MemoryEvent(
@@ -300,7 +338,7 @@ class MemoryPolicy:
                 )
             )
 
-        if self._contains_any(answer_lower, self.RELATIONSHIP_TOKENS):
+        if self._is_assistant_relationship_memory_candidate(final_answer):
             relationship_text = final_answer.strip()
             events.append(
                 MemoryEvent(
@@ -350,6 +388,28 @@ class MemoryPolicy:
     def _contains_value_cue(self, text: str) -> bool:
         return any(cue in text for cue in self.VALUE_CUES)
 
+    def _is_assistant_relationship_memory_candidate(self, text: str) -> bool:
+        lowered = self._normalize_memory_candidate(text)
+        return self.is_high_quality_self_memory_candidate(text) and any(
+            cue in lowered for cue in self.ASSISTANT_RELATIONSHIP_CUES
+        )
+
+    def _is_question_like(self, text: str) -> bool:
+        return text.strip().endswith("?")
+
+    def _preference_object_type(self, lowered_text: str) -> str:
+        if "deployment style" in lowered_text or "deploy" in lowered_text:
+            return "deployment_preference"
+        if "model" in lowered_text:
+            return "model_preference"
+        return "preference"
+
+    def _normalize_memory_candidate(self, text: str) -> str:
+        lowered = text.lower().strip()
+        lowered = re.sub(r"^[\s\*_`\"']+", "", lowered)
+        lowered = re.sub(r"[\s\*_`\"']+$", "", lowered)
+        return lowered
+
     def _slugify(self, text: str) -> str:
         parts = [
             "".join(ch for ch in token.lower() if ch.isalnum())
@@ -385,6 +445,7 @@ class BasicMemoryEventFactory:
         assistant_tags, assistant_importance, assistant_continuity_weight = (
             self.policy.classify_assistant_text(final_answer)
         )
+        assistant_promotion_candidate = self.policy.is_high_quality_self_memory_candidate(final_answer)
 
         events: list[MemoryEvent] = [
             MemoryEvent(
@@ -421,7 +482,7 @@ class BasicMemoryEventFactory:
                 source="nova",
                 metadata={
                     "role": "assistant",
-                    "promotion_candidate": assistant_importance >= 0.7,
+                    "promotion_candidate": assistant_importance >= 0.7 and assistant_promotion_candidate,
                 },
             ),
         ]
@@ -447,7 +508,7 @@ class BasicMemoryEventFactory:
                 )
             )
 
-        if self.policy.should_write_engram(final_answer, tags=assistant_tags):
+        if assistant_promotion_candidate and self.policy.should_write_engram(final_answer, tags=assistant_tags):
             events.append(
                 MemoryEvent(
                     event_id=uuid4().hex,
@@ -480,6 +541,7 @@ class BasicMemoryEventFactory:
         )
 
         if self.policy.should_write_autobiographical(
+            final_answer=final_answer,
             assistant_tags=assistant_tags,
             assistant_continuity_weight=assistant_continuity_weight,
         ):
