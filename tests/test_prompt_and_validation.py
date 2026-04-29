@@ -20,6 +20,7 @@ class PromptAndValidationTests(unittest.TestCase):
         bundle = composer.compose(
             persona=persona,
             self_state=self_state,
+            private_cognition_block="[Private Cognition]\n- response_mode: continuity_recall",
             memory_hits=[
                 RetrievalHit(channel="episodic", text="Past memory", score=0.9, kind="note")
             ],
@@ -43,6 +44,7 @@ class PromptAndValidationTests(unittest.TestCase):
 
         self.assertIn("[Persona]", bundle.full_prompt)
         self.assertIn("[Self-State]", bundle.full_prompt)
+        self.assertIn("[Private Cognition]", bundle.full_prompt)
         self.assertIn("[Memory:episodic]", bundle.full_prompt)
         self.assertIn("[Recent Conversation]", bundle.full_prompt)
         self.assertIn("[User]", bundle.full_prompt)

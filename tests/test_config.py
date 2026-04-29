@@ -57,6 +57,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.model.n_ctx, 4096)
             self.assertEqual(config.console.pending_proposal_max_age_seconds, 120)
             self.assertTrue(config.memory.semantic_enabled)
+            self.assertTrue(config.cognition.enabled)
 
 
 if __name__ == "__main__":

@@ -55,3 +55,8 @@ eval:
   enable_probes: true
   orientation_stability_threshold: 0.72
   orientation_min_runs: 2
+
+cognition:
+  enabled: true
+  pass_budget: 1
+  revision_ceiling: 1

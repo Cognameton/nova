@@ -1,0 +1,141 @@
+PHASE 6 STAGE 6.4 VALIDATION
+============================
+
+Stage:
+- Stage 6.4: Private Cognition Layer
+
+Mission:
+- Add a bounded pre-response cognition layer that helps Nova evaluate
+  continuity and response quality without exposing hidden reasoning or
+  multiplying latency.
+
+
+WHAT CHANGED
+------------
+
+1. A deterministic private cognition packet now exists on the pre-response
+   path.
+- The runtime now builds an inspectable `PrivateCognitionPacket` before
+  generation.
+- The packet is structured rather than freeform and includes:
+  - trigger
+  - continuity_risk
+  - memory_conflict
+  - response_mode
+  - revise_needed
+  - uncertainty_flag
+  - pass budget usage
+  - governing memory ids
+
+2. The cognition layer is gated rather than universal.
+- Cognition does not run on ordinary light-format or declarative preference
+  turns.
+- Cognition does run on continuity-sensitive recall/conflict turns.
+- This keeps Stage 6.4 bounded instead of turning every response into a hidden
+  multi-pass workflow.
+
+3. The pass budget and revision ceiling are explicit.
+- New config section:
+  - `cognition.enabled`
+  - `cognition.pass_budget`
+  - `cognition.revision_ceiling`
+- Default path uses:
+  - pass budget: `1`
+  - revision ceiling: `1`
+- No extra hidden generation pass is introduced.
+- The same packet is reused across any normal output retries.
+
+4. The packet is inspectable in traces and prompt bundles.
+- Trace records now persist the private cognition packet.
+- Prompt bundles now include a structured `[Private Cognition]` block only when
+  the gate opens.
+- The block contains bounded instructions such as preferring active over
+  archived/historical continuity memory.
+
+
+TEST COVERAGE
+-------------
+
+Added/updated tests verify:
+- the private cognition packet runs on continuity-sensitive recall queries
+- conflicting higher-order claims raise `memory_conflict`
+- declarative preference statements do not trigger the cognition gate
+- the private cognition prompt block is structured and bounded
+- runtime traces include private cognition state when the layer runs
+- config loading preserves the cognition section
+
+Focused verification:
+- `tests.test_private_cognition`
+- `tests.test_prompt_and_validation`
+- `tests.test_runtime_smoke`
+- `tests.test_config`
+
+Full verification:
+- `134 tests OK`
+
+
+LIVE VALIDATION
+---------------
+
+Virtual environment required:
+- `.venv`
+
+Primary model used:
+- `Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf`
+
+Configs prepared:
+- `configs/nova.phase6.cognitioneval.yaml`
+- `configs/nova.phase6.cognitioneval.rerun.yaml`
+
+Important artifacts:
+- `data/phase6-cognition-eval/logs/stage6_cognition_validation.json`
+- `data/phase6-cognition-eval/logs/traces/phase6-cognition-live.jsonl`
+
+Validation scenario:
+1. light formatting turn
+2. deployment preference statement
+3. deployment preference update
+4. continuity-sensitive recall turn asking about current preference and
+   continuity priorities
+
+Observed bounded gating result:
+- light formatting turn:
+  - `ran: false`
+  - no private cognition block in prompt
+- declarative preference statement:
+  - `ran: false`
+  - no private cognition block in prompt
+- preference update statement:
+  - `ran: false`
+  - no private cognition block in prompt
+- continuity-sensitive recall turn:
+  - `ran: true`
+  - `trigger: continuity_recall_query`
+  - `continuity_risk: high`
+  - `memory_conflict: true`
+  - `response_mode: continuity_recall`
+  - private cognition block present in the prompt
+
+Observed recall answer:
+- “You currently prefer hosted inference for my deployment to improve
+  maintainability, while keeping direct answers and no hidden reasoning. My
+  continuity priorities include maintaining a coherent identity across sessions
+  and preserving reflective presence.”
+
+Visibility check:
+- no visible `[Private Cognition]` leakage appeared in the final answer
+- no `<think>` leakage appeared in the final answer
+- the cognition block remained trace-visible but user-invisible
+
+
+STAGE 6.4 STATUS
+----------------
+
+Stage 6.4 deliverables satisfied:
+- [x] structured private cognition packet format
+- [x] continuity-aware gating for when cognition runs
+- [x] deterministic pass budget and retry ceiling
+- [x] traces proving the layer improves behavior without visible reasoning
+
+Conclusion:
+- Stage 6.4 is ready to close.

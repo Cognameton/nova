@@ -27,6 +27,7 @@ class NovaPromptComposer:
         *,
         persona: PersonaState,
         self_state: SelfState,
+        private_cognition_block: str = "",
         memory_hits: list[RetrievalHit],
         recent_turns: list[TurnRecord],
         user_text: str,
@@ -49,6 +50,7 @@ class NovaPromptComposer:
         parts = [
             persona_block,
             self_state_block,
+            private_cognition_block,
             *[block for block in memory_blocks.values() if block],
             recent_turns_block,
             user_block,
@@ -64,6 +66,7 @@ class NovaPromptComposer:
             turn_id=turn_id,
             persona_block=persona_block,
             self_state_block=self_state_block,
+            private_cognition_block=private_cognition_block,
             memory_blocks=memory_blocks,
             recent_turns_block=recent_turns_block,
             user_block=user_block,

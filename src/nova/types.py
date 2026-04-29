@@ -109,11 +109,33 @@ class RetrievalHit:
 
 
 @dataclass(slots=True)
+class PrivateCognitionPacket:
+    schema_version: str = SCHEMA_VERSION
+    enabled: bool = False
+    ran: bool = False
+    trigger: str = ""
+    continuity_risk: str = "low"
+    memory_conflict: bool = False
+    response_mode: str = "direct_answer"
+    revise_needed: bool = False
+    uncertainty_flag: bool = False
+    pass_budget: int = 0
+    pass_budget_used: int = 0
+    revision_ceiling: int = 0
+    relevant_channels: list[str] = field(default_factory=list)
+    governing_memory_ids: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class PromptBundle:
     session_id: str
     turn_id: str
     persona_block: str
     self_state_block: str
+    private_cognition_block: str
     memory_blocks: dict[str, str]
     recent_turns_block: str
     user_block: str
@@ -200,6 +222,7 @@ class TraceRecord:
     persona_state_snapshot: dict[str, Any] = field(default_factory=dict)
     self_state_snapshot: dict[str, Any] = field(default_factory=dict)
     prompt_bundle: dict[str, Any] = field(default_factory=dict)
+    private_cognition: dict[str, Any] = field(default_factory=dict)
     generation_request: dict[str, Any] = field(default_factory=dict)
     generation_result: dict[str, Any] = field(default_factory=dict)
     validation_result: dict[str, Any] = field(default_factory=dict)

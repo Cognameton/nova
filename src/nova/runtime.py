@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
+from nova.agent.private_cognition import PrivateCognitionEngine
 from nova.agent.presence import JsonPresenceStore, PresenceState
 from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
@@ -34,7 +35,7 @@ from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.session import JsonlSessionStore
-from nova.types import TraceRecord, TurnRecord, ValidationResult
+from nova.types import PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
 
 
 def utc_now_iso() -> str:
@@ -65,6 +66,7 @@ class NovaRuntime:
         probe_runner: object | None = None,
         orientation_engine: SelfOrientationEngine | None = None,
         orientation_evaluator: OrientationStabilityEvaluator | None = None,
+        private_cognition_engine: PrivateCognitionEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -85,6 +87,7 @@ class NovaRuntime:
         self.orientation_evaluator = orientation_evaluator or OrientationStabilityEvaluator(
             threshold=self.config.eval.orientation_stability_threshold
         )
+        self.private_cognition_engine = private_cognition_engine or PrivateCognitionEngine()
         self.tool_registry = tool_registry or default_tool_registry()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
@@ -487,9 +490,14 @@ class NovaRuntime:
             top_k_by_channel=retrieval_plan.top_k_by_channel,
         )
         memory_hits = self.retrieval_policy.rerank_hits(memory_hits)
+        private_cognition = self._build_private_cognition(
+            user_text=user_text,
+            memory_hits=memory_hits,
+        )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,
+            private_cognition_block=self.private_cognition_engine.build_prompt_block(private_cognition),
             memory_hits=memory_hits,
             recent_turns=recent_turns,
             user_text=user_text,
@@ -573,7 +581,7 @@ class NovaRuntime:
             latency_ms=generation_result.latency_ms,
             model_id=generation_result.model_id,
             retry_count=retry_count,
-            notes={},
+            notes={"private_cognition": private_cognition.to_dict()},
         )
         self.session_store.append_turn(turn)
 
@@ -600,6 +608,7 @@ class NovaRuntime:
             persona_state_snapshot=self.persona.to_dict(),
             self_state_snapshot=self.self_state.to_dict(),
             prompt_bundle=prompt_bundle.to_dict(),
+            private_cognition=private_cognition.to_dict(),
             generation_request=generation_request.to_dict(),
             generation_result=generation_result.to_dict(),
             validation_result=validation.to_dict(),
@@ -615,6 +624,25 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return turn
+
+    def _build_private_cognition(
+        self,
+        *,
+        user_text: str,
+        memory_hits: list,
+    ) -> PrivateCognitionPacket:
+        assert self.self_state is not None
+        return self.private_cognition_engine.build_packet(
+            user_text=user_text,
+            memory_hits=memory_hits,
+            self_state=self.self_state,
+            enabled=getattr(self.config.cognition, "enabled", False),
+            pass_budget=getattr(self.config.cognition, "pass_budget", 0),
+            revision_ceiling=min(
+                getattr(self.config.cognition, "revision_ceiling", 0),
+                self.config.generation.retries,
+            ),
+        )
 
     def _write_semantic_candidates(self) -> list:
         if not getattr(self.config.memory, "semantic_enabled", False):

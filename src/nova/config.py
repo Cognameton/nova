@@ -83,6 +83,13 @@ class EvalConfig:
 
 
 @dataclass(slots=True)
+class CognitionConfig:
+    enabled: bool = True
+    pass_budget: int = 1
+    revision_ceiling: int = 1
+
+
+@dataclass(slots=True)
 class NovaConfig:
     app: AppConfig = field(default_factory=AppConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
@@ -93,6 +100,7 @@ class NovaConfig:
     session: SessionConfig = field(default_factory=SessionConfig)
     console: ConsoleConfig = field(default_factory=ConsoleConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
+    cognition: CognitionConfig = field(default_factory=CognitionConfig)
 
     def validate(self) -> None:
         if self.model.backend not in VALID_BACKENDS:
@@ -117,6 +125,10 @@ class NovaConfig:
             raise ValueError("eval.orientation_stability_threshold must be between 0.0 and 1.0")
         if self.eval.orientation_min_runs <= 0:
             raise ValueError("eval.orientation_min_runs must be positive")
+        if self.cognition.pass_budget < 0:
+            raise ValueError("cognition.pass_budget must be non-negative")
+        if self.cognition.revision_ceiling < 0:
+            raise ValueError("cognition.revision_ceiling must be non-negative")
 
     def snapshot(self) -> dict[str, Any]:
         return asdict(self)
@@ -179,6 +191,7 @@ def load_config(
         session=_section(SessionConfig, payload.get("session")),
         console=_section(ConsoleConfig, payload.get("console")),
         eval=_section(EvalConfig, payload.get("eval")),
+        cognition=_section(CognitionConfig, payload.get("cognition")),
     )
     config.validate()
     return config
