@@ -40,6 +40,7 @@ class PrivateCognitionTests(unittest.TestCase):
         self.assertEqual(packet.response_mode, "continuity_recall")
         self.assertEqual(packet.pass_budget_used, 1)
         self.assertEqual(packet.governing_memory_ids, ["sem-1"])
+        self.assertEqual(packet.current_claims, ["deployment-style=hosted-inference"])
 
     def test_packet_detects_conflicting_claims(self) -> None:
         persona = default_persona_state()
@@ -119,6 +120,7 @@ class PrivateCognitionTests(unittest.TestCase):
 
         self.assertIn("[Private Cognition]", block)
         self.assertIn("response_mode:", block)
+        self.assertIn("treat archived or historical continuity memory as background only", block)
         self.assertNotIn("because", block.lower())
 
 

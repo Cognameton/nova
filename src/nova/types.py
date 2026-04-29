@@ -124,6 +124,7 @@ class PrivateCognitionPacket:
     revision_ceiling: int = 0
     relevant_channels: list[str] = field(default_factory=list)
     governing_memory_ids: list[str] = field(default_factory=list)
+    current_claims: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

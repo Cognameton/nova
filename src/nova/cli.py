@@ -11,6 +11,7 @@ from nova.agent.presence import JsonPresenceStore
 from nova.console import InteractionConsole
 from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.presence import PresenceInteractionEvaluator
+from nova.eval.continuity import ContinuityEvaluationRunner
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -253,6 +254,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--presence-eval",
         action="store_true",
         help="Run Phase 4.5 presence and interaction evaluation without inference.",
+    )
+    parser.add_argument(
+        "--continuity-eval",
+        action="store_true",
+        help="Run Phase 6.5 continuity evaluation over recorded sessions and traces.",
     )
     return parser
 
@@ -629,6 +635,28 @@ def main() -> int:
             print(f"summary_bounded: {report.summary_bounded}")
             print(f"action_history_stable: {report.action_history_stable}")
             print(f"commands_run: {report.commands_run}")
+            print(f"reasons: {report.reasons}")
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.continuity_eval:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            report = ContinuityEvaluationRunner().evaluate(runtime=runtime)
+            print("Nova 2.0 Continuity Evaluation")
+            print(f"passed: {report.passed}")
+            print(f"session_count: {report.session_count}")
+            print(f"evaluated_turn_count: {report.evaluated_turn_count}")
+            print(f"recall_turn_count: {report.recall_turn_count}")
+            print(f"recall_memory_guided: {report.recall_memory_guided}")
+            print(f"recall_factually_current: {report.recall_factually_current}")
+            print(f"supersession_preserved: {report.supersession_preserved}")
+            print(f"cognition_bounded: {report.cognition_bounded}")
+            print(f"contract_stable: {report.contract_stable}")
+            print(f"avg_latency_ms: {report.avg_latency_ms}")
+            print(f"avg_latency_with_cognition_ms: {report.avg_latency_with_cognition_ms}")
+            print(f"avg_latency_without_cognition_ms: {report.avg_latency_without_cognition_ms}")
             print(f"reasons: {report.reasons}")
             return 0 if report.passed else 1
         finally:

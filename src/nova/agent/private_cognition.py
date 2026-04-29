@@ -48,6 +48,7 @@ class PrivateCognitionEngine:
         relevant_hits = self._relevant_hits(memory_hits)
         active_hits = [hit for hit in relevant_hits if self._is_active(hit)]
         governing_ids = [str(hit.source_ref or "") for hit in active_hits if hit.source_ref][:4]
+        current_claims = self._current_claims(active_hits)
         relevant_channels = sorted({hit.channel for hit in relevant_hits if hit.channel})
         memory_conflict = self._has_conflict(relevant_hits)
         uncertainty_flag = not active_hits and trigger == "continuity_recall_query"
@@ -69,6 +70,7 @@ class PrivateCognitionEngine:
             revision_ceiling=revision_ceiling,
             relevant_channels=relevant_channels,
             governing_memory_ids=governing_ids,
+            current_claims=current_claims,
         )
 
     def build_prompt_block(self, packet: PrivateCognitionPacket | None) -> str:
@@ -87,7 +89,10 @@ class PrivateCognitionEngine:
             lines.append(
                 f"- governing_memory_ids: {', '.join(packet.governing_memory_ids[:4])}"
             )
-        lines.append("- instruction: prefer active over archived or historical continuity memory.")
+        if packet.current_claims:
+            lines.append(f"- current_claims: {'; '.join(packet.current_claims[:3])}")
+        lines.append("- instruction: when asked for the current state, use current_claims and active memory as authoritative.")
+        lines.append("- instruction: treat archived or historical continuity memory as background only, not as the present state.")
         if packet.uncertainty_flag:
             lines.append("- instruction: if recall is weak, answer narrowly and mark uncertainty.")
         return "\n".join(lines)
@@ -175,3 +180,19 @@ class PrivateCognitionEngine:
         if governance_status == "superseded":
             return False
         return True
+
+    def _current_claims(self, memory_hits: list[RetrievalHit]) -> list[str]:
+        claims: list[str] = []
+        seen: set[str] = set()
+        for hit in memory_hits:
+            metadata = dict(hit.metadata or {})
+            claim_axis = str(metadata.get("claim_axis", "") or "").strip()
+            claim_value = str(metadata.get("claim_value", "") or "").strip()
+            if not claim_axis or not claim_value:
+                continue
+            claim = f"{claim_axis}={claim_value}"
+            if claim in seen:
+                continue
+            seen.add(claim)
+            claims.append(claim)
+        return claims

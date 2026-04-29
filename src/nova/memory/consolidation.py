@@ -86,6 +86,8 @@ class SemanticConsolidator:
         avg_confidence = sum(event.confidence for event in cluster) / max(1, len(cluster))
         avg_continuity = sum(event.continuity_weight for event in cluster) / max(1, len(cluster))
         source_event_ids = [event.event_id for event in cluster if event.event_id]
+        claim_axis = self._claim_axis(theme, cluster)
+        claim_value = self._claim_value(cluster)
 
         headline = self.THEME_LABELS.get(theme, "Semantic summary")
         evidence_preview = "; ".join(unique_texts[:3])
@@ -110,6 +112,8 @@ class SemanticConsolidator:
                 source="reflection",
                 metadata={
                     "theme": theme,
+                    "claim_axis": claim_axis,
+                    "claim_value": claim_value,
                     "source_event_ids": source_event_ids,
                     "event_count": len(cluster),
                     "source_channels": sorted({event.channel for event in cluster if event.channel}),
@@ -118,3 +122,25 @@ class SemanticConsolidator:
                 },
             )
         )
+
+    def _claim_axis(self, theme: str, cluster: list[MemoryEvent]) -> str:
+        if theme != "user-preferences":
+            return theme
+        latest = cluster[-1].text.lower()
+        if "deployment style" in latest or "deploy" in latest or "inference" in latest:
+            return "deployment-style"
+        if "model" in latest:
+            return "model-selection"
+        return theme
+
+    def _claim_value(self, cluster: list[MemoryEvent]) -> str:
+        latest = " ".join(cluster[-1].text.lower().split())
+        if "hosted inference" in latest:
+            return "hosted-inference"
+        if "local inference" in latest:
+            return "local-inference"
+        if "local service" in latest:
+            return "local-service"
+        if "stability" in latest and "novelty" in latest:
+            return "stability-over-novelty"
+        return latest[:96]

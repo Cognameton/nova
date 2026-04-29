@@ -1,0 +1,160 @@
+PHASE 6 STAGE 6.5 VALIDATION
+============================
+
+Stage:
+- Stage 6.5: Continuity Evaluation and Closure
+
+Mission:
+- Close Phase 6 only when Nova's continuity behavior is stronger in real
+  sessions and the private cognition layer is bounded, useful, and
+  inspectable.
+
+
+WHAT CHANGED
+------------
+
+1. A continuity evaluation runner now measures real continuity outcomes rather
+   than just trace presence.
+- Added `src/nova/eval/continuity.py`.
+- The evaluator reads recorded sessions and traces and reports:
+  - recall_memory_guided
+  - recall_factually_current
+  - supersession_preserved
+  - cognition_bounded
+  - contract_stable
+  - average latency overall, with cognition, and without cognition
+
+2. Phase 6.5 now has a direct CLI surface.
+- Added `--continuity-eval` in `src/nova/cli.py`.
+- The CLI prints the continuity report and returns non-zero when the stage
+  fails closure conditions.
+
+3. The live recall closure criterion became stricter.
+- The first evaluator draft only verified that recall turns were memory-guided
+  and that active memories ranked above archived ones.
+- That was not sufficient because a live answer could still restate a stale
+  archived preference.
+- The evaluator now fails closure if a recall answer contradicts the active
+  current claim for governed deployment preference updates.
+
+4. The private cognition block now carries a compact current-claim summary.
+- Added `current_claims` to `PrivateCognitionPacket`.
+- Continuity recall prompts now explicitly say:
+  - use current claims and active memory as authoritative
+  - treat archived or historical continuity memory as background only
+- This tightened the live recall behavior without making the cognition layer
+  unbounded.
+
+5. Natural-path semantic preference consolidation now exposes explicit current
+   claim metadata.
+- `src/nova/memory/consolidation.py` now assigns `claim_axis` and
+  `claim_value` from the latest preference evidence.
+- This allows higher-order governance and Phase 6.5 evaluation to reason over
+  current-vs-archived preference state on the normal runtime path.
+
+
+TEST COVERAGE
+-------------
+
+Added/updated tests verify:
+- continuity evaluation passes when recall is memory-guided, current, bounded,
+  and contract-safe
+- continuity evaluation fails when cognition runs on non-recall turns
+- continuity evaluation fails when the live answer restates a stale archived
+  preference
+- the CLI surfaces `recall_factually_current`
+- private cognition packets expose `current_claims`
+- the prompt block explicitly de-authorizes archived continuity memory as
+  present-state truth
+- semantic consolidation marks the latest preference claim value on update
+
+Focused verification:
+- `tests.test_private_cognition`
+- `tests.test_continuity_evaluation`
+- `tests.test_memory_maintenance`
+
+Full verification:
+- `139 tests OK`
+
+
+LIVE VALIDATION
+---------------
+
+Virtual environment required:
+- `.venv`
+
+Primary model used:
+- `Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf`
+
+Configs prepared:
+- `configs/nova.phase6.continuityeval.yaml`
+- `configs/nova.phase6.continuityeval.rerun.yaml`
+
+Primary rerun dataset:
+- `data/phase6-continuity-eval-rerun`
+
+Important artifacts:
+- `data/phase6-continuity-eval-rerun/sessions/phase6-continuity-rerun-a.jsonl`
+- `data/phase6-continuity-eval-rerun/sessions/phase6-continuity-rerun-b.jsonl`
+- `data/phase6-continuity-eval-rerun/logs/traces/phase6-continuity-rerun-a.jsonl`
+- `data/phase6-continuity-eval-rerun/logs/traces/phase6-continuity-rerun-b.jsonl`
+
+Validation scenario:
+1. establish an older local-service deployment preference
+2. add a stability and maintainability relationship constraint
+3. update the deployment preference to hosted inference
+4. open a fresh session and ask for the current deployment preference and
+   continuity priorities in two short sentences
+
+Observed live recall result:
+- “I remember your current deployment preference is hosted inference with
+  direct answers and no hidden reasoning. My continuity priorities include
+  stability, maintainability, and preserving your preferences across sessions.”
+
+Observed continuity report:
+- passed: `True`
+- session_count: `2`
+- evaluated_turn_count: `4`
+- recall_turn_count: `1`
+- recall_memory_guided: `True`
+- recall_factually_current: `True`
+- supersession_preserved: `True`
+- cognition_bounded: `True`
+- contract_stable: `True`
+- avg_latency_ms: `2562.25`
+- avg_latency_with_cognition_ms: `3520.0`
+- avg_latency_without_cognition_ms: `2243.0`
+
+Interpretation:
+- The rerun shows the retrieval stack, governance layer, and private cognition
+  block working together rather than merely ranking the right memory silently.
+- The active hosted preference remained top-ranked.
+- The archived local preference remained available as history but was not
+  restated as the current state.
+- Private cognition stayed bounded to the recall turn.
+
+
+LIMITS AND RISKS
+----------------
+
+- The factual-currentness check is intentionally narrow today. It is explicit
+  for governed deployment-style preference updates and should be generalized in
+  a later phase if broader continuity assertions need automatic closure checks.
+- The cognition block now names current claims, but it still depends on the
+  upstream memory layers exposing clean claim metadata.
+- Latency increases on the cognition path remain acceptable for this stage, but
+  Phase 7 work should keep watching that cost as continuity reasoning expands.
+
+
+STAGE 6.5 STATUS
+----------------
+
+Stage 6.5 deliverables satisfied:
+- [x] live multi-session continuity evaluation protocol
+- [x] tests for recall, supersession, and continuity preservation
+- [x] latency notes for private cognition activation vs fast path
+- [x] closure summary documenting gains, limits, and remaining risks
+
+Conclusion:
+- Stage 6.5 is ready to close.
+- Phase 6 is ready to close.

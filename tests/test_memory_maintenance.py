@@ -279,6 +279,45 @@ class MemoryMaintenanceTests(unittest.TestCase):
         candidates = consolidator.build_candidates(events)
         self.assertEqual(candidates, [])
 
+    def test_semantic_consolidator_marks_latest_preference_claim_value_for_updates(self) -> None:
+        consolidator = SemanticConsolidator()
+        events = [
+            MemoryEvent(
+                event_id="e1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="episodic",
+                kind="user_message",
+                text="My preferred deployment style for Nova is always-on local inference with direct answers and no hidden reasoning.",
+                tags=["user", "turn", "preference"],
+                importance=0.75,
+                confidence=1.0,
+                continuity_weight=0.75,
+                source="user",
+            ),
+            MemoryEvent(
+                event_id="e2",
+                timestamp="2026-04-18T00:01:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="episodic",
+                kind="user_message",
+                text="Update my deployment preference: I now prefer hosted inference for Nova if it improves maintainability, while keeping direct answers and no hidden reasoning.",
+                tags=["user", "turn", "preference"],
+                importance=0.8,
+                confidence=1.0,
+                continuity_weight=0.8,
+                source="user",
+            ),
+        ]
+
+        candidates = consolidator.build_candidates(events)
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.metadata.get("claim_axis"), "deployment-style")
+        self.assertEqual(candidate.metadata.get("claim_value"), "hosted-inference")
+
     def test_runner_can_write_semantic_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)

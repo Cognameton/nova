@@ -175,10 +175,10 @@ Close Phase 6 only when Nova's continuity behavior is stronger in real sessions
 and the private cognition layer is bounded, useful, and inspectable.
 
 Stage 6.5 deliverables:
-- [ ] live multi-session continuity evaluation protocol
-- [ ] tests for recall, supersession, and continuity preservation
-- [ ] latency notes for private cognition activation vs fast path
-- [ ] closure summary documenting gains, limits, and remaining risks
+- [x] live multi-session continuity evaluation protocol
+- [x] tests for recall, supersession, and continuity preservation
+- [x] latency notes for private cognition activation vs fast path
+- [x] closure summary documenting gains, limits, and remaining risks
 
 Stage 6.5 restrictions:
 - no closure based only on philosophical appeal
