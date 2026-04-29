@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from nova.memory.governance import normalize_governed_event
 from nova.types import MemoryEvent
 
 
@@ -90,26 +91,30 @@ class SemanticConsolidator:
         evidence_preview = "; ".join(unique_texts[:3])
         summary_text = f"{headline}: {evidence_preview}"
 
-        return MemoryEvent(
-            event_id=uuid4().hex,
-            timestamp=utc_now_iso(),
-            session_id=cluster[-1].session_id if cluster else "",
-            turn_id=cluster[-1].turn_id if cluster else "",
-            channel="semantic",
-            kind="theme_summary",
-            text=summary_text,
-            summary=summary_text,
-            tags=sorted({"semantic", "summary", theme, *[tag for event in cluster for tag in event.tags if tag != "turn"]}),
-            importance=min(1.0, avg_importance + 0.15),
-            confidence=min(1.0, max(0.6, avg_confidence)),
-            continuity_weight=min(1.0, avg_continuity + 0.1),
-            retention="active",
-            supersedes=source_event_ids,
-            source="reflection",
-            metadata={
-                "theme": theme,
-                "source_event_ids": source_event_ids,
-                "event_count": len(cluster),
-                "generated_by": "semantic_consolidator",
-            },
+        return normalize_governed_event(
+            MemoryEvent(
+                event_id=uuid4().hex,
+                timestamp=utc_now_iso(),
+                session_id=cluster[-1].session_id if cluster else "",
+                turn_id=cluster[-1].turn_id if cluster else "",
+                channel="semantic",
+                kind="theme_summary",
+                text=summary_text,
+                summary=summary_text,
+                tags=sorted({"semantic", "summary", theme, *[tag for event in cluster for tag in event.tags if tag != "turn"]}),
+                importance=min(1.0, avg_importance + 0.15),
+                confidence=min(1.0, max(0.6, avg_confidence)),
+                continuity_weight=min(1.0, avg_continuity + 0.1),
+                retention="active",
+                supersedes=source_event_ids,
+                source="reflection",
+                metadata={
+                    "theme": theme,
+                    "source_event_ids": source_event_ids,
+                    "event_count": len(cluster),
+                    "source_channels": sorted({event.channel for event in cluster if event.channel}),
+                    "evidence_preview": unique_texts[:3],
+                    "generated_by": "semantic_consolidator",
+                },
+            )
         )

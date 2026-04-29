@@ -6,6 +6,13 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from nova.memory.governance import (
+    merge_provenance,
+    normalize_governed_event,
+    payload_conflicts,
+    payload_governance_scope,
+    payload_support_count,
+)
 from nova.types import MemoryEvent, RetrievalHit
 
 
@@ -18,28 +25,38 @@ class JsonlSemanticMemoryStore:
         self.path.touch(exist_ok=True)
 
     def add(self, event: MemoryEvent) -> None:
+        event = normalize_governed_event(event)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
 
     def merge_reflection_candidate(self, event: MemoryEvent) -> MemoryEvent:
+        event = normalize_governed_event(event)
         payloads = self._load_events()
-        theme = str((event.metadata or {}).get("theme", "") or "")
-        if not theme:
+        scope = str((event.metadata or {}).get("governance_scope", "") or "")
+        if not scope:
             self.add(event)
             return event
 
+        conflict_ids: list[str] = []
         for index, payload in enumerate(payloads):
             metadata = dict(payload.get("metadata", {}) or {})
             if (
                 str(payload.get("source", "") or "") == "reflection"
-                and str(metadata.get("theme", "") or "") == theme
                 and str(payload.get("retention", "active") or "active") == "active"
+                and payload_governance_scope(payload) == scope
             ):
+                if payload_conflicts(payload, event):
+                    payloads[index] = self._archive_superseded_payload(payload, event.event_id, event.timestamp)
+                    conflict_ids.append(str(payload.get("event_id", "") or ""))
+                    continue
                 merged = self._merge_payload(payload, event)
                 payloads[index] = merged
                 self._save_payloads(payloads)
                 return self._event_from_payload(merged)
 
+        if conflict_ids:
+            event.metadata["supersedes_conflicts"] = conflict_ids
+            self._save_payloads(payloads)
         self.add(event)
         return event
 
@@ -61,9 +78,19 @@ class JsonlSemanticMemoryStore:
             importance = float(payload.get("importance", 0.0) or 0.0)
             continuity_weight = float(payload.get("continuity_weight", 0.0) or 0.0)
             confidence = float(payload.get("confidence", 1.0) or 1.0)
-            score = float(overlap + importance + continuity_weight + (0.25 * confidence))
+            support_count = payload_support_count(payload)
+            score = float(
+                overlap
+                + importance
+                + continuity_weight
+                + (0.25 * confidence)
+                + min(1.0, support_count * 0.15)
+            )
             if score <= 0:
                 continue
+            metadata = dict(payload.get("metadata", {}) or {})
+            if str(metadata.get("governance_status", "active") or "active") == "active":
+                score += 0.2
             if retention == "demoted":
                 score *= 0.7
             elif retention == "archived":
@@ -77,11 +104,12 @@ class JsonlSemanticMemoryStore:
                     source_ref=payload.get("event_id"),
                     tags=list(payload.get("tags", []) or []),
                     metadata={
-                        **dict(payload.get("metadata", {}) or {}),
+                        **metadata,
                         "retention": retention,
                         "importance": importance,
                         "continuity_weight": continuity_weight,
                         "confidence": confidence,
+                        "support_count": support_count,
                     },
                 )
             )
@@ -152,10 +180,10 @@ class JsonlSemanticMemoryStore:
     def _merge_payload(self, existing: dict, event: MemoryEvent) -> dict:
         existing_metadata = dict(existing.get("metadata", {}) or {})
         event_metadata = dict(event.metadata or {})
+        merged_provenance = merge_provenance(existing_metadata, event_metadata)
         merged_source_ids = sorted(
             {
-                *list(existing_metadata.get("source_event_ids", []) or []),
-                *list(event_metadata.get("source_event_ids", []) or []),
+                *list(merged_provenance.get("source_event_ids", []) or []),
                 *list(existing.get("supersedes", []) or []),
                 *list(event.supersedes or []),
             }
@@ -182,12 +210,25 @@ class JsonlSemanticMemoryStore:
                     **existing_metadata,
                     **event_metadata,
                     "source_event_ids": merged_source_ids,
+                    "source_channels": merged_provenance.get("source_channels", []),
+                    "support_count": merged_provenance.get("support_count", 0),
+                    "provenance": merged_provenance,
+                    "governance_status": "active",
                     "revision_count": revision_count,
                     "revised_at": event.timestamp,
                 },
             }
         )
         return existing
+
+    def _archive_superseded_payload(self, payload: dict, successor_id: str, timestamp: str) -> dict:
+        metadata = dict(payload.get("metadata", {}) or {})
+        metadata["governance_status"] = "superseded"
+        metadata["superseded_by"] = successor_id
+        metadata["superseded_at"] = timestamp
+        payload["retention"] = "archived"
+        payload["metadata"] = metadata
+        return payload
 
     def _event_from_payload(self, payload: dict) -> MemoryEvent:
         return MemoryEvent(

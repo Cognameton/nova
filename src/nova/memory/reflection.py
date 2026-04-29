@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from nova.memory.consolidation import SemanticConsolidator
+from nova.memory.governance import normalize_governed_event
 from nova.types import MemoryEvent
 
 
@@ -153,40 +154,43 @@ class ReflectionEngine:
         prefix = self._autobiographical_prefix(theme=theme, note_type=note_type)
         summary_text = f"{prefix}: {'; '.join(preview_texts[:3])}"
 
-        return MemoryEvent(
-            event_id=uuid4().hex,
-            timestamp=utc_now_iso(),
-            session_id=cluster[-1].session_id if cluster else "",
-            turn_id=cluster[-1].turn_id if cluster else "",
-            channel="autobiographical",
-            kind=self._autobiographical_kind(note_type),
-            text=summary_text,
-            summary=summary_text,
-            tags=sorted(
-                {
-                    "autobiographical",
-                    "reflection",
-                    theme,
-                    note_type,
-                    *[tag for event in cluster for tag in event.tags if tag != "turn"],
-                }
-            ),
-            importance=min(1.0, avg_importance + 0.2),
-            confidence=min(1.0, max(0.7, avg_confidence)),
-            continuity_weight=min(1.0, avg_continuity + 0.15),
-            retention="active",
-            supersedes=source_event_ids,
-            source="reflection",
-            metadata={
-                "theme": theme,
-                "note_type": note_type,
-                "source_event_ids": source_event_ids,
-                "event_count": len(cluster),
-                "distinct_turn_count": len(distinct_turns),
-                "source_channels": sorted({event.channel for event in cluster if event.channel}),
-                "semantic_support": semantic_support,
-                "generated_by": "reflection_engine",
-            },
+        return normalize_governed_event(
+            MemoryEvent(
+                event_id=uuid4().hex,
+                timestamp=utc_now_iso(),
+                session_id=cluster[-1].session_id if cluster else "",
+                turn_id=cluster[-1].turn_id if cluster else "",
+                channel="autobiographical",
+                kind=self._autobiographical_kind(note_type),
+                text=summary_text,
+                summary=summary_text,
+                tags=sorted(
+                    {
+                        "autobiographical",
+                        "reflection",
+                        theme,
+                        note_type,
+                        *[tag for event in cluster for tag in event.tags if tag != "turn"],
+                    }
+                ),
+                importance=min(1.0, avg_importance + 0.2),
+                confidence=min(1.0, max(0.7, avg_confidence)),
+                continuity_weight=min(1.0, avg_continuity + 0.15),
+                retention="active",
+                supersedes=source_event_ids,
+                source="reflection",
+                metadata={
+                    "theme": theme,
+                    "note_type": note_type,
+                    "source_event_ids": source_event_ids,
+                    "event_count": len(cluster),
+                    "distinct_turn_count": len(distinct_turns),
+                    "source_channels": sorted({event.channel for event in cluster if event.channel}),
+                    "evidence_preview": preview_texts[:3],
+                    "semantic_support": semantic_support,
+                    "generated_by": "reflection_engine",
+                },
+            )
         )
 
     def _preview_texts(self, cluster: list[MemoryEvent], unique_texts: list[str]) -> list[str]:

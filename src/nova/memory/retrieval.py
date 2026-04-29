@@ -44,9 +44,14 @@ class MemoryPolicy:
     }
     PREFERENCE_CUES = (
         "i prefer ",
+        "i now prefer ",
         "my preferred ",
         "my preference is ",
         "my preference for ",
+        "update my preference",
+        "update my deployment preference",
+        "change my preference",
+        "change my deployment preference",
         "i want ",
         "i need ",
         "i like ",
@@ -416,7 +421,8 @@ class MemoryPolicy:
         return any(phrase in text for phrase in phrases)
 
     def _contains_preference_cue(self, text: str) -> bool:
-        return any(cue in text for cue in self.PREFERENCE_CUES)
+        normalized = f" {text.lower().strip()} "
+        return any(cue in normalized for cue in self.PREFERENCE_CUES)
 
     def _contains_value_cue(self, text: str) -> bool:
         return any(cue in text for cue in self.VALUE_CUES)

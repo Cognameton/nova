@@ -240,6 +240,8 @@ class MemoryMaintenanceTests(unittest.TestCase):
         self.assertIn("user-preferences", candidate.tags)
         self.assertEqual(candidate.source, "reflection")
         self.assertEqual(set(candidate.supersedes), {"e1", "e2"})
+        self.assertEqual(candidate.metadata.get("governance_scope"), "user-preferences")
+        self.assertEqual(candidate.metadata.get("provenance", {}).get("support_count"), 2)
 
     def test_semantic_consolidator_ignores_generic_relationship_turns(self) -> None:
         consolidator = SemanticConsolidator()
@@ -476,6 +478,7 @@ class MemoryMaintenanceTests(unittest.TestCase):
         self.assertEqual(candidate.kind, "developmental_milestone")
         self.assertEqual(candidate.metadata.get("note_type"), "developmental-milestone")
         self.assertTrue(candidate.metadata.get("semantic_support"))
+        self.assertEqual(candidate.metadata.get("governance_scope"), "identity-continuity")
 
     def test_reflection_engine_ignores_relationship_context_semantic_support(self) -> None:
         engine = ReflectionEngine()
@@ -792,6 +795,129 @@ class MemoryMaintenanceTests(unittest.TestCase):
             self.assertEqual(len(autobiographical_events), 1)
             self.assertEqual(autobiographical_events[0].metadata.get("revision_count"), 1)
             self.assertEqual(autobiographical_events[0].metadata.get("theme"), "identity-continuity")
+            self.assertEqual(autobiographical_events[0].metadata.get("support_count"), 3)
+
+    def test_semantic_store_archives_conflicting_active_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonlSemanticMemoryStore(Path(tmpdir) / "semantic.jsonl")
+
+            first = MemoryEvent(
+                event_id="s1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="semantic",
+                kind="theme_summary",
+                text="User preferences: local inference remains preferred for Nova.",
+                summary="User preferences: local inference remains preferred for Nova.",
+                tags=["semantic", "summary", "user-preferences"],
+                importance=0.8,
+                confidence=0.9,
+                continuity_weight=0.8,
+                source="reflection",
+                metadata={
+                    "theme": "user-preferences",
+                    "claim_axis": "deployment-style",
+                    "claim_value": "local-inference",
+                    "source_event_ids": ["e1", "e2"],
+                    "distinct_turn_count": 2,
+                },
+            )
+            second = MemoryEvent(
+                event_id="s2",
+                timestamp="2026-04-19T00:00:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="semantic",
+                kind="theme_summary",
+                text="User preferences: hosted inference is now preferred for Nova.",
+                summary="User preferences: hosted inference is now preferred for Nova.",
+                tags=["semantic", "summary", "user-preferences"],
+                importance=0.85,
+                confidence=0.95,
+                continuity_weight=0.9,
+                source="reflection",
+                metadata={
+                    "theme": "user-preferences",
+                    "claim_axis": "deployment-style",
+                    "claim_value": "hosted-inference",
+                    "source_event_ids": ["e3", "e4", "e5"],
+                    "distinct_turn_count": 3,
+                },
+            )
+
+            store.merge_reflection_candidate(first)
+            store.merge_reflection_candidate(second)
+
+            events = sorted(store.list_events(), key=lambda event: event.event_id)
+            self.assertEqual(len(events), 2)
+            older = next(event for event in events if event.event_id == "s1")
+            newer = next(event for event in events if event.event_id == "s2")
+            self.assertEqual(older.retention, "archived")
+            self.assertEqual(older.metadata.get("governance_status"), "superseded")
+            self.assertEqual(older.metadata.get("superseded_by"), "s2")
+            self.assertEqual(newer.retention, "active")
+            self.assertEqual(newer.metadata.get("supersedes_conflicts"), ["s1"])
+
+    def test_autobiographical_store_archives_conflicting_continuity_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonlAutobiographicalMemoryStore(Path(tmpdir) / "autobiographical.jsonl")
+
+            first = MemoryEvent(
+                event_id="a1",
+                timestamp="2026-04-18T00:00:00Z",
+                session_id="s1",
+                turn_id="t1",
+                channel="autobiographical",
+                kind="reflection_note",
+                text="Identity continuity: I stay direct-first when preserving continuity.",
+                summary="Identity continuity: I stay direct-first when preserving continuity.",
+                tags=["autobiographical", "identity-continuity"],
+                importance=0.85,
+                confidence=0.9,
+                continuity_weight=0.95,
+                source="reflection",
+                metadata={
+                    "theme": "identity-continuity",
+                    "claim_axis": "answer-style",
+                    "claim_value": "direct-first",
+                    "source_event_ids": ["e1", "e2"],
+                },
+            )
+            second = MemoryEvent(
+                event_id="a2",
+                timestamp="2026-04-19T00:00:00Z",
+                session_id="s1",
+                turn_id="t2",
+                channel="autobiographical",
+                kind="continuity_shift",
+                text="Identity shift: I now prefer broader contextual framing before directness.",
+                summary="Identity shift: I now prefer broader contextual framing before directness.",
+                tags=["autobiographical", "identity-continuity"],
+                importance=0.88,
+                confidence=0.95,
+                continuity_weight=0.96,
+                source="reflection",
+                metadata={
+                    "theme": "identity-continuity",
+                    "claim_axis": "answer-style",
+                    "claim_value": "broad-context-first",
+                    "source_event_ids": ["e3", "e4", "e5"],
+                },
+            )
+
+            store.merge_reflection_candidate(first)
+            store.merge_reflection_candidate(second)
+
+            hits = store.search("directness context framing", top_k=2)
+            self.assertEqual(hits[0].source_ref, "a2")
+
+            events = sorted(store.list_events(), key=lambda event: event.event_id)
+            older = next(event for event in events if event.event_id == "a1")
+            newer = next(event for event in events if event.event_id == "a2")
+            self.assertEqual(older.retention, "archived")
+            self.assertEqual(older.metadata.get("superseded_by"), "a2")
+            self.assertEqual(newer.metadata.get("supersedes_conflicts"), ["a1"])
 
     def test_runner_can_apply_retention_mutations_to_stores(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

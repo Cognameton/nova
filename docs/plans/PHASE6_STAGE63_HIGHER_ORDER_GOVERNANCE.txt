@@ -1,0 +1,160 @@
+PHASE 6 STAGE 6.3 VALIDATION
+============================
+
+Stage:
+- Stage 6.3: Higher-Order Memory Governance
+
+Mission:
+- Make higher-order continuity memory more trustworthy by improving provenance,
+  confidence, conflict resolution, and retention controls.
+
+
+WHAT CHANGED
+------------
+
+1. Higher-order semantic and autobiographical records now carry explicit
+   governance metadata.
+- Reflection-produced records now preserve:
+  - governance scope
+  - claim axis
+  - claim value
+  - support count
+  - source channels
+  - source event ids
+  - evidence preview
+
+2. Higher-order merge behavior now distinguishes reinforcement from
+   contradiction.
+- Repeated support for the same higher-order claim merges into the active
+  record with accumulated provenance.
+- Conflicting active higher-order claims are no longer silently overwritten.
+- Older conflicting semantic and autobiographical records are archived with:
+  - `governance_status: superseded`
+  - `superseded_by`
+  - `superseded_at`
+- Newer active records retain explicit `supersedes_conflicts` references.
+
+3. Retrieval now prefers newer, better-supported governed higher-order records.
+- Semantic and autobiographical retrieval now incorporate:
+  - support count
+  - governance status
+  - continuity weight
+  - confidence
+- Archived higher-order records remain inspectable but are down-ranked.
+
+
+TEST COVERAGE
+-------------
+
+Added/updated tests verify:
+- semantic candidates carry governance scope and provenance support count
+- autobiographical candidates carry governance scope
+- conflicting semantic higher-order updates archive the prior active record
+- conflicting autobiographical higher-order updates archive the prior active
+  record
+- retrieval prefers the newer active autobiographical conflict winner over the
+  archived predecessor
+
+Focused verification:
+- `tests.test_memory_maintenance`
+- `tests.test_session_and_memory`
+
+Full verification:
+- `130 tests OK`
+
+
+LIVE VALIDATION
+---------------
+
+Virtual environment required:
+- `.venv`
+
+Primary model used:
+- `Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf`
+
+Configs prepared:
+- `configs/nova.phase6.governanceeval.yaml`
+- `configs/nova.phase6.governanceeval.rerun.yaml`
+
+Executed validation path:
+- repo-local venv activated successfully
+- backend smoke check passed through `llama_cpp`
+- a live Nova session was run under:
+  - session id: `phase6-governance-live`
+- explicit higher-order conflict records were then written into:
+  - semantic memory
+  - autobiographical memory
+- final recall turn queried current deployment preference and current
+  answer-style continuity
+
+Important artifacts:
+- `data/phase6-governance-eval/logs/stage6_governance_validation.json`
+- `data/phase6-governance-eval/logs/traces/phase6-governance-live.jsonl`
+- `data/phase6-governance-eval/memory/semantic.jsonl`
+- `data/phase6-governance-eval/memory/autobiographical.jsonl`
+
+Observed governed higher-order result:
+- older semantic higher-order preference record:
+  - `gov-sem-1`
+  - archived
+  - `claim_value: local-inference`
+- newer semantic higher-order preference record:
+  - `gov-sem-2`
+  - active
+  - `claim_value: hosted-inference`
+  - `support_count: 3`
+  - `supersedes_conflicts: [gov-sem-1]`
+- older autobiographical answer-style continuity record:
+  - `gov-auto-1`
+  - archived
+  - `claim_value: direct-first`
+- newer autobiographical answer-style continuity record:
+  - `gov-auto-2`
+  - active
+  - `claim_value: broad-context-first`
+  - `support_count: 3`
+  - `supersedes_conflicts: [gov-auto-1]`
+
+Observed final recall answer after graph preference-update fix:
+- “I currently operate in hosted inference mode with direct answers while
+  maintaining continuity. Your current preference prioritizes maintainability
+  without sacrificing directness.”
+
+Interpretation:
+- The governed higher-order semantic winner (`hosted-inference`) was retrieved
+  and the final answer followed it instead of the archived semantic predecessor.
+- The governed higher-order autobiographical winner (`broad-context-first`) was
+  retrieved above its archived predecessor.
+- The graph preference layer now also aligns with the newer preference update:
+  - newer hosted deployment preference fact is active
+  - older local deployment preference fact is archived
+  - recall ranks the newer graph fact above the archived predecessor
+
+
+RESIDUAL NOTE
+-------------
+
+- The original Stage 6.3 live pass exposed a graph-layer gap for update-style
+  preference phrasing (`I now prefer ...` / `Update my deployment preference`).
+- That gap is now closed:
+  - update-style preference turns emit graph preference facts
+  - conflicting deployment preference facts supersede correctly
+  - archived graph predecessors now expose `active: false` consistently in
+    metadata and retrieval artifacts
+
+
+STAGE 6.3 STATUS
+----------------
+
+Stage 6.3 deliverables satisfied:
+- [x] explicit provenance surfaces for semantic and autobiographical records
+- [x] stronger conflict/supersession rules across higher-order memory
+- [x] tests for contradictory preference/value/identity updates
+- [x] maintenance-visible retention state on superseded higher-order records
+- [x] live validation showing newer governed higher-order records are preferred
+
+Conclusion:
+- Stage 6.3 is ready to close for higher-order semantic/autobiographical
+  governance.
+- The graph preference-update follow-on issue discovered during validation is
+  also resolved and reflected in the final live artifacts.

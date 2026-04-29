@@ -111,6 +111,8 @@ class SqliteGraphMemoryStore:
                 continue
             status = "active" if int(row["active"] or 0) else "historical"
             metadata = json.loads(row["metadata_json"] or "{}")
+            metadata["active"] = bool(int(row["active"] or 0))
+            metadata["superseded_by"] = row["superseded_by"]
             retention = str(metadata.get("retention", "active") or "active")
             if retention == "pruned":
                 continue
@@ -170,6 +172,8 @@ class SqliteGraphMemoryStore:
         events: list[MemoryEvent] = []
         for row in rows:
             metadata = json.loads(row["metadata_json"] or "{}")
+            metadata["active"] = bool(int(row["active"] or 0))
+            metadata["superseded_by"] = row["superseded_by"]
             events.append(
                 MemoryEvent(
                     event_id=str(row["fact_id"] or ""),
@@ -214,6 +218,7 @@ class SqliteGraphMemoryStore:
                 metadata = json.loads(row["metadata_json"] or "{}")
                 target_retention = str(getattr(decision, "target_retention", "active") or "active")
                 metadata["retention"] = target_retention
+                metadata["active"] = target_retention == "active"
                 metadata["maintenance"] = {
                     "action": getattr(decision, "action", ""),
                     "reason": getattr(decision, "reason", ""),
@@ -295,6 +300,7 @@ class SqliteGraphMemoryStore:
             if prior_object_type != fact.object_type:
                 continue
             prior_metadata["retention"] = "archived"
+            prior_metadata["active"] = False
             prior_metadata["superseded_by"] = fact.fact_id
             prior_metadata["superseded_at"] = fact.timestamp
             conn.execute(

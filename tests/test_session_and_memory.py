@@ -99,6 +99,25 @@ class SessionAndMemoryTests(unittest.TestCase):
         self.assertTrue(any("preferred deployment style" in event.text.lower() for event in graph_events))
         self.assertTrue(any(event.metadata.get("object_type") == "deployment_preference" for event in graph_events))
 
+    def test_memory_event_factory_promotes_preference_update_as_preference(self) -> None:
+        factory = BasicMemoryEventFactory()
+        events = factory.from_turn(
+            session_id="s1",
+            turn_id="t1",
+            user_text=(
+                "Update my deployment preference: I now prefer hosted inference for Nova "
+                "if it improves maintainability, while keeping direct answers and no hidden reasoning."
+            ),
+            final_answer="Understood. I will keep the newer deployment preference in mind.",
+            persona=PersonaState(name="Nova"),
+            self_state=SelfState(identity_summary="Nova is continuity-focused."),
+        )
+
+        graph_events = [event for event in events if event.channel == "graph"]
+        self.assertTrue(any(event.kind == "preference_fact" for event in graph_events))
+        self.assertTrue(any(event.metadata.get("object_type") == "deployment_preference" for event in graph_events))
+        self.assertTrue(any("hosted inference" in event.text.lower() for event in graph_events))
+
     def test_memory_event_factory_does_not_promote_question_as_preference(self) -> None:
         factory = BasicMemoryEventFactory()
         events = factory.from_turn(
@@ -438,6 +457,56 @@ class SessionAndMemoryTests(unittest.TestCase):
             events = store.list_events()
             active_prefs = [e for e in events if e.metadata.get("fact_domain") == "preference" and e.retention == "active"]
             self.assertEqual(len(active_prefs), 2)
+
+    def test_graph_memory_supersedes_deployment_preference_update_emitted_by_factory(self) -> None:
+        factory = BasicMemoryEventFactory()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = SqliteGraphMemoryStore(Path(tmpdir) / "graph.db")
+
+            first_events = factory.from_turn(
+                session_id="s1",
+                turn_id="t1",
+                user_text=(
+                    "My preferred deployment style for Nova is always-on local inference "
+                    "with direct answers and no hidden reasoning."
+                ),
+                final_answer="Understood. I'll operate in always-on local inference mode with direct answers.",
+                persona=PersonaState(name="Nova"),
+                self_state=SelfState(identity_summary="Nova is continuity-focused."),
+            )
+            second_events = factory.from_turn(
+                session_id="s1",
+                turn_id="t2",
+                user_text=(
+                    "Update my deployment preference: I now prefer hosted inference for Nova "
+                    "if it improves maintainability, while keeping direct answers and no hidden reasoning."
+                ),
+                final_answer="Understood. I'll operate in hosted inference mode with direct answers.",
+                persona=PersonaState(name="Nova"),
+                self_state=SelfState(identity_summary="Nova is continuity-focused."),
+            )
+
+            for event in first_events + second_events:
+                if event.channel == "graph":
+                    store.add(event)
+
+            events = store.list_events()
+            active_prefs = [
+                e for e in events
+                if e.metadata.get("fact_domain") == "preference" and e.retention == "active"
+            ]
+            archived_prefs = [
+                e for e in events
+                if e.metadata.get("fact_domain") == "preference" and e.retention == "archived"
+            ]
+            self.assertEqual(len(active_prefs), 1)
+            self.assertIn("hosted inference", active_prefs[0].text.lower())
+            self.assertEqual(len(archived_prefs), 1)
+            self.assertIn("local inference", archived_prefs[0].text.lower())
+            self.assertEqual(
+                archived_prefs[0].metadata.get("superseded_by"),
+                active_prefs[0].event_id,
+            )
 
 
 if __name__ == "__main__":
