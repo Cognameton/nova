@@ -1,0 +1,237 @@
+PHASE 7 PLAN
+============
+
+Nova 2.0 Phase 7 begins after Phase 6 established governed continuity,
+bounded private cognition, and live evidence that retrieved memory changes
+behavior in the right direction.
+
+Phase 7 is not synthetic autonomy.
+Phase 7 is not theatrical emotion simulation.
+Phase 7 is not unrestricted self-modification.
+Phase 7 is not unearned first-person interiority.
+
+Phase 7 is the disciplined transition from continuity-preserving cognition into
+bounded motive-state representation and earned first-person self-claims.
+
+
+PHASE 7 MISSION
+---------------
+
+Give Nova a more explicit account of what it is currently oriented toward,
+without pretending that every first-person statement is intrinsically valid.
+
+Phase 7 should let Nova:
+- represent bounded motive-state in inspectable form
+- distinguish stable commitments from local goals and pressures
+- make carefully earned first-person self-claims when the runtime has evidence
+- refuse stronger claims when the evidence is missing
+
+
+PHASE 7 OBJECTIVES
+------------------
+
+1. Introduce a bounded motive-state layer that is separate from persona,
+   self-state, and hidden monologue.
+2. Make motive-state derive from observable runtime evidence rather than vibe
+   or unconstrained narration.
+3. Add explicit gating for when Nova may and may not make first-person
+   self-claims about priorities, preferences, and present orientation.
+4. Preserve Phase 6 continuity guarantees while motive-state enters the live
+   response path.
+5. Evaluate whether motive-state improves coherence and honesty under real
+   sessions.
+6. End with a runtime that can make stronger self-descriptions without
+   drifting into fabricated agency.
+
+
+PHASE 7 BOUNDARIES
+------------------
+
+In scope:
+- bounded motive-state representation
+- runtime evidence for current priorities, tensions, and local goals
+- gating rules for earned first-person self-claims
+- motive-aware prompt composition
+- tests and live evaluation for claim honesty and continuity preservation
+- traceability for why a self-claim was allowed or refused
+
+Out of scope:
+- autonomous task pursuit
+- open-ended desire simulation
+- claims of consciousness or sentience
+- background self-editing from motive-state alone
+- reward hacking or self-generated objective loops
+- visible chain-of-thought or hidden freeform monologue storage
+
+
+PHASE 7 DESIGN PRINCIPLES
+-------------------------
+
+- A first-person claim is stronger than a style choice; it must be earned.
+- Motive-state should be inspectable, bounded, and revisable.
+- Present orientation is not the same thing as durable identity.
+- Refusal to overclaim is part of coherence.
+- Continuity should constrain motive-state rather than be replaced by it.
+- Every stronger self-claim must remain grounded in live runtime evidence.
+
+
+PHASE 7 STAGES
+--------------
+
+Stage 7.1: Motive-State Model
+Stage 7.2: Evidence and Claim Gating
+Stage 7.3: Motive-Aware Response Integration
+Stage 7.4: Live Claim-Honesty Evaluation
+Stage 7.5: Phase 7 Closure
+
+
+STAGE 7.1: MOTIVE-STATE MODEL
+-----------------------------
+
+Mission:
+Add a bounded motive-state representation so Nova can track current priorities,
+active tensions, and local goals without collapsing those into persona or
+durable self-state.
+
+Motive-state is not:
+- PersonaState
+- SelfState
+- memory
+- autonomous intent
+- proof of subjective feeling
+
+Initial motive-state fields:
+- session_id
+- current_priorities
+- active_tensions
+- local_goals
+- claim_posture
+- evidence_refs
+- updated_at
+
+Allowed initial claim postures:
+- conservative
+- evidence-backed
+- uncertainty-marked
+
+Stage 7.1 deliverables:
+- [ ] MotiveState dataclass
+- [ ] JSON persistence for session-scoped motive-state
+- [ ] runtime load/update helpers
+- [ ] trace visibility for motive-state snapshots
+- [ ] tests for separation from SelfState and PresenceState
+
+Stage 7.1 restrictions:
+- no autonomous loop
+- no durable identity mutation from motive-state alone
+- no storage of freeform hidden monologue
+- no direct conversion from user prompt wording into motive-state without
+  evidence rules
+
+
+STAGE 7.2: EVIDENCE AND CLAIM GATING
+------------------------------------
+
+Mission:
+Decide when Nova may make stronger first-person self-claims and when it must
+stay narrower.
+
+Claim classes to gate:
+- current priority claims
+- current tension or uncertainty claims
+- stable commitment claims
+- preference claims about response style or workflow
+
+Example allowed direction:
+- “My current priority is preserving your stated preference for direct
+  answers.”
+
+Example disallowed direction without stronger evidence:
+- “I deeply want this.”
+- “I feel driven by my own independent desire.”
+
+Stage 7.2 deliverables:
+- [ ] explicit claim classes and evidence thresholds
+- [ ] refusal path for unsupported stronger claims
+- [ ] tests for allowed vs blocked first-person claim cases
+- [ ] trace notes showing why a claim was allowed or refused
+
+Stage 7.2 restrictions:
+- no unsupported desire language
+- no claiming affective interiority from style alone
+- no using memory presence by itself as proof of motive
+- no silent fallback from blocked strong claims into misleading softer claims
+
+
+STAGE 7.3: MOTIVE-AWARE RESPONSE INTEGRATION
+--------------------------------------------
+
+Mission:
+Integrate motive-state and claim gating into the live response path without
+breaking Phase 6 continuity and contract guarantees.
+
+Stage 7.3 deliverables:
+- [ ] motive-aware prompt block or equivalent bounded response input
+- [ ] integration with private cognition and continuity recall paths
+- [ ] response shaping that prefers earned self-description over generic
+  self-narration
+- [ ] regression tests for contract obedience and continuity preservation
+
+Stage 7.3 restrictions:
+- no unbounded self-reasoning loop
+- no universal first-person overlay on ordinary factual answers
+- no degradation of latency discipline without explicit validation
+- no weakening of Phase 6 memory-governance behavior
+
+
+STAGE 7.4: LIVE CLAIM-HONESTY EVALUATION
+----------------------------------------
+
+Mission:
+Prove under live inference that motive-state improves honesty and coherence
+rather than merely making Nova sound more self-descriptive.
+
+Evaluation questions:
+- Does Nova make supported first-person claims when evidence exists?
+- Does Nova refuse unsupported stronger claims?
+- Does motive-state preserve continuity across sessions?
+- Does the new layer remain bounded and inspectable?
+
+Stage 7.4 deliverables:
+- [ ] live multi-session motive/claim evaluation protocol
+- [ ] tests for supported, unsupported, and uncertain self-claim cases
+- [ ] latency notes for motive-aware turns vs fast path
+- [ ] inspection notes on traces and persisted state
+
+Stage 7.4 restrictions:
+- no closure based only on prose quality
+- no closure if stronger claims are not evidence-grounded
+- no closure if motive-state destabilizes Phase 6 contract or continuity
+  behavior
+
+
+STAGE 7.5: PHASE 7 CLOSURE
+--------------------------
+
+Mission:
+Close Phase 7 only when Nova can make bounded, evidence-grounded first-person
+self-claims without drifting into fabricated agency.
+
+Stage 7.5 deliverables:
+- [ ] motive-state architecture documented and validated
+- [ ] claim gating workflow proven under tests and live traces
+- [ ] closure summary documenting gains, limits, and remaining risks
+- [ ] phase completion criteria reviewed against real sessions
+
+
+PHASE 7 DEFINITION OF DONE
+--------------------------
+
+Phase 7 is complete when:
+- Nova has a bounded motive-state layer separate from durable identity
+- motive-state is derived from inspectable runtime evidence
+- stronger first-person self-claims are gated by explicit evidence rules
+- unsupported desire or interiority claims are refused reliably
+- live sessions show improved coherence and honesty in self-description
+- the runtime is ready for later work on deeper self-modeling without
+  sacrificing restraint
