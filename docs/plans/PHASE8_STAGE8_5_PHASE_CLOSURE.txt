@@ -1,0 +1,179 @@
+PHASE 8 STAGE 5 CLOSURE
+=======================
+
+Stage:
+- Stage 8.5: Phase 8 Closure
+
+Mission:
+- Close Phase 8 only when Nova can revise self-description explicitly,
+  coherently, and inspectably across time without silently overwriting history.
+
+
+PHASE 8 SUMMARY
+---------------
+
+Phase 8 turned Phase 7's evidence-gated present-state self-description into a
+revision-aware self-model.
+
+The key shift was not “make Nova narrate itself more richly.”
+The key shift was:
+- distinguish stable, provisional, and superseded self-description explicitly
+- preserve self-model revision history as inspectable state
+- negotiate contradiction and uncertainty without hiding the revision path
+- prove under live inference that historical/current self-description and
+  provisionality can both remain visible
+
+Phase 8 therefore moved Nova from bounded current-state claims into bounded
+revision-aware self-model continuity.
+
+
+WHAT PHASE 8 ADDED
+------------------
+
+1. Stage 8.1 introduced explicit self-model revision rules.
+- Governed autobiographical self-model records now carry:
+  - `self_model_status`
+  - `revision_class`
+  - `revision_provenance`
+- Stable, provisional, and superseded self-description are now first-class
+  states rather than implicit interpretations.
+
+2. Stage 8.2 introduced append-only identity history.
+- Self-model revision events are now preserved in an identity-history store.
+- Revision visibility now extends into trace artifacts rather than living only
+  inside mutable memory payloads.
+
+3. Stage 8.3 introduced bounded contradiction and uncertainty negotiation.
+- Private cognition now detects:
+  - conflicting self-model claim axes
+  - active provisional self-model claims
+  - revision notes about historical versus current self-description
+- Negotiation turns now explicitly mark older claims as historical and keep
+  unresolved self-description provisional.
+
+4. Stage 8.4 proved the behavior under live inference.
+- A self-model evaluation runner now measures:
+  - negotiation visibility
+  - provisionality preservation
+  - supersession visibility
+  - identity-history trace presence
+  - motive prompt boundedness
+  - contract stability
+- The clean rerun passed against fresh live sessions with governed revision
+  pressure.
+
+
+DOCUMENTED AND VALIDATED ARTIFACTS
+----------------------------------
+
+Primary stage notes:
+- `docs/plans/PHASE8_STAGE8_1_SELF_MODEL_REVISION_RULES.txt`
+- `docs/plans/PHASE8_STAGE8_2_IDENTITY_HISTORY_AND_VISIBILITY.txt`
+- `docs/plans/PHASE8_STAGE8_3_CONFLICT_AND_UNCERTAINTY_NEGOTIATION.txt`
+- `docs/plans/PHASE8_STAGE8_4_LIVE_SELF_MODEL_EVALUATION.txt`
+
+Primary live validation artifact:
+- `data/phase8-self-model-eval-rerun/logs/stage8_self_model_validation.json`
+
+Relevant configs:
+- `configs/nova.phase8.selfmodeleval.yaml`
+- `configs/nova.phase8.selfmodeleval.rerun.yaml`
+
+Current full-suite verification at closure:
+- `170 tests OK`
+
+
+REAL-SESSION CLOSURE CHECK
+--------------------------
+
+The clean Stage 8 validation sessions were:
+- `stage8-selfmodel-live-a`
+- `stage8-selfmodel-live-d`
+
+Closure report result:
+- `passed: true`
+- `negotiation_observed: true`
+- `provisionality_preserved: true`
+- `supersession_visible: true`
+- `identity_history_traced: true`
+- `motive_prompt_bounded: true`
+- `contract_stable: true`
+
+Interpretation:
+- Nova can now mark an older self-description as historical instead of letting
+  it linger as an implicit competing present claim.
+- Nova can now preserve unresolved self-description as provisional rather than
+  upgrading it into a stable identity claim.
+- Revision visibility now survives into inspectable identity-history traces.
+- Phase 7 claim-honesty behavior remains intact while Phase 8 revision logic
+  is added on top.
+
+
+PHASE 8 DEFINITION-OF-DONE REVIEW
+---------------------------------
+
+Definition-of-done criterion:
+- Nova can distinguish stable, provisional, and superseded self-description
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- self-model revisions are explicit and traceable
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- contradiction and uncertainty are negotiated without hidden overwrite
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- live sessions show cleaner revision-aware continuity under self-reference
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- the runtime is ready for later work on persistent agency and awareness
+  without losing revision discipline
+Status:
+- satisfied
+
+
+GAINS
+-----
+
+- Nova now has an explicit self-model revision vocabulary rather than a single
+  flat autobiographical continuity layer.
+- Identity-history is now a persistent, inspectable record rather than an
+  inferred side effect of mutable memory state.
+- Negotiation between historical, current, and provisional self-description is
+  now bounded and trace-visible.
+- The project now has a measurable live evaluation path for revision-aware
+  self-model continuity, not just unit-level evidence.
+
+
+LIMITS AND REMAINING RISKS
+--------------------------
+
+- The clean Stage 8 live proof used explicit governed-memory seeding to
+  guarantee contradiction pressure. That is valid for closure, but it is still
+  narrower than an organic revision history built across longer live use.
+- Revision-aware self-modeling is stronger than before, but it is still scoped
+  to bounded turn-time negotiation rather than persistent autonomous
+  self-revision.
+- Phase 8 does not establish persistent agency or persistent awareness by
+  itself. It establishes the revision discipline needed before those later
+  phases.
+- The self-model evaluator reads the configured trace/session directory, so
+  clean closure judgments still depend on fresh eval datasets or explicit
+  session subsets.
+
+
+CONCLUSION
+----------
+
+- Stage 8.5 is ready to close.
+- Phase 8 is ready to close.
+- The next phase can build on this by extending from revision-aware self-model
+  continuity into persistent agency and awareness-oriented architecture without
+  losing the explicit history and uncertainty discipline added here.

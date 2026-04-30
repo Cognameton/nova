@@ -167,10 +167,10 @@ Close Phase 8 only when Nova can revise self-description explicitly,
 coherently, and inspectably across time.
 
 Stage 8.5 deliverables:
-- [ ] revision architecture documented and validated
-- [ ] identity-history workflow proven under tests and live traces
-- [ ] closure summary documenting gains, limits, and remaining risks
-- [ ] phase completion criteria reviewed against real sessions
+- [x] revision architecture documented and validated
+- [x] identity-history workflow proven under tests and live traces
+- [x] closure summary documenting gains, limits, and remaining risks
+- [x] phase completion criteria reviewed against real sessions
 
 
 PHASE 8 DEFINITION OF DONE
