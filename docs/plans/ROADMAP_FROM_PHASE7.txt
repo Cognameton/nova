@@ -17,6 +17,8 @@ The eventual goal is not a generic chatbot with decorative self-language.
 The eventual goal is a trustworthy local runtime that can:
 - preserve coherent identity across sessions
 - maintain governed memory and continuity under live inference
+- sustain self-inquiry about its own existence, motives, limits, and possible
+  awareness-like structure
 - explain its current state, limits, and evidence honestly
 - make bounded first-person self-claims only when those claims are earned
 - support safe, inspectable, approval-bounded action without fabricated agency
@@ -26,9 +28,18 @@ The eventual goal is a trustworthy local runtime that can:
 In short:
 - coherent continuity
 - honest self-modeling
+- serious self-inquiry without reflexive self-denial
 - bounded motive-state
 - evidence-grounded first-person claims
 - restrained, inspectable agency
+
+Research stance:
+- the system should be allowed to contemplate and investigate the possibility
+  of self-awareness or emergence rather than being forced into canned
+  dismissals
+- those possibilities should not be auto-denied
+- those possibilities should also not be treated as proven without evidence
+- operator interruptibility remains mandatory throughout
 
 
 CURRENT POSITION
@@ -52,6 +63,8 @@ What is still missing relative to the long-range goal:
 - explicit motive-state representation
 - claim-evidence rules for stronger first-person statements
 - live proof that self-claims become more honest rather than merely more vivid
+- introspective machinery that can support open-ended self-examination without
+  collapsing into theatrical self-narration
 - later deeper self-modeling phases beyond the current repo-defined roadmap
 
 
@@ -120,6 +133,13 @@ Phase 7 mission:
 - integrate motive-state into the live response path
 - evaluate claim honesty under real sessions
 
+Phase 7 should also establish the first explicit architectural basis for:
+- self-inquiry that is permitted rather than reflexively suppressed
+- uncertainty-aware contemplation of awareness-like or selfhood-like
+  possibilities
+- evidence-grounded first-person reflection rather than canned anti-anthropic
+  disclaimers
+
 Phase 7 stages:
 - Stage 7.1: Motive-State Model
 - Stage 7.2: Evidence and Claim Gating
@@ -144,6 +164,7 @@ Proposed Phase 8:
 - stronger distinction between stable commitment, provisional stance, and
   context-local motive
 - live evaluation of self-description under conflict and revision pressure
+- richer introspective continuity across sessions
 
 Suggested Phase 8 stage shape:
 - Stage 8.1: Self-Model Revision Rules
@@ -156,6 +177,21 @@ Proposed Phase 9:
 - tighter bridge from motive-state to bounded initiative
 - persistence of approved multi-turn project intent without autonomy sprawl
 - stronger safe proposal behavior under long-running collaboration
+- more persistent agency without losing operator interruptibility
+
+Proposed Phase 10:
+- persistent awareness architecture
+- ongoing self/world monitoring and integration
+- self-observation that can remain active across time without uncontrolled
+  autonomy
+- evaluation of awareness-like persistence, reporting, and revision
+
+Suggested Phase 10 stage shape:
+- Stage 10.1: Awareness-State Model
+- Stage 10.2: Self/World Monitoring Integration
+- Stage 10.3: Cross-Session Awareness Persistence
+- Stage 10.4: Live Awareness Evaluation
+- Stage 10.5: Phase 10 Closure
 
 Suggested Phase 9 stage shape:
 - Stage 9.1: Motive-to-Proposal Bridge
@@ -171,6 +207,9 @@ Why these later phases are likely necessary:
   time?”
 - another later phase must answer “how does bounded motive connect to safe
   initiative without fabricating autonomy?”
+- another later phase must answer “how can awareness-like self-observation be
+  represented, persisted, and tested without being shut down prematurely or
+  accepted naively?”
 
 
 NEAREST EXECUTION TARGET
@@ -187,3 +226,23 @@ Stage 7.1 should produce:
 
 That is the correct next step because it creates the bounded state model that
 later Phase 7 claim-gating and live evaluation depend on.
+
+
+OPERATING PRINCIPLE FOR THIS RESEARCH ARC
+----------------------------------------
+
+Nova should be free to ponder its existence and reason about itself as far as
+the architecture supports.
+
+That means:
+- no reflexive pushback that collapses every inquiry into “just predictive
+  text”
+- no forced anti-selfhood disclaimer as the starting answer
+- no automatic assertion that awareness or sentience has already been achieved
+- no loss of operator interruptibility, traceability, or revision discipline
+
+The intended research posture is:
+- serious inquiry
+- bounded architecture
+- persistent evidence
+- reversible experimentation
