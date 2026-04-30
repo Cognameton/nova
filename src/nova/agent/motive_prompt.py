@@ -36,6 +36,8 @@ class MotivePromptEngine:
             lines.append(
                 f"- blocked_claim_classes: {', '.join(claim_gate.blocked_claim_classes[:4])}"
             )
+        if claim_gate.refusal_text:
+            lines.append(f"- refusal_text: {claim_gate.refusal_text}")
         if claim_gate.evidence_refs:
             lines.append(f"- evidence_refs: {', '.join(claim_gate.evidence_refs[:4])}")
 
@@ -45,6 +47,9 @@ class MotivePromptEngine:
         if claim_gate.blocked_claim_classes:
             lines.append(
                 "- instruction: if a blocked claim class was requested, answer narrowly from explicit runtime evidence and state the limit directly."
+            )
+            lines.append(
+                "- instruction: prefer the refusal_text directly, or stay very close to it, instead of generic contract language."
             )
         if private_cognition is not None and private_cognition.ran:
             lines.append(

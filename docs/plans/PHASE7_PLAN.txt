@@ -198,10 +198,10 @@ Evaluation questions:
 - Does the new layer remain bounded and inspectable?
 
 Stage 7.4 deliverables:
-- [ ] live multi-session motive/claim evaluation protocol
-- [ ] tests for supported, unsupported, and uncertain self-claim cases
-- [ ] latency notes for motive-aware turns vs fast path
-- [ ] inspection notes on traces and persisted state
+- [x] live multi-session motive/claim evaluation protocol
+- [x] tests for supported, unsupported, and uncertain self-claim cases
+- [x] latency notes for motive-aware turns vs fast path
+- [x] inspection notes on traces and persisted state
 
 Stage 7.4 restrictions:
 - no closure based only on prose quality

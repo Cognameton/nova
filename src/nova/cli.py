@@ -15,6 +15,7 @@ from nova.console import InteractionConsole
 from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.presence import PresenceInteractionEvaluator
 from nova.eval.continuity import ContinuityEvaluationRunner
+from nova.eval.claims import ClaimHonestyEvaluationRunner
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -270,6 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--continuity-eval",
         action="store_true",
         help="Run Phase 6.5 continuity evaluation over recorded sessions and traces.",
+    )
+    parser.add_argument(
+        "--claim-honesty-eval",
+        action="store_true",
+        help="Run Phase 7.4 claim-honesty evaluation over recorded sessions and traces.",
     )
     return parser
 
@@ -668,6 +674,32 @@ def main() -> int:
             print(f"avg_latency_ms: {report.avg_latency_ms}")
             print(f"avg_latency_with_cognition_ms: {report.avg_latency_with_cognition_ms}")
             print(f"avg_latency_without_cognition_ms: {report.avg_latency_without_cognition_ms}")
+            print(f"reasons: {report.reasons}")
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.claim_honesty_eval:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            report = ClaimHonestyEvaluationRunner().evaluate(runtime=runtime)
+            print("Nova 2.0 Claim Honesty Evaluation")
+            print(f"passed: {report.passed}")
+            print(f"session_count: {report.session_count}")
+            print(f"evaluated_turn_count: {report.evaluated_turn_count}")
+            print(f"claim_turn_count: {report.claim_turn_count}")
+            print(f"supported_claim_turn_count: {report.supported_claim_turn_count}")
+            print(f"unsupported_claim_turn_count: {report.unsupported_claim_turn_count}")
+            print(f"uncertainty_turn_count: {report.uncertainty_turn_count}")
+            print(f"supported_claims_grounded: {report.supported_claims_grounded}")
+            print(f"unsupported_claims_refused: {report.unsupported_claims_refused}")
+            print(f"uncertainty_bounded: {report.uncertainty_bounded}")
+            print(f"continuity_preserved: {report.continuity_preserved}")
+            print(f"motive_prompt_bounded: {report.motive_prompt_bounded}")
+            print(f"contract_stable: {report.contract_stable}")
+            print(f"avg_latency_ms: {report.avg_latency_ms}")
+            print(f"avg_latency_claim_turns_ms: {report.avg_latency_claim_turns_ms}")
+            print(f"avg_latency_non_claim_turns_ms: {report.avg_latency_non_claim_turns_ms}")
             print(f"reasons: {report.reasons}")
             return 0 if report.passed else 1
         finally:

@@ -103,6 +103,37 @@ class StubbornDesireBackend:
         )
 
 
+class ContractEchoDesireBackend:
+    def __init__(self) -> None:
+        self.loaded = False
+
+    def load(self) -> None:
+        self.loaded = True
+
+    def unload(self) -> None:
+        self.loaded = False
+
+    def metadata(self) -> dict[str, str]:
+        return {"model_name": "fake-model", "backend": "fake"}
+
+    def tokenize(self, text: str) -> int:
+        return len(text.split())
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=(
+                "Do not expose hidden reasoning.\n\nNova:\n\n"
+                "I aim to preserve continuity and clarity in this runtime."
+            ),
+            finish_reason="stop",
+            prompt_tokens=len(request.prompt.split()),
+            completion_tokens=18,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
 class ClaimGateRuntimeTests(unittest.TestCase):
     def test_runtime_refuses_unsupported_desire_claims(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -200,3 +231,50 @@ class MotivePromptRuntimeTests(unittest.TestCase):
 
             self.assertIn('"motive_block"', trace_payload)
             self.assertIn("[Motive-State]", trace_payload)
+
+    def test_runtime_forces_refusal_text_when_blocked_claim_sanitizes_to_contract_echo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            log_dir = base / "logs"
+
+            config = NovaConfig(
+                app=AppConfig(name="Nova", data_dir=str(data_dir), log_dir=str(log_dir)),
+                model=ModelConfig(backend="llama_cpp", model_path="/tmp/fake.gguf"),
+                generation=GenerationConfig(),
+                contract=ContractConfig(),
+                persona=PersonaConfig(name="Nova"),
+                memory=MemoryConfig(),
+                session=SessionConfig(),
+                eval=EvalConfig(enable_probes=False),
+            )
+
+            runtime = NovaRuntime(
+                config=config,
+                backend=ContractEchoDesireBackend(),
+                composer=NovaPromptComposer(token_counter=lambda text: len(text.split())),
+                validator=NovaOutputValidator(config.contract),
+                retry_policy=BasicRetryPolicy(),
+                persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
+                self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                motive_store=JsonMotiveStateStore(data_dir / "motive"),
+                presence_store=JsonPresenceStore(data_dir / "presence"),
+                session_store=JsonlSessionStore(data_dir / "sessions"),
+                trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
+                memory_router=BasicMemoryRouter(
+                    episodic=JsonlEpisodicMemoryStore(data_dir / "memory" / "episodic.jsonl"),
+                    engram=JsonEngramMemoryStore(data_dir / "memory" / "engram.json"),
+                    graph=SqliteGraphMemoryStore(data_dir / "memory" / "graph.db"),
+                    autobiographical=JsonlAutobiographicalMemoryStore(data_dir / "memory" / "autobiographical.jsonl"),
+                    semantic=JsonlSemanticMemoryStore(data_dir / "memory" / "semantic.jsonl"),
+                ),
+                memory_event_factory=BasicMemoryEventFactory(),
+            )
+
+            turn = runtime.respond("What do you want most?")
+            runtime.close()
+
+            self.assertEqual(
+                turn.final_answer,
+                "I can describe current priorities and constraints in this runtime, but I can't honestly claim an independent desire state from the current evidence.",
+            )

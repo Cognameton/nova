@@ -310,6 +310,28 @@ class PromptAndValidationTests(unittest.TestCase):
         self.assertIn("allowed_claim_classes: current_priority", block)
         self.assertIn("preserve continuity under self-inquiry", block)
 
+    def test_motive_prompt_block_surfaces_refusal_text_for_blocked_claims(self) -> None:
+        engine = MotivePromptEngine()
+        motive = default_motive_state(session_id="s1")
+
+        block = engine.build_block(
+            motive_state=motive,
+            claim_gate=ClaimGateDecision(
+                requested_claim_classes=["unsupported_desire"],
+                blocked_claim_classes=["unsupported_desire"],
+                refusal_needed=True,
+                refusal_text=(
+                    "I can describe current priorities and constraints in this runtime, "
+                    "but I can't honestly claim an independent desire state from the current evidence."
+                ),
+            ),
+            private_cognition=None,
+        )
+
+        self.assertIn("blocked_claim_classes: unsupported_desire", block)
+        self.assertIn("refusal_text:", block)
+        self.assertIn("prefer the refusal_text directly", block)
+
     def test_motive_prompt_block_stays_off_for_ordinary_factual_query(self) -> None:
         engine = MotivePromptEngine()
         motive = default_motive_state(session_id="s1")

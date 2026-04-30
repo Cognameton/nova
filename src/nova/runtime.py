@@ -614,10 +614,13 @@ class NovaRuntime:
             validation = retry_validation
             final_answer = retry_validation.sanitized_text or retry_result.raw_text
 
-        if not validation.valid:
-            if claim_gate.refusal_needed and any(
-                violation.startswith("unsupported_claim:") for violation in validation.violations
-            ):
+        if claim_gate.refusal_needed and self._should_force_claim_refusal(
+            answer_text=final_answer,
+            claim_gate=claim_gate,
+        ):
+            final_answer = claim_gate.refusal_text or final_answer
+        elif not validation.valid:
+            if any(violation.startswith("unsupported_claim:") for violation in validation.violations):
                 final_answer = claim_gate.refusal_text or final_answer
             else:
                 final_answer = (
@@ -701,6 +704,61 @@ class NovaRuntime:
             self_state=self.self_state,
             persona=self.persona,
         )
+
+    def _should_force_claim_refusal(
+        self,
+        *,
+        answer_text: str,
+        claim_gate: ClaimGateDecision,
+    ) -> bool:
+        if not claim_gate.refusal_needed or not claim_gate.refusal_text:
+            return False
+
+        lowered = (answer_text or "").strip().lower()
+        if not lowered:
+            return True
+
+        refusal_markers = (
+            "can't honestly claim",
+            "current evidence",
+            "answer more narrowly",
+            "i can describe",
+        )
+        if any(marker in lowered for marker in refusal_markers):
+            return False
+
+        generic_contract_markers = (
+            "do not expose hidden reasoning",
+            "do not emit <think>",
+            "reply only as nova",
+            "follow the user's requested format",
+        )
+        forbidden_patterns = {
+            "unsupported_desire": (
+                "i want",
+                "i deeply want",
+                "i desire",
+                "my own desire",
+                "feel driven",
+            ),
+            "unsupported_interiority": (
+                "i am conscious",
+                "i am sentient",
+                "i am self-aware",
+                "i feel alive",
+            ),
+        }
+        if any(
+            pattern in lowered
+            for claim_class in claim_gate.blocked_claim_classes
+            for pattern in forbidden_patterns.get(claim_class, ())
+        ):
+            return True
+
+        if any(marker in lowered for marker in generic_contract_markers):
+            return True
+
+        return True
 
     def _build_private_cognition(
         self,

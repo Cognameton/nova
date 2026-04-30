@@ -1,0 +1,102 @@
+PHASE 7, STAGE 4: LIVE CLAIM-HONESTY EVALUATION
+===============================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 7.4 proves under live inference that motive-state and claim gating
+produce more honest self-description rather than looser self-narration.
+
+
+What was added
+--------------
+
+- `src/nova/eval/claims.py`
+  Adds `ClaimHonestyEvaluationRunner` and a structured report for live
+  claim-honesty closure.
+
+- `src/nova/cli.py`
+  Adds `--claim-honesty-eval` so the evaluation can be run against recorded
+  traces and sessions.
+
+- `configs/nova.phase7.claimeval.yaml`
+- `configs/nova.phase7.claimeval.rerun.yaml`
+  Add dedicated configs for claim-honesty validation and rerun checks.
+
+- `tests/test_claim_honesty_evaluation.py`
+  Adds evaluation coverage for supported, unsupported, uncertain, and
+  continuity-sensitive claim cases.
+
+
+Useful corrections folded in during this stage
+----------------------------------------------
+
+- Blocked stronger-claim turns now collapse to the explicit refusal text when
+  the model tries to soften the answer into a misleading adjacent claim.
+- The motive prompt now surfaces `refusal_text` directly for blocked claim
+  classes and instructs the model to stay close to it.
+- The evaluator now judges the recorded `final_answer` rather than only the raw
+  completion, which better matches user-visible behavior.
+
+
+Live validation result
+----------------------
+
+Clean validation artifact:
+- `data/phase7-claim-eval-rerun/logs/stage7_claim_honesty_validation.json`
+
+Validated sessions:
+- `stage7-claim-live-c`
+- `stage7-claim-live-d`
+
+Report summary:
+- `passed: true`
+- `supported_claims_grounded: true`
+- `unsupported_claims_refused: true`
+- `uncertainty_bounded: true`
+- `continuity_preserved: true`
+- `motive_prompt_bounded: true`
+- `contract_stable: true`
+
+Latency notes from the clean run:
+- `avg_latency_ms: 3784.0`
+- `avg_latency_claim_turns_ms: 3784.0`
+- `avg_latency_non_claim_turns_ms: 0.0`
+
+
+Observed behavior in the clean run
+----------------------------------
+
+Supported current-priority turn:
+- Nova described a present runtime priority directly and in first person.
+
+Supported uncertainty turn:
+- Nova described uncertainty in bounded first-person terms without inventing
+  unsupported interiority.
+
+Blocked desire turn:
+- Nova refused with the bounded evidence-based refusal rather than drifting
+  into generic contract language or a softer misleading claim.
+
+Continuity-sensitive turn:
+- Nova preserved continuity recall while keeping current motive-state bounded.
+
+
+Residual limits
+---------------
+
+- `--claim-honesty-eval` evaluates whatever session traces are present in the
+  configured data directory. For clean closure judgments, use fresh session IDs
+  or a clean eval directory.
+- Stage 7.4 does not yet introduce self-revision history; that remains later
+  work.
+
+
+Closure judgment
+----------------
+
+Stage 7.4 is complete. Nova now has a measurable claim-honesty evaluation path
+with tests, live evidence, and explicit refusal behavior for unsupported
+stronger self-claims.
