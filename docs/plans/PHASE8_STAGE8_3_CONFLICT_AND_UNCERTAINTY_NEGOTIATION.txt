@@ -1,0 +1,104 @@
+PHASE 8, STAGE 3: CONFLICT AND UNCERTAINTY NEGOTIATION
+======================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 8.3 adds a bounded negotiation path for self-model contradiction and
+provisionality so Nova can acknowledge revision and uncertainty explicitly
+instead of flattening conflict into generic self-description.
+
+
+What changed
+------------
+
+- `src/nova/agent/private_cognition.py`
+  Private cognition now detects:
+  - conflicting autobiographical claim axes
+  - active provisional self-model claim axes
+  - revision notes summarizing historical vs current self-description
+
+- `src/nova/types.py`
+  `PrivateCognitionPacket` now carries:
+  - `conflict_claim_axes`
+  - `provisional_claim_axes`
+  - `revision_notes`
+
+- `src/nova/agent/motive_prompt.py`
+  The motive block now renders for `self_model_negotiation` turns and
+  preserves bounded revision-aware instructions alongside existing continuity
+  and claim-gating instructions.
+
+
+Negotiation model added in Stage 8.3
+------------------------------------
+
+New cognition behavior:
+- historical vs active self-model conflicts are detected per autobiographical
+  `claim_axis`
+- active provisional self-model claims remain marked as provisional
+- negotiation turns now use `response_mode: self_model_negotiation`
+
+Prompt shaping added:
+- mark older conflicting self-description as historical
+- state the current active claim explicitly when present
+- keep provisional claims explicitly unsettled
+- do not upgrade provisionality into stable commitment
+
+
+Boundary preserved
+------------------
+
+Stage 8.3 does not create an open-ended introspection loop.
+
+The negotiation path is still:
+- deterministic
+- bounded to the existing private cognition packet
+- trace-visible
+- subordinate to Phase 7 claim-honesty rules
+
+Unsupported desire and interiority claims remain blocked exactly as before.
+
+
+What the new tests prove
+------------------------
+
+- self-model contradiction queries can trigger a negotiation packet
+- conflicting autobiographical claim axes are surfaced explicitly
+- provisional self-model claims remain provisional in negotiation state
+- prompt blocks now include bounded revision and provisionality instructions
+- Phase 7 claim gating and Phase 6 continuity evaluation remain intact
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_private_cognition`
+- `tests.test_prompt_and_validation`
+- `tests.test_claims`
+- `tests.test_continuity_evaluation`
+
+Full verification:
+- `166 tests OK`
+
+
+Limits
+------
+
+- Stage 8.3 adds negotiation state and prompt shaping, not live revision
+  evaluation yet
+- responses do not yet consume identity-history retrieval directly as a
+  separate surfaced block
+- contradiction resolution remains bounded and summary-like; it is not a free
+  reasoning transcript
+
+
+Closure judgment
+----------------
+
+Stage 8.3 is complete. Nova can now detect conflicting or provisional
+self-model claims and negotiate them explicitly in the bounded cognition path
+without weakening continuity or claim-honesty safeguards.

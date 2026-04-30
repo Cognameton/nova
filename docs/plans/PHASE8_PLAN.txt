@@ -129,10 +129,10 @@ Handle contradiction between prior self-description, current motive-state, and
 new evidence without flattening the conflict away.
 
 Stage 8.3 deliverables:
-- [ ] contradiction-detection rules for self-model claims
-- [ ] bounded negotiation path for uncertain or conflicting self-description
-- [ ] response shaping that marks revision and uncertainty explicitly
-- [ ] tests for conflict handling across sessions
+- [x] contradiction-detection rules for self-model claims
+- [x] bounded negotiation path for uncertain or conflicting self-description
+- [x] response shaping that marks revision and uncertainty explicitly
+- [x] tests for conflict handling across sessions
 
 Stage 8.3 restrictions:
 - no contradiction laundering through vague language

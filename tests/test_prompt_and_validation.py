@@ -361,6 +361,23 @@ class PromptAndValidationTests(unittest.TestCase):
         self.assertIn("active continuity memory remain authoritative", block)
         self.assertIn("must not replace governed continuity recall", block)
 
+    def test_motive_prompt_block_renders_for_self_model_negotiation(self) -> None:
+        engine = MotivePromptEngine()
+        motive = default_motive_state(session_id="s1")
+
+        block = engine.build_block(
+            motive_state=motive,
+            claim_gate=ClaimGateDecision(),
+            private_cognition=type(
+                "Packet",
+                (),
+                {"ran": True, "response_mode": "self_model_negotiation"},
+            )(),
+        )
+
+        self.assertIn("[Motive-State]", block)
+        self.assertIn("must not replace governed continuity recall", block)
+
 
 if __name__ == "__main__":
     unittest.main()

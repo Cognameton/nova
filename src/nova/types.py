@@ -158,6 +158,9 @@ class PrivateCognitionPacket:
     relevant_channels: list[str] = field(default_factory=list)
     governing_memory_ids: list[str] = field(default_factory=list)
     current_claims: list[str] = field(default_factory=list)
+    conflict_claim_axes: list[str] = field(default_factory=list)
+    provisional_claim_axes: list[str] = field(default_factory=list)
+    revision_notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

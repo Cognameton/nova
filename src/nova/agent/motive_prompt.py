@@ -71,7 +71,7 @@ class MotivePromptEngine:
         if (
             private_cognition is not None
             and private_cognition.ran
-            and private_cognition.response_mode == "continuity_recall"
+            and private_cognition.response_mode in {"continuity_recall", "self_model_negotiation"}
         ):
             return True
         return False
