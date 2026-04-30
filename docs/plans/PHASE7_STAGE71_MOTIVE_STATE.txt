@@ -1,0 +1,84 @@
+PHASE 7 STAGE 7.1 VALIDATION
+============================
+
+Stage:
+- Stage 7.1: Motive-State Model
+
+Mission:
+- Add a bounded motive-state representation so Nova can track current
+  priorities, active tensions, and local goals without collapsing those into
+  persona or durable self-state.
+
+
+WHAT CHANGED
+------------
+
+1. A new session-scoped `MotiveState` now exists.
+- Added `MotiveState` in `src/nova/types.py`.
+- Initial fields:
+  - `session_id`
+  - `current_priorities`
+  - `active_tensions`
+  - `local_goals`
+  - `claim_posture`
+  - `evidence_refs`
+  - `updated_at`
+
+2. Motive-state persistence now follows the same architectural style as other
+   bounded runtime state.
+- Added `src/nova/agent/motive.py`.
+- New store: `JsonMotiveStateStore`
+- Session files are written under:
+  - `data/.../motive/<session_id>.motive.json`
+- Load behavior is schema-tolerant and recovers cleanly from malformed JSON.
+
+3. Runtime construction and session loading now include motive-state.
+- `build_runtime()` now creates and passes a motive store.
+- `NovaRuntime.start()` loads motive-state after session creation.
+- New runtime helpers:
+  - `motive_status()`
+  - `update_motive()`
+
+4. Trace visibility is now explicit.
+- `TraceRecord` now includes `motive_state_snapshot`.
+- Runtime turn traces persist the current motive-state snapshot alongside
+  persona, self-state, prompt bundle, and private cognition data.
+
+5. Stage 7.1 preserves state separation.
+- Motive-state remains session-scoped.
+- Updating motive-state does not mutate `SelfState`.
+- Updating motive-state does not mutate `PresenceState`.
+
+
+TEST COVERAGE
+-------------
+
+Added/updated tests verify:
+- motive store creation and round-trip persistence
+- normalization of unknown claim posture values
+- tolerance for minor schema drift
+- recovery from malformed motive JSON
+- runtime motive updates do not mutate self-state or presence state
+- runtime traces include `motive_state_snapshot`
+
+Focused verification:
+- `tests.test_motive`
+- `tests.test_runtime_smoke`
+
+Full verification:
+- `144 tests OK`
+
+
+STAGE 7.1 STATUS
+----------------
+
+Stage 7.1 deliverables satisfied:
+- [x] MotiveState dataclass
+- [x] JSON persistence for session-scoped motive-state
+- [x] runtime load/update helpers
+- [x] trace visibility for motive-state snapshots
+- [x] tests for separation from SelfState and PresenceState
+
+Conclusion:
+- Stage 7.1 is ready to close.
+- The correct next step is Stage 7.2: Evidence and Claim Gating.

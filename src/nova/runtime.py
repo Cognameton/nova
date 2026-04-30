@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
+from nova.agent.motive import JsonMotiveStateStore
 from nova.agent.private_cognition import PrivateCognitionEngine
 from nova.agent.presence import JsonPresenceStore, PresenceState
 from nova.agent.stability import OrientationHistoryAnalyzer
@@ -35,7 +36,7 @@ from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.session import JsonlSessionStore
-from nova.types import PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
+from nova.types import MotiveState, PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
 
 
 def utc_now_iso() -> str:
@@ -57,6 +58,7 @@ class NovaRuntime:
         retry_policy: BasicRetryPolicy,
         persona_store: JsonPersonaStore,
         self_state_store: JsonSelfStateStore,
+        motive_store: JsonMotiveStateStore,
         presence_store: JsonPresenceStore,
         session_store: JsonlSessionStore,
         trace_logger: JsonlTraceLogger,
@@ -76,6 +78,7 @@ class NovaRuntime:
         self.retry_policy = retry_policy
         self.persona_store = persona_store
         self.self_state_store = self_state_store
+        self.motive_store = motive_store
         self.presence_store = presence_store
         self.session_store = session_store
         self.trace_logger = trace_logger
@@ -103,6 +106,7 @@ class NovaRuntime:
         self.session_id: str | None = None
         self.persona = None
         self.self_state = None
+        self.motive_state: MotiveState | None = None
         self.presence_state: PresenceState | None = None
 
     def start(self, *, session_id: str | None = None) -> str:
@@ -110,6 +114,7 @@ class NovaRuntime:
         self.self_state = self.self_state_store.load(persona=self.persona)
         self.backend.load()
         self.session_id = self.session_store.start_session(session_id=session_id)
+        self.motive_state = self.motive_store.load(session_id=self.session_id)
         self.presence_state = self.presence_store.load(session_id=self.session_id)
         if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
             for probe in self.probe_runner.run_startup_probes(
@@ -118,6 +123,13 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return self.session_id
+
+    def motive_status(self) -> MotiveState:
+        self._ensure_motive_loaded()
+        assert self.session_id is not None
+        if self.motive_state is None or self.motive_state.session_id != self.session_id:
+            self.motive_state = self.motive_store.load(session_id=self.session_id)
+        return self.motive_state
 
     def presence_status(self) -> PresenceState:
         self._ensure_presence_loaded()
@@ -173,6 +185,30 @@ class NovaRuntime:
         self.presence_store.save(presence)
         self.presence_state = presence
         return presence
+
+    def update_motive(
+        self,
+        *,
+        current_priorities: list[str] | None = None,
+        active_tensions: list[str] | None = None,
+        local_goals: list[str] | None = None,
+        claim_posture: str | None = None,
+        evidence_refs: list[str] | None = None,
+    ) -> MotiveState:
+        motive = self.motive_status()
+        if current_priorities is not None:
+            motive.current_priorities = list(current_priorities)
+        if active_tensions is not None:
+            motive.active_tensions = list(active_tensions)
+        if local_goals is not None:
+            motive.local_goals = list(local_goals)
+        if claim_posture is not None:
+            motive.claim_posture = claim_posture
+        if evidence_refs is not None:
+            motive.evidence_refs = list(evidence_refs)
+        self.motive_store.save(motive)
+        self.motive_state = motive
+        return motive
 
     def orientation_snapshot(self) -> OrientationSnapshot:
         self._ensure_state_loaded()
@@ -474,6 +510,7 @@ class NovaRuntime:
         assert self.session_id is not None
         assert self.persona is not None
         assert self.self_state is not None
+        assert self.motive_state is not None
 
         turn_id = uuid4().hex
         contract_rules = build_contract_rules(self.persona, self.config.contract)
@@ -607,6 +644,7 @@ class NovaRuntime:
             config_snapshot=self.config.snapshot(),
             persona_state_snapshot=self.persona.to_dict(),
             self_state_snapshot=self.self_state.to_dict(),
+            motive_state_snapshot=self.motive_state.to_dict(),
             prompt_bundle=prompt_bundle.to_dict(),
             private_cognition=private_cognition.to_dict(),
             generation_request=generation_request.to_dict(),
@@ -668,7 +706,14 @@ class NovaRuntime:
             self.persona = self.persona_store.load()
         if self.self_state is None:
             self.self_state = self.self_state_store.load(persona=self.persona)
+        self._ensure_motive_loaded()
         self._ensure_presence_loaded()
+
+    def _ensure_motive_loaded(self) -> None:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        if self.motive_state is None or self.motive_state.session_id != self.session_id:
+            self.motive_state = self.motive_store.load(session_id=self.session_id)
 
     def _ensure_presence_loaded(self) -> None:
         if self.session_id is None:

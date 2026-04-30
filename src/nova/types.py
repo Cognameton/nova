@@ -46,6 +46,21 @@ class SelfState:
 
 
 @dataclass(slots=True)
+class MotiveState:
+    schema_version: str = SCHEMA_VERSION
+    session_id: str = ""
+    current_priorities: list[str] = field(default_factory=list)
+    active_tensions: list[str] = field(default_factory=list)
+    local_goals: list[str] = field(default_factory=list)
+    claim_posture: str = "conservative"
+    evidence_refs: list[str] = field(default_factory=list)
+    updated_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class MemoryEvent:
     schema_version: str = SCHEMA_VERSION
     event_id: str = ""
@@ -222,6 +237,7 @@ class TraceRecord:
     config_snapshot: dict[str, Any] = field(default_factory=dict)
     persona_state_snapshot: dict[str, Any] = field(default_factory=dict)
     self_state_snapshot: dict[str, Any] = field(default_factory=dict)
+    motive_state_snapshot: dict[str, Any] = field(default_factory=dict)
     prompt_bundle: dict[str, Any] = field(default_factory=dict)
     private_cognition: dict[str, Any] = field(default_factory=dict)
     generation_request: dict[str, Any] = field(default_factory=dict)

@@ -115,11 +115,11 @@ Allowed initial claim postures:
 - uncertainty-marked
 
 Stage 7.1 deliverables:
-- [ ] MotiveState dataclass
-- [ ] JSON persistence for session-scoped motive-state
-- [ ] runtime load/update helpers
-- [ ] trace visibility for motive-state snapshots
-- [ ] tests for separation from SelfState and PresenceState
+- [x] MotiveState dataclass
+- [x] JSON persistence for session-scoped motive-state
+- [x] runtime load/update helpers
+- [x] trace visibility for motive-state snapshots
+- [x] tests for separation from SelfState and PresenceState
 
 Stage 7.1 restrictions:
 - no autonomous loop

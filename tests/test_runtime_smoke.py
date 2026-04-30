@@ -17,6 +17,7 @@ from nova.config import (
 )
 from nova.eval.probes import BasicProbeRunner
 from nova.logging.traces import JsonlTraceLogger
+from nova.agent.motive import JsonMotiveStateStore
 from nova.agent.presence import JsonPresenceStore
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
 from nova.memory.engram import JsonEngramMemoryStore
@@ -101,6 +102,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 retry_policy=BasicRetryPolicy(),
                 persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -126,6 +128,7 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertTrue((log_dir / "probes.jsonl").exists())
             trace_payload = (log_dir / "traces" / f"{turn.session_id}.jsonl").read_text(encoding="utf-8")
             self.assertIn('"private_cognition"', trace_payload)
+            self.assertIn('"motive_state_snapshot"', trace_payload)
             self.assertIn("[Private Cognition]", trace_payload)
 
     def test_backend_check_runs_generation_without_persisting_turns(self) -> None:
@@ -153,6 +156,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 retry_policy=BasicRetryPolicy(),
                 persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -205,6 +209,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 retry_policy=BasicRetryPolicy(),
                 persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -254,6 +259,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 retry_policy=BasicRetryPolicy(),
                 persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from nova.agent.action import ActionApproval
+from nova.agent.motive import JsonMotiveStateStore
 from nova.agent.presence import JsonPresenceStore
 from nova.console import InteractionConsole
 from nova.config import DEFAULT_CONFIG_PATH, load_config
@@ -61,6 +62,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
 
     persona_store = JsonPersonaStore(data_dir / "persona_state.json")
     self_state_store = JsonSelfStateStore(data_dir / "self_state.json")
+    motive_store = JsonMotiveStateStore(data_dir / "motive")
     presence_store = JsonPresenceStore(data_dir / "presence")
     session_store = JsonlSessionStore(sessions_dir)
     trace_logger = JsonlTraceLogger(traces_dir, probe_path=probes_path)
@@ -96,6 +98,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
         "log_dir": log_dir,
         "persona_store": persona_store,
         "self_state_store": self_state_store,
+        "motive_store": motive_store,
         "presence_store": presence_store,
         "session_store": session_store,
         "trace_logger": trace_logger,
@@ -116,6 +119,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     memory_router = components["memory_router"]
     persona_store = components["persona_store"]
     self_state_store = components["self_state_store"]
+    motive_store = components["motive_store"]
     presence_store = components["presence_store"]
     session_store = components["session_store"]
 
@@ -139,6 +143,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         retry_policy=retry_policy,
         persona_store=persona_store,
         self_state_store=self_state_store,
+        motive_store=motive_store,
         presence_store=presence_store,
         session_store=session_store,
         trace_logger=trace_logger,
