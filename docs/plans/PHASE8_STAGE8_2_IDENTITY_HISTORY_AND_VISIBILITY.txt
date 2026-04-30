@@ -1,0 +1,119 @@
+PHASE 8, STAGE 2: IDENTITY HISTORY AND REVISION VISIBILITY
+==========================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 8.2 makes self-model revision history inspectable across sessions and
+traces instead of leaving revision meaning buried only inside current
+autobiographical payload metadata.
+
+
+What changed
+------------
+
+- `src/nova/memory/identity_history.py`
+  Adds an append-only `JsonlIdentityHistoryStore` for governed self-model
+  revision entries.
+
+- `src/nova/memory/autobiographical.py`
+  Governed autobiographical writes now emit append-only identity-history
+  entries for both new active revisions and archived superseded records.
+
+- `src/nova/memory/maintenance.py`
+  Autobiographical maintenance writes now forward identity-history entries into
+  trace logs.
+
+- `src/nova/logging/traces.py`
+  Adds dedicated identity-history trace logging at
+  `*.identity-history.jsonl`.
+
+- `src/nova/cli.py`
+  Runtime/maintenance construction now includes the identity-history store, and
+  maintenance actions report `identity_history_written`.
+
+- `src/nova/types.py`
+  Adds `IdentityHistoryEntry` plus `identity_history_events` on `TraceRecord`.
+
+
+Identity-history model
+----------------------
+
+Append-only file:
+- `data/.../memory/identity_history.jsonl`
+
+Per-entry fields:
+- `entry_id`
+- `timestamp`
+- `session_id`
+- `source_event_id`
+- `governance_scope`
+- `claim_axis`
+- `self_model_status`
+- `revision_class`
+- `text`
+- `superseded_by`
+- `prior_event_ids`
+- `provenance`
+
+The history store resolves latest visibility per `source_event_id`, so queries
+for `stable` vs `superseded` reflect current revision state rather than every
+intermediate append.
+
+
+Visibility added in Stage 8.2
+-----------------------------
+
+- identity history is now persisted separately from the mutable
+  autobiographical JSONL
+- superseded records are not deleted from history
+- maintenance writes emit per-session trace artifacts:
+  - `logs/traces/<session>.identity-history.jsonl`
+- maintenance CLI surfaces:
+  - `identity_history_written`
+
+
+What the new tests prove
+------------------------
+
+- append-only identity-history entries are written for governed self-model
+  revisions
+- latest-state history queries distinguish active stable from superseded
+  self-description
+- superseded entries retain `superseded_by` visibility
+- maintenance writes emit identity-history trace records
+- CLI maintenance actions report identity-history write counts
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_memory_maintenance`
+- `tests.test_cli_maintenance`
+- `tests.test_session_and_memory`
+- `tests.test_orientation`
+- `tests.test_orientation_context_pressure`
+
+Full verification:
+- `162 tests OK`
+
+
+Limits
+------
+
+- Stage 8.2 provides history visibility, not contradiction negotiation
+- runtime response prompts do not yet reason over identity-history directly;
+  that belongs to later Phase 8 work
+- trace visibility currently comes from maintenance/reflection-driven
+  autobiographical writes, not a separate live revision evaluator yet
+
+
+Closure judgment
+----------------
+
+Stage 8.2 is complete. Nova now has append-only identity-history persistence,
+latest-state visibility for active vs superseded self-description, and trace
+artifacts that expose revision events explicitly.

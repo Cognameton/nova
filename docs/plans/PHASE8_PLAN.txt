@@ -110,10 +110,10 @@ Mission:
 Make self-model revision history inspectable across sessions and traces.
 
 Stage 8.2 deliverables:
-- [ ] append-only identity-history representation
-- [ ] trace visibility for revision events
-- [ ] retrieval support for active vs superseded self-description
-- [ ] tests for visibility and provenance
+- [x] append-only identity-history representation
+- [x] trace visibility for revision events
+- [x] retrieval support for active vs superseded self-description
+- [x] tests for visibility and provenance
 
 Stage 8.2 restrictions:
 - no deletion of superseded self-claims

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
+from nova.memory.identity_history import JsonlIdentityHistoryStore
 from nova.memory.governance import (
     SELF_MODEL_STATUS_PROVISIONAL,
     SELF_MODEL_STATUS_STABLE,
@@ -17,21 +19,29 @@ from nova.memory.governance import (
     payload_governance_scope,
     payload_support_count,
 )
-from nova.types import MemoryEvent, RetrievalHit
+from nova.types import IdentityHistoryEntry, MemoryEvent, RetrievalHit
 
 
 class JsonlAutobiographicalMemoryStore:
     """Privileged autobiographical memory for identity-relevant records."""
 
-    def __init__(self, path: str | Path):
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        identity_history_store: JsonlIdentityHistoryStore | None = None,
+    ):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.touch(exist_ok=True)
+        self.identity_history_store = identity_history_store
+        self._recent_history_entries: list[IdentityHistoryEntry] = []
 
     def add(self, event: MemoryEvent) -> None:
         event = normalize_governed_event(event)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event.to_dict(), ensure_ascii=False) + "\n")
+        self._record_identity_history(event)
 
     def merge_reflection_candidate(self, event: MemoryEvent) -> MemoryEvent:
         event = normalize_governed_event(event)
@@ -56,7 +66,9 @@ class JsonlAutobiographicalMemoryStore:
                 merged = self._merge_payload(payload, event)
                 payloads[index] = merged
                 self._save_payloads(payloads)
-                return self._event_from_payload(merged)
+                merged_event = self._event_from_payload(merged)
+                self._record_identity_history(merged_event)
+                return merged_event
 
         if conflict_ids:
             event.metadata["supersedes_conflicts"] = conflict_ids
@@ -131,6 +143,11 @@ class JsonlAutobiographicalMemoryStore:
 
     def list_events(self) -> list[MemoryEvent]:
         return [self._event_from_payload(payload) for payload in self._load_events()]
+
+    def consume_recent_history_entries(self) -> list[IdentityHistoryEntry]:
+        entries = list(self._recent_history_entries)
+        self._recent_history_entries.clear()
+        return entries
 
     def apply_maintenance_decisions(self, decisions: list[object]) -> int:
         decision_map = {
@@ -243,6 +260,7 @@ class JsonlAutobiographicalMemoryStore:
         )
         payload["retention"] = "archived"
         payload["metadata"] = metadata
+        self._record_identity_history(self._event_from_payload(payload))
         return payload
 
     def _event_from_payload(self, payload: dict) -> MemoryEvent:
@@ -272,3 +290,27 @@ class JsonlAutobiographicalMemoryStore:
             for token in text.replace("\n", " ").lower().split()
             if token.strip()
         }
+
+    def _record_identity_history(self, event: MemoryEvent) -> None:
+        metadata = dict(event.metadata or {})
+        if "self_model_status" not in metadata or "revision_class" not in metadata:
+            return
+        entry = IdentityHistoryEntry(
+            entry_id=uuid4().hex,
+            timestamp=event.timestamp,
+            session_id=event.session_id,
+            source_event_id=event.event_id,
+            governance_scope=str(metadata.get("governance_scope", "") or ""),
+            claim_axis=str(metadata.get("claim_axis", "") or ""),
+            self_model_status=str(metadata.get("self_model_status", "") or ""),
+            revision_class=str(metadata.get("revision_class", "") or ""),
+            text=event.text,
+            superseded_by=metadata.get("superseded_by"),
+            prior_event_ids=list(
+                dict(metadata.get("revision_provenance", {}) or {}).get("prior_event_ids", []) or []
+            ),
+            provenance=dict(metadata.get("revision_provenance", {}) or {}),
+        )
+        self._recent_history_entries.append(entry)
+        if self.identity_history_store is not None:
+            self.identity_history_store.append(entry)

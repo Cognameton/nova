@@ -93,3 +93,18 @@ class JsonlTraceLogger:
         }
         with action_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def log_identity_history(
+        self,
+        *,
+        session_id: str,
+        entry: dict,
+    ) -> None:
+        history_path = self.trace_dir / f"{session_id}.identity-history.jsonl"
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "entry": entry,
+        }
+        with history_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")

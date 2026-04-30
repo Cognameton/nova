@@ -24,6 +24,7 @@ from nova.agent.orientation_eval import OrientationStabilityEvaluator
 from nova.agent.stability import OrientationHistoryAnalyzer
 from nova.agent.stability import ContextPressureOrientationChecker, MaintenanceOrientationStabilityChecker
 from nova.memory.maintenance import MemoryMaintenanceRunner
+from nova.memory.identity_history import JsonlIdentityHistoryStore
 from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
 from nova.memory.engram import JsonEngramMemoryStore
@@ -76,8 +77,10 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
         enabled=config.memory.engram_enabled,
     )
     graph_store = SqliteGraphMemoryStore(memory_dir / "graph.db")
+    identity_history_store = JsonlIdentityHistoryStore(memory_dir / "identity_history.jsonl")
     autobiographical_store = JsonlAutobiographicalMemoryStore(
-        memory_dir / "autobiographical.jsonl"
+        memory_dir / "autobiographical.jsonl",
+        identity_history_store=identity_history_store,
     )
     semantic_store = JsonlSemanticMemoryStore(memory_dir / "semantic.jsonl")
     memory_router = BasicMemoryRouter(
@@ -93,6 +96,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
         graph=graph_store,
         autobiographical=autobiographical_store,
         semantic=semantic_store,
+        trace_logger=trace_logger,
     )
 
     return {
@@ -109,6 +113,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
         "engram_store": engram_store,
         "graph_store": graph_store,
         "autobiographical_store": autobiographical_store,
+        "identity_history_store": identity_history_store,
         "semantic_store": semantic_store,
         "memory_router": memory_router,
         "maintenance_runner": maintenance_runner,
@@ -298,10 +303,12 @@ def run_maintenance_action(*, config_override: str | None = None, action: str) -
         }
     if action == "write-autobiographical":
         candidates = runner.write_autobiographical_candidates()
+        identity_history_store = components["identity_history_store"]
         return {
             "action": action,
             "written": len(candidates),
             "event_ids": [candidate.event_id for candidate in candidates],
+            "identity_history_written": len(identity_history_store.list_entries()),
         }
     if action == "apply":
         decisions = runner.build_plan()
@@ -314,10 +321,12 @@ def run_maintenance_action(*, config_override: str | None = None, action: str) -
         autobiographical_candidates = runner.write_autobiographical_candidates()
         decisions = runner.build_plan()
         applied = runner.apply_plan(decisions)
+        identity_history_store = components["identity_history_store"]
         return {
             "action": action,
             "semantic_written": len(semantic_candidates),
             "autobiographical_written": len(autobiographical_candidates),
+            "identity_history_written": len(identity_history_store.list_entries()),
             "applied": applied,
             "summary": runner.summarize_plan(),
         }

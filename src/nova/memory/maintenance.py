@@ -240,6 +240,7 @@ class MemoryMaintenanceRunner:
         semantic: Any | None = None,
         planner: MemoryMaintenancePlanner | None = None,
         reflection_engine: ReflectionEngine | None = None,
+        trace_logger: Any | None = None,
     ):
         self.stores = {
             "episodic": episodic,
@@ -250,6 +251,7 @@ class MemoryMaintenanceRunner:
         }
         self.planner = planner or MemoryMaintenancePlanner()
         self.reflection_engine = reflection_engine or ReflectionEngine()
+        self.trace_logger = trace_logger
 
     def collect_events(self) -> list[MemoryEvent]:
         events: list[MemoryEvent] = []
@@ -315,12 +317,21 @@ class MemoryMaintenanceRunner:
         if autobiographical_store is None or not hasattr(autobiographical_store, "add"):
             return candidates
         written: list[MemoryEvent] = []
+        history_entries: list[Any] = []
         for candidate in candidates:
             if hasattr(autobiographical_store, "merge_reflection_candidate"):
                 written.append(autobiographical_store.merge_reflection_candidate(candidate))
             else:
                 autobiographical_store.add(candidate)
                 written.append(candidate)
+            if hasattr(autobiographical_store, "consume_recent_history_entries"):
+                history_entries.extend(autobiographical_store.consume_recent_history_entries())
+        if self.trace_logger is not None:
+            for entry in history_entries:
+                self.trace_logger.log_identity_history(
+                    session_id=entry.session_id or "maintenance",
+                    entry=entry.to_dict(),
+                )
         return written
 
     def apply_plan(

@@ -248,6 +248,26 @@ class TurnRecord:
 
 
 @dataclass(slots=True)
+class IdentityHistoryEntry:
+    schema_version: str = SCHEMA_VERSION
+    entry_id: str = ""
+    timestamp: str = ""
+    session_id: str = ""
+    source_event_id: str = ""
+    governance_scope: str = ""
+    claim_axis: str = ""
+    self_model_status: str = ""
+    revision_class: str = ""
+    text: str = ""
+    superseded_by: str | None = None
+    prior_event_ids: list[str] = field(default_factory=list)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class TraceRecord:
     schema_version: str = SCHEMA_VERSION
     session_id: str = ""
@@ -265,6 +285,7 @@ class TraceRecord:
     validation_result: dict[str, Any] = field(default_factory=dict)
     retries: list[dict[str, Any]] = field(default_factory=list)
     persisted_memory_events: list[dict[str, Any]] = field(default_factory=list)
+    identity_history_events: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

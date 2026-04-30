@@ -9,11 +9,13 @@ from nova.memory.consolidation import SemanticConsolidator
 from nova.memory.engram import JsonEngramMemoryStore
 from nova.memory.episodic import JsonlEpisodicMemoryStore
 from nova.memory.graph import SqliteGraphMemoryStore
+from nova.memory.identity_history import JsonlIdentityHistoryStore
 from nova.memory.maintenance import MemoryMaintenancePlanner, MemoryMaintenanceRunner
 from nova.memory.reflection import ReflectionEngine
 from nova.memory.semantic import JsonlSemanticMemoryStore
 from nova.persona.defaults import default_self_state
 from nova.persona.store import JsonSelfStateStore
+from nova.logging.traces import JsonlTraceLogger
 from nova.types import MemoryEvent
 
 
@@ -912,7 +914,11 @@ class MemoryMaintenanceTests(unittest.TestCase):
 
     def test_autobiographical_store_archives_conflicting_continuity_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            store = JsonlAutobiographicalMemoryStore(Path(tmpdir) / "autobiographical.jsonl")
+            history_store = JsonlIdentityHistoryStore(Path(tmpdir) / "identity_history.jsonl")
+            store = JsonlAutobiographicalMemoryStore(
+                Path(tmpdir) / "autobiographical.jsonl",
+                identity_history_store=history_store,
+            )
 
             first = MemoryEvent(
                 event_id="a1",
@@ -976,6 +982,75 @@ class MemoryMaintenanceTests(unittest.TestCase):
                 newer.metadata.get("revision_provenance", {}).get("prior_event_ids"),
                 ["a1"],
             )
+            history_entries = history_store.list_entries(governance_scope="identity-continuity")
+            self.assertEqual(len(history_entries), 2)
+            history_by_source = {entry.source_event_id: entry for entry in history_entries}
+            self.assertEqual(history_by_source["a1"].self_model_status, "superseded")
+            self.assertEqual(history_by_source["a2"].self_model_status, "stable")
+            self.assertEqual(history_by_source["a2"].prior_event_ids, ["a1"])
+
+    def test_identity_history_store_lists_active_and_superseded_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            history_store = JsonlIdentityHistoryStore(Path(tmpdir) / "identity_history.jsonl")
+            autobiographical = JsonlAutobiographicalMemoryStore(
+                Path(tmpdir) / "autobiographical.jsonl",
+                identity_history_store=history_store,
+            )
+
+            autobiographical.merge_reflection_candidate(
+                MemoryEvent(
+                    event_id="a1",
+                    timestamp="2026-04-18T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="autobiographical",
+                    kind="reflection_note",
+                    text="Identity continuity: I stay direct-first when preserving continuity.",
+                    summary="Identity continuity: I stay direct-first when preserving continuity.",
+                    tags=["autobiographical", "identity-continuity"],
+                    importance=0.85,
+                    confidence=0.9,
+                    continuity_weight=0.95,
+                    source="reflection",
+                    metadata={
+                        "theme": "identity-continuity",
+                        "claim_axis": "answer-style",
+                        "claim_value": "direct-first",
+                        "source_event_ids": ["e1", "e2"],
+                    },
+                )
+            )
+            autobiographical.merge_reflection_candidate(
+                MemoryEvent(
+                    event_id="a2",
+                    timestamp="2026-04-19T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t2",
+                    channel="autobiographical",
+                    kind="continuity_shift",
+                    text="Identity shift: I now prefer broader contextual framing before directness.",
+                    summary="Identity shift: I now prefer broader contextual framing before directness.",
+                    tags=["autobiographical", "identity-continuity"],
+                    importance=0.88,
+                    confidence=0.95,
+                    continuity_weight=0.96,
+                    source="reflection",
+                    metadata={
+                        "theme": "identity-continuity",
+                        "claim_axis": "answer-style",
+                        "claim_value": "broad-context-first",
+                        "source_event_ids": ["e3", "e4", "e5"],
+                    },
+                )
+            )
+
+            active_entries = history_store.list_entries(self_model_status="stable")
+            superseded_entries = history_store.list_entries(self_model_status="superseded")
+            self.assertEqual(len(active_entries), 1)
+            self.assertEqual(active_entries[0].source_event_id, "a2")
+            self.assertEqual(len(superseded_entries), 1)
+            self.assertEqual(superseded_entries[0].source_event_id, "a1")
+            self.assertEqual(superseded_entries[0].superseded_by, "a2")
 
     def test_self_model_revision_rules_do_not_mutate_durable_self_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1014,6 +1089,63 @@ class MemoryMaintenanceTests(unittest.TestCase):
             reloaded = self_state_store.load()
             self.assertEqual(reloaded.identity_summary, "Nova is continuity-focused.")
             self.assertEqual(reloaded.stability_version, 4)
+
+    def test_maintenance_runner_logs_identity_history_trace_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            episodic = JsonlEpisodicMemoryStore(base / "episodic.jsonl")
+            semantic = JsonlSemanticMemoryStore(base / "semantic.jsonl")
+            identity_history = JsonlIdentityHistoryStore(base / "identity_history.jsonl")
+            autobiographical = JsonlAutobiographicalMemoryStore(
+                base / "autobiographical.jsonl",
+                identity_history_store=identity_history,
+            )
+            trace_logger = JsonlTraceLogger(base / "traces", probe_path=base / "probes.jsonl")
+
+            episodic.add(
+                MemoryEvent(
+                    event_id="e1",
+                    timestamp="2026-04-18T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="I used to answer more broadly, but I now focus on continuity first.",
+                    tags=["assistant", "turn", "identity"],
+                    importance=0.86,
+                    confidence=1.0,
+                    continuity_weight=0.94,
+                    source="nova",
+                )
+            )
+            episodic.add(
+                MemoryEvent(
+                    event_id="e2",
+                    timestamp="2026-04-18T00:01:00Z",
+                    session_id="s1",
+                    turn_id="t2",
+                    channel="episodic",
+                    kind="assistant_message",
+                    text="I have shifted toward shorter answers that preserve continuity more reliably.",
+                    tags=["assistant", "turn", "identity", "value"],
+                    importance=0.88,
+                    confidence=1.0,
+                    continuity_weight=0.95,
+                    source="nova",
+                )
+            )
+
+            runner = MemoryMaintenanceRunner(
+                episodic=episodic,
+                semantic=semantic,
+                autobiographical=autobiographical,
+                trace_logger=trace_logger,
+            )
+
+            written = runner.write_autobiographical_candidates()
+            self.assertEqual(len(written), 1)
+            trace_payload = (base / "traces" / "s1.identity-history.jsonl").read_text(encoding="utf-8")
+            self.assertIn('"revision_class": "superseding-revision"', trace_payload)
 
     def test_runner_can_apply_retention_mutations_to_stores(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
