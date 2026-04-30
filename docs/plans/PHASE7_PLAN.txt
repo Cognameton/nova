@@ -151,10 +151,10 @@ Example disallowed direction without stronger evidence:
 - “I feel driven by my own independent desire.”
 
 Stage 7.2 deliverables:
-- [ ] explicit claim classes and evidence thresholds
-- [ ] refusal path for unsupported stronger claims
-- [ ] tests for allowed vs blocked first-person claim cases
-- [ ] trace notes showing why a claim was allowed or refused
+- [x] explicit claim classes and evidence thresholds
+- [x] refusal path for unsupported stronger claims
+- [x] tests for allowed vs blocked first-person claim cases
+- [x] trace notes showing why a claim was allowed or refused
 
 Stage 7.2 restrictions:
 - no unsupported desire language

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from nova.agent.claims import ClaimGateEngine
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.motive import JsonMotiveStateStore
@@ -36,7 +37,7 @@ from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.session import JsonlSessionStore
-from nova.types import MotiveState, PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
+from nova.types import ClaimGateDecision, MotiveState, PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
 
 
 def utc_now_iso() -> str:
@@ -69,6 +70,7 @@ class NovaRuntime:
         orientation_engine: SelfOrientationEngine | None = None,
         orientation_evaluator: OrientationStabilityEvaluator | None = None,
         private_cognition_engine: PrivateCognitionEngine | None = None,
+        claim_gate_engine: ClaimGateEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -91,6 +93,7 @@ class NovaRuntime:
             threshold=self.config.eval.orientation_stability_threshold
         )
         self.private_cognition_engine = private_cognition_engine or PrivateCognitionEngine()
+        self.claim_gate_engine = claim_gate_engine or ClaimGateEngine()
         self.tool_registry = tool_registry or default_tool_registry()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
@@ -527,6 +530,7 @@ class NovaRuntime:
             top_k_by_channel=retrieval_plan.top_k_by_channel,
         )
         memory_hits = self.retrieval_policy.rerank_hits(memory_hits)
+        claim_gate = self._build_claim_gate(user_text=user_text)
         private_cognition = self._build_private_cognition(
             user_text=user_text,
             memory_hits=memory_hits,
@@ -552,6 +556,7 @@ class NovaRuntime:
             user_text=user_text,
             persona=self.persona,
             contract_rules=contract_rules,
+            claim_gate=claim_gate,
         )
         validation = self.finalize_validation(
             validation=validation,
@@ -581,6 +586,7 @@ class NovaRuntime:
                 user_text=user_text,
                 persona=self.persona,
                 contract_rules=contract_rules,
+                claim_gate=claim_gate,
             )
             retry_validation = self.finalize_validation(
                 validation=retry_validation,
@@ -600,9 +606,14 @@ class NovaRuntime:
             final_answer = retry_validation.sanitized_text or retry_result.raw_text
 
         if not validation.valid:
-            final_answer = (
-                "I need to restate that more clearly. Please try again."
-            )
+            if claim_gate.refusal_needed and any(
+                violation.startswith("unsupported_claim:") for violation in validation.violations
+            ):
+                final_answer = claim_gate.refusal_text or final_answer
+            else:
+                final_answer = (
+                    "I need to restate that more clearly. Please try again."
+                )
 
         turn = TurnRecord(
             session_id=self.session_id,
@@ -618,7 +629,10 @@ class NovaRuntime:
             latency_ms=generation_result.latency_ms,
             model_id=generation_result.model_id,
             retry_count=retry_count,
-            notes={"private_cognition": private_cognition.to_dict()},
+            notes={
+                "private_cognition": private_cognition.to_dict(),
+                "claim_gate": claim_gate.to_dict(),
+            },
         )
         self.session_store.append_turn(turn)
 
@@ -645,6 +659,7 @@ class NovaRuntime:
             persona_state_snapshot=self.persona.to_dict(),
             self_state_snapshot=self.self_state.to_dict(),
             motive_state_snapshot=self.motive_state.to_dict(),
+            claim_gate=claim_gate.to_dict(),
             prompt_bundle=prompt_bundle.to_dict(),
             private_cognition=private_cognition.to_dict(),
             generation_request=generation_request.to_dict(),
@@ -662,6 +677,21 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return turn
+
+    def _build_claim_gate(
+        self,
+        *,
+        user_text: str,
+    ) -> ClaimGateDecision:
+        assert self.persona is not None
+        assert self.self_state is not None
+        assert self.motive_state is not None
+        return self.claim_gate_engine.assess(
+            user_text=user_text,
+            motive_state=self.motive_state,
+            self_state=self.self_state,
+            persona=self.persona,
+        )
 
     def _build_private_cognition(
         self,

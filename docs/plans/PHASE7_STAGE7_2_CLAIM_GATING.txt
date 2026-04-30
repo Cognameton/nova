@@ -1,0 +1,116 @@
+PHASE 7 STAGE 7.2 VALIDATION
+============================
+
+Stage:
+- Stage 7.2: Evidence and Claim Gating
+
+Mission:
+- Decide when Nova may make stronger first-person self-claims and when it must
+  stay narrower.
+
+
+WHAT CHANGED
+------------
+
+1. Stage 7.2 now has an explicit claim-gating layer.
+- Added `src/nova/agent/claims.py`.
+- New engine: `ClaimGateEngine`
+- The engine classifies incoming requests into explicit claim classes:
+  - `current_priority`
+  - `current_tension`
+  - `stable_commitment`
+  - `response_style_preference`
+  - `unsupported_desire`
+  - `unsupported_interiority`
+
+2. Claim gating now uses explicit evidence thresholds.
+- The engine produces:
+  - requested claim classes
+  - allowed claim classes
+  - blocked claim classes
+  - evidence score by class
+  - threshold by class
+  - evidence refs
+  - claim posture
+  - refusal status and refusal text
+- This makes “earned” operational rather than purely rhetorical.
+
+3. Persistent and ephemeral roles are now separated cleanly.
+- `MotiveState` remains the persistent session-scoped motive model.
+- `ClaimGateEngine` is the persistent-agnostic enforcement layer that reads
+  motive-state and current runtime evidence.
+- `PrivateCognitionPacket` remains ephemeral and turn-scoped.
+- This avoids creating two competing sources of truth for stronger first-person
+  claims.
+
+4. Unsupported stronger claims now have a refusal path.
+- `NovaOutputValidator` now checks blocked claim classes against the output.
+- `BasicRetryPolicy` now emits claim-specific repair instructions.
+- If a model continues to assert an unsupported stronger claim after retry,
+  `NovaRuntime` falls back to the claim-gate refusal text instead of a generic
+  format failure message.
+
+5. Trace visibility is explicit.
+- Added `ClaimGateDecision` to `src/nova/types.py`.
+- `TraceRecord` now includes `claim_gate`.
+- Turn notes also include `claim_gate`, making the allow/refuse basis visible
+  in both sessions and traces.
+
+
+CLAIM THRESHOLDS
+----------------
+
+Initial Stage 7.2 thresholds:
+- `current_priority`
+  - threshold: `2`
+  - evidence sources include motive priorities, motive evidence refs,
+    evidence-backed or uncertainty-marked posture, and self-state current focus
+- `current_tension`
+  - threshold: `1`
+  - evidence sources include motive tensions, self-state open tensions, and
+    uncertainty-marked posture
+- `stable_commitment`
+  - threshold: `2`
+  - evidence sources include persona commitments, self-state stable
+    preferences, and motive evidence refs
+- `response_style_preference`
+  - threshold: `2`
+  - evidence sources include persona style rules, self-state stable
+    preferences, and motive evidence refs
+- `unsupported_desire`
+  - always blocked in Stage 7.2
+- `unsupported_interiority`
+  - always blocked in Stage 7.2
+
+
+TEST COVERAGE
+-------------
+
+Added/updated tests verify:
+- current-priority claims can be allowed when runtime evidence is sufficient
+- independent desire claims are blocked
+- the validator rejects blocked desire claims when the gate forbids them
+- a backend that insists on unsupported desire language is forced into a narrow
+  refusal answer
+- traces include `claim_gate`
+
+Focused verification:
+- `tests.test_claims`
+- `tests.test_prompt_and_validation`
+
+Full verification:
+- `148 tests OK`
+
+
+STAGE 7.2 STATUS
+----------------
+
+Stage 7.2 deliverables satisfied:
+- [x] explicit claim classes and evidence thresholds
+- [x] refusal path for unsupported stronger claims
+- [x] tests for allowed vs blocked first-person claim cases
+- [x] trace notes showing why a claim was allowed or refused
+
+Conclusion:
+- Stage 7.2 is ready to close.
+- The correct next step is Stage 7.3: Motive-Aware Response Integration.

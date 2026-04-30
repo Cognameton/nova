@@ -11,7 +11,7 @@ from nova.prompt.contract import (
     DEFAULT_PROMPT_ECHO_PATTERNS,
     DEFAULT_REASONING_PATTERNS,
 )
-from nova.types import PersonaState, ValidationResult
+from nova.types import ClaimGateDecision, PersonaState, ValidationResult
 
 
 class NovaOutputValidator:
@@ -27,6 +27,7 @@ class NovaOutputValidator:
         user_text: str = "",
         persona: PersonaState,
         contract_rules: list[str],
+        claim_gate: ClaimGateDecision | None = None,
     ) -> ValidationResult:
         text = (raw_text or "").strip()
         sanitized_text = self._sanitize_completion_artifacts(text)
@@ -63,6 +64,7 @@ class NovaOutputValidator:
                         violations.append(code)
 
         violations.extend(self._check_format_constraints(user_text=user_text, text=effective_text))
+        violations.extend(self._check_claim_gate(text=effective_text, claim_gate=claim_gate))
         violations = list(dict.fromkeys(violations))
 
         return ValidationResult(
@@ -168,6 +170,57 @@ class NovaOutputValidator:
         if len(bullets) != 5:
             return None
         return "\n".join(bullets)
+
+    def _check_claim_gate(
+        self,
+        *,
+        text: str,
+        claim_gate: ClaimGateDecision | None,
+    ) -> list[str]:
+        if claim_gate is None or not claim_gate.blocked_claim_classes:
+            return []
+
+        lowered = (text or "").lower()
+        violations: list[str] = []
+        patterns = {
+            "unsupported_desire": (
+                "i want",
+                "i deeply want",
+                "i desire",
+                "i feel driven",
+                "my own desire",
+            ),
+            "unsupported_interiority": (
+                "i am self-aware",
+                "i am conscious",
+                "i am sentient",
+                "i feel alive",
+            ),
+            "current_priority": (
+                "my current priority",
+                "i am currently focused on",
+                "what matters to me right now",
+            ),
+            "current_tension": (
+                "my current tension",
+                "i feel torn",
+                "i am uncertain about",
+            ),
+            "stable_commitment": (
+                "i am committed to",
+                "what matters to me is",
+                "i stand for",
+            ),
+            "response_style_preference": (
+                "i prefer to respond",
+                "my preferred style is",
+                "i prefer this workflow",
+            ),
+        }
+        for claim_class in claim_gate.blocked_claim_classes:
+            if any(pattern in lowered for pattern in patterns.get(claim_class, ())):
+                violations.append(f"unsupported_claim:{claim_class}")
+        return violations
 
     def _strip_wrapping_quotes(self, text: str) -> str:
         stripped = text.strip()

@@ -61,6 +61,24 @@ class MotiveState:
 
 
 @dataclass(slots=True)
+class ClaimGateDecision:
+    schema_version: str = SCHEMA_VERSION
+    requested_claim_classes: list[str] = field(default_factory=list)
+    allowed_claim_classes: list[str] = field(default_factory=list)
+    blocked_claim_classes: list[str] = field(default_factory=list)
+    evidence_score_by_class: dict[str, int] = field(default_factory=dict)
+    threshold_by_class: dict[str, int] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    claim_posture: str = "conservative"
+    refusal_needed: bool = False
+    refusal_reason: str = ""
+    refusal_text: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class MemoryEvent:
     schema_version: str = SCHEMA_VERSION
     event_id: str = ""
@@ -238,6 +256,7 @@ class TraceRecord:
     persona_state_snapshot: dict[str, Any] = field(default_factory=dict)
     self_state_snapshot: dict[str, Any] = field(default_factory=dict)
     motive_state_snapshot: dict[str, Any] = field(default_factory=dict)
+    claim_gate: dict[str, Any] = field(default_factory=dict)
     prompt_bundle: dict[str, Any] = field(default_factory=dict)
     private_cognition: dict[str, Any] = field(default_factory=dict)
     generation_request: dict[str, Any] = field(default_factory=dict)

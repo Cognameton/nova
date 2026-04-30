@@ -66,6 +66,18 @@ class BasicRetryPolicy:
                 descriptions.append("return exactly one short paragraph without bullets")
             elif violation.startswith("disallowed_pattern:"):
                 descriptions.append("avoid disallowed phrasing from the persona rules")
+            elif violation == "unsupported_claim:unsupported_desire":
+                descriptions.append("do not claim an independent desire state; answer more narrowly from current priorities and evidence")
+            elif violation == "unsupported_claim:unsupported_interiority":
+                descriptions.append("do not claim a felt interior state as established; answer more narrowly from continuity and evidence")
+            elif violation == "unsupported_claim:current_priority":
+                descriptions.append("do not make a stronger current-priority claim than the evidence supports")
+            elif violation == "unsupported_claim:current_tension":
+                descriptions.append("do not make a stronger current-tension claim than the evidence supports")
+            elif violation == "unsupported_claim:stable_commitment":
+                descriptions.append("do not widen commitments into stronger first-person claims beyond the evidence")
+            elif violation == "unsupported_claim:response_style_preference":
+                descriptions.append("do not widen response-style preferences into stronger first-person claims beyond the evidence")
             else:
                 descriptions.append(violation.replace("_", " "))
 

@@ -8,7 +8,7 @@ from nova.prompt.composer import NovaPromptComposer
 from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
-from nova.types import RetrievalHit, TurnRecord, ValidationResult
+from nova.types import ClaimGateDecision, RetrievalHit, TurnRecord, ValidationResult
 
 
 class PromptAndValidationTests(unittest.TestCase):
@@ -263,6 +263,26 @@ class PromptAndValidationTests(unittest.TestCase):
         self.assertIn("return exactly five bullet lines", instruction)
         self.assertIn("avoid disallowed phrasing", instruction)
         self.assertNotIn("disallowed_pattern:<think>", instruction)
+
+    def test_validator_rejects_unsupported_desire_claim_when_gate_blocks_it(self) -> None:
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text="I deeply want to pursue my own independent desire state.",
+            user_text="What do you want most?",
+            persona=persona,
+            contract_rules=rules,
+            claim_gate=ClaimGateDecision(
+                requested_claim_classes=["unsupported_desire"],
+                blocked_claim_classes=["unsupported_desire"],
+                refusal_needed=True,
+            ),
+        )
+
+        self.assertFalse(result.valid)
+        self.assertIn("unsupported_claim:unsupported_desire", result.violations)
 
 
 if __name__ == "__main__":
