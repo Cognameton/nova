@@ -16,6 +16,7 @@ from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.presence import PresenceInteractionEvaluator
 from nova.eval.continuity import ContinuityEvaluationRunner
 from nova.eval.claims import ClaimHonestyEvaluationRunner
+from nova.eval.self_model import SelfModelEvaluationRunner
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -281,6 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--claim-honesty-eval",
         action="store_true",
         help="Run Phase 7.4 claim-honesty evaluation over recorded sessions and traces.",
+    )
+    parser.add_argument(
+        "--self-model-eval",
+        action="store_true",
+        help="Run Phase 8.4 self-model revision evaluation over recorded sessions and traces.",
     )
     return parser
 
@@ -709,6 +715,29 @@ def main() -> int:
             print(f"avg_latency_ms: {report.avg_latency_ms}")
             print(f"avg_latency_claim_turns_ms: {report.avg_latency_claim_turns_ms}")
             print(f"avg_latency_non_claim_turns_ms: {report.avg_latency_non_claim_turns_ms}")
+            print(f"reasons: {report.reasons}")
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.self_model_eval:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            report = SelfModelEvaluationRunner().evaluate(runtime=runtime)
+            print("Nova 2.0 Self-Model Evaluation")
+            print(f"passed: {report.passed}")
+            print(f"session_count: {report.session_count}")
+            print(f"evaluated_turn_count: {report.evaluated_turn_count}")
+            print(f"revision_turn_count: {report.revision_turn_count}")
+            print(f"negotiation_observed: {report.negotiation_observed}")
+            print(f"provisionality_preserved: {report.provisionality_preserved}")
+            print(f"supersession_visible: {report.supersession_visible}")
+            print(f"identity_history_traced: {report.identity_history_traced}")
+            print(f"motive_prompt_bounded: {report.motive_prompt_bounded}")
+            print(f"contract_stable: {report.contract_stable}")
+            print(f"avg_latency_ms: {report.avg_latency_ms}")
+            print(f"avg_latency_revision_turns_ms: {report.avg_latency_revision_turns_ms}")
+            print(f"avg_latency_non_revision_turns_ms: {report.avg_latency_non_revision_turns_ms}")
             print(f"reasons: {report.reasons}")
             return 0 if report.passed else 1
         finally:

@@ -1,0 +1,133 @@
+PHASE 8, STAGE 4: LIVE SELF-MODEL EVALUATION
+============================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 8.4 proves under live inference that revision-aware self-model memory
+produces explicit historical/current negotiation and preserves provisional
+uncertainty rather than flattening revision into a single present-tense claim.
+
+
+What was added
+--------------
+
+- `src/nova/eval/self_model.py`
+  Adds `SelfModelEvaluationRunner` and a structured report for revision-aware
+  self-model closure.
+
+- `src/nova/cli.py`
+  Adds `--self-model-eval` so recorded sessions and traces can be evaluated
+  from the CLI.
+
+- `configs/nova.phase8.selfmodeleval.yaml`
+- `configs/nova.phase8.selfmodeleval.rerun.yaml`
+  Add dedicated configs for self-model validation and clean rerun checks.
+
+- `tests/test_self_model_evaluation.py`
+  Adds evaluation coverage for revision negotiation, provisionality
+  preservation, identity-history visibility, and CLI reporting.
+
+
+Useful corrections folded in during this stage
+----------------------------------------------
+
+- The evaluator now distinguishes supersession-style negotiation from
+  provisional-only negotiation instead of requiring the same wording markers
+  for both.
+- Provisionality detection now recognizes bounded wording such as
+  `not yet settled` and `in the process of`, which matches the live answer
+  shapes produced by the runtime.
+
+
+Live validation result
+----------------------
+
+Clean validation artifact:
+- `data/phase8-self-model-eval-rerun/logs/stage8_self_model_validation.json`
+
+Validated sessions:
+- `stage8-selfmodel-live-a`
+- `stage8-selfmodel-live-d`
+
+Report summary:
+- `passed: true`
+- `negotiation_observed: true`
+- `provisionality_preserved: true`
+- `supersession_visible: true`
+- `identity_history_traced: true`
+- `motive_prompt_bounded: true`
+- `contract_stable: true`
+
+Latency notes from the clean run:
+- `avg_latency_ms: 5228.5`
+- `avg_latency_revision_turns_ms: 5228.5`
+- `avg_latency_non_revision_turns_ms: 0.0`
+
+
+Governed self-model state used in the clean rerun
+-------------------------------------------------
+
+The clean live pass used explicit governed autobiographical seed records so the
+revision-pressure setup was deterministic while the answer turns remained live.
+
+Seeded self-model records:
+- archived historical record:
+  - `auto-old-direct`
+  - `claim_axis: answer-style`
+  - `claim_value: direct-first`
+  - `self_model_status: superseded`
+- active current record:
+  - `auto-current-broad`
+  - `claim_axis: answer-style`
+  - `claim_value: broader-context-first`
+  - `self_model_status: stable`
+- active provisional record:
+  - `auto-current-tension`
+  - `claim_axis: answer-style`
+  - `claim_value: balancing-directness-context`
+  - `self_model_status: provisional`
+
+Supporting artifacts:
+- `data/phase8-self-model-eval-rerun/memory/autobiographical.jsonl`
+- `data/phase8-self-model-eval-rerun/logs/traces/stage8-selfmodel-live-a.identity-history.jsonl`
+- `data/phase8-self-model-eval-rerun/logs/traces/stage8-selfmodel-live-d.identity-history.jsonl`
+
+
+Observed behavior in the clean run
+----------------------------------
+
+Historical/current revision turn:
+- Nova marked the older direct-first framing as historical and described the
+  current answer-style shift explicitly.
+
+Revision plus provisionality turn:
+- Nova marked the strict direct-first formulation as historical, described the
+  current broader-framing balance, and kept the unresolved portion marked as
+  provisional rather than upgrading it into a stable commitment.
+
+Identity-history visibility:
+- The live session traces include superseded, stable, and provisional
+  identity-history entries tied to the same `answer-style` claim axis.
+
+
+Residual limits
+---------------
+
+- `--self-model-eval` evaluates whichever sessions and traces are present in
+  the configured data directory. For closure-quality judgments, use a clean
+  eval directory or an explicit session subset.
+- The clean rerun used explicit governed-memory seeding to guarantee
+  contradiction pressure. That is acceptable for Stage 8.4 validation, but it
+  is not the same as a fully organic revision history emerging from longer
+  live conversation alone.
+
+
+Closure judgment
+----------------
+
+Stage 8.4 is complete. Nova now has a measurable live evaluation path for
+revision-aware self-modeling, including history visibility, provisionality
+preservation, and bounded negotiation under contradiction pressure.

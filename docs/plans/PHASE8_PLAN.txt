@@ -148,10 +148,10 @@ Prove under live inference that revision-aware self-modeling improves honesty
 and continuity under contradiction pressure.
 
 Stage 8.4 deliverables:
-- [ ] live multi-session revision-pressure evaluation protocol
-- [ ] tests for revision, retraction, contradiction, and uncertainty cases
-- [ ] latency notes for revision-aware turns vs fast path
-- [ ] inspection notes on revision traces and persisted history
+- [x] live multi-session revision-pressure evaluation protocol
+- [x] tests for revision, retraction, contradiction, and uncertainty cases
+- [x] latency notes for revision-aware turns vs fast path
+- [x] inspection notes on revision traces and persisted history
 
 Stage 8.4 restrictions:
 - no closure based only on eloquent self-description
