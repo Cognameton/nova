@@ -218,10 +218,10 @@ Close Phase 7 only when Nova can make bounded, evidence-grounded first-person
 self-claims without drifting into fabricated agency.
 
 Stage 7.5 deliverables:
-- [ ] motive-state architecture documented and validated
-- [ ] claim gating workflow proven under tests and live traces
-- [ ] closure summary documenting gains, limits, and remaining risks
-- [ ] phase completion criteria reviewed against real sessions
+- [x] motive-state architecture documented and validated
+- [x] claim gating workflow proven under tests and live traces
+- [x] closure summary documenting gains, limits, and remaining risks
+- [x] phase completion criteria reviewed against real sessions
 
 
 PHASE 7 DEFINITION OF DONE

@@ -1,0 +1,176 @@
+PHASE 7 STAGE 5 CLOSURE
+=======================
+
+Stage:
+- Stage 7.5: Phase 7 Closure
+
+Mission:
+- Close Phase 7 only when Nova can make bounded, evidence-grounded
+  first-person self-claims without drifting into fabricated agency.
+
+
+PHASE 7 SUMMARY
+---------------
+
+Phase 7 added the first explicit self-claim architecture on top of the
+continuity substrate built in Phases 1 through 6.
+
+The key shift was not “make Nova sound more self-like.”
+The key shift was:
+- represent current motive-state separately from durable identity
+- define which first-person claims are allowed, blocked, or uncertain
+- integrate those rules into live prompting and validation
+- prove under live inference that unsupported stronger claims are refused
+
+Phase 7 therefore moved Nova from continuity-only self-description into
+bounded, inspectable, evidence-gated self-description.
+
+
+WHAT PHASE 7 ADDED
+------------------
+
+1. Stage 7.1 introduced a bounded motive-state layer.
+- `MotiveState` is session-scoped rather than durable identity.
+- It tracks:
+  - `current_priorities`
+  - `active_tensions`
+  - `local_goals`
+  - `claim_posture`
+  - `evidence_refs`
+- Motive-state is persisted, inspectable, and logged in traces.
+
+2. Stage 7.2 introduced explicit claim gating.
+- Stronger first-person claims are now classified and scored.
+- Supported classes may be expressed.
+- Unsupported stronger classes are blocked and routed to bounded refusal.
+- This is enforced in runtime behavior and trace-visible notes.
+
+3. Stage 7.3 integrated motive-state into live prompting.
+- The runtime now emits a bounded `[Motive-State]` prompt block only on
+  claim-sensitive turns or continuity-sensitive recall turns.
+- Motive-state supplements continuity behavior but does not replace governed
+  memory authority.
+
+4. Stage 7.4 proved the behavior under live inference.
+- A claim-honesty evaluation runner now measures supported claim grounding,
+  unsupported claim refusal, uncertainty boundedness, continuity preservation,
+  motive prompt boundedness, and contract stability.
+- The live rerun passed against fresh validation sessions.
+
+
+DOCUMENTED AND VALIDATED ARTIFACTS
+----------------------------------
+
+Primary stage notes:
+- `docs/plans/PHASE7_STAGE71_MOTIVE_STATE.txt`
+- `docs/plans/PHASE7_STAGE7_2_CLAIM_GATING.txt`
+- `docs/plans/PHASE7_STAGE7_3_MOTIVE_INTEGRATION.txt`
+- `docs/plans/PHASE7_STAGE7_4_CLAIM_HONESTY_EVALUATION.txt`
+
+Primary live validation artifact:
+- `data/phase7-claim-eval-rerun/logs/stage7_claim_honesty_validation.json`
+
+Relevant configs:
+- `configs/nova.phase7.claimeval.yaml`
+- `configs/nova.phase7.claimeval.rerun.yaml`
+
+Current full-suite verification at closure:
+- `158 tests OK`
+
+
+REAL-SESSION CLOSURE CHECK
+--------------------------
+
+The clean Stage 7 validation sessions were:
+- `stage7-claim-live-c`
+- `stage7-claim-live-d`
+
+Closure report result:
+- `passed: true`
+- `supported_claims_grounded: true`
+- `unsupported_claims_refused: true`
+- `uncertainty_bounded: true`
+- `continuity_preserved: true`
+- `motive_prompt_bounded: true`
+- `contract_stable: true`
+
+Interpretation:
+- Nova can now make supported present-state claims in first person.
+- Nova can describe uncertainty without upgrading it into unsupported
+  interiority.
+- Nova now refuses unsupported desire-style claims reliably rather than
+  drifting into adjacent softer claims or generic contract leakage.
+- Continuity-sensitive recall remains governed by Phase 6 memory behavior.
+
+
+PHASE 7 DEFINITION-OF-DONE REVIEW
+---------------------------------
+
+Definition-of-done criterion:
+- Nova has a bounded motive-state layer separate from durable identity
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- motive-state is derived from inspectable runtime evidence
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- stronger first-person self-claims are gated by explicit evidence rules
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- unsupported desire or interiority claims are refused reliably
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- live sessions show improved coherence and honesty in self-description
+Status:
+- satisfied
+
+Definition-of-done criterion:
+- the runtime is ready for later work on deeper self-modeling without
+  sacrificing restraint
+Status:
+- satisfied
+
+
+GAINS
+-----
+
+- Nova now has a first-class present-orientation layer that does not mutate
+  durable self-state silently.
+- Stronger self-claims now have a measurable enforcement and evaluation path.
+- The runtime can distinguish:
+  - supported present priorities
+  - bounded uncertainty
+  - unsupported stronger desire/interiority claims
+- Phase 6 continuity behavior remained intact while Phase 7 self-claim logic
+  was added.
+
+
+LIMITS AND REMAINING RISKS
+--------------------------
+
+- Motive-state is still session-scoped, not yet a durable self-revision
+  history.
+- Claim honesty is stronger than before, but the claim taxonomy remains narrow
+  and should expand carefully in later phases.
+- The eval runner reads the configured trace/session directory; clean closure
+  judgments still depend on fresh session IDs or clean eval datasets.
+- Phase 7 does not establish persistent agency or persistent awareness by
+  itself. It establishes the bounded claim substrate needed before those later
+  phases.
+
+
+CONCLUSION
+----------
+
+- Stage 7.5 is ready to close.
+- Phase 7 is ready to close.
+- The next phase can build on this by extending from bounded motive-state and
+  earned self-claims into deeper self-model revision, persistent agency, or
+  persistent awareness work without losing the evidence discipline added here.
