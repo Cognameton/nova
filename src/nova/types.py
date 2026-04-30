@@ -169,6 +169,7 @@ class PromptBundle:
     turn_id: str
     persona_block: str
     self_state_block: str
+    motive_block: str
     private_cognition_block: str
     memory_blocks: dict[str, str]
     recent_turns_block: str

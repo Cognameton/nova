@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from nova.agent.claims import ClaimGateEngine
+from nova.agent.motive_prompt import MotivePromptEngine
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.motive import JsonMotiveStateStore
@@ -71,6 +72,7 @@ class NovaRuntime:
         orientation_evaluator: OrientationStabilityEvaluator | None = None,
         private_cognition_engine: PrivateCognitionEngine | None = None,
         claim_gate_engine: ClaimGateEngine | None = None,
+        motive_prompt_engine: MotivePromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -94,6 +96,7 @@ class NovaRuntime:
         )
         self.private_cognition_engine = private_cognition_engine or PrivateCognitionEngine()
         self.claim_gate_engine = claim_gate_engine or ClaimGateEngine()
+        self.motive_prompt_engine = motive_prompt_engine or MotivePromptEngine()
         self.tool_registry = tool_registry or default_tool_registry()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
@@ -535,9 +538,15 @@ class NovaRuntime:
             user_text=user_text,
             memory_hits=memory_hits,
         )
+        motive_block = self.motive_prompt_engine.build_block(
+            motive_state=self.motive_state,
+            claim_gate=claim_gate,
+            private_cognition=private_cognition,
+        )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,
+            motive_block=motive_block,
             private_cognition_block=self.private_cognition_engine.build_prompt_block(private_cognition),
             memory_hits=memory_hits,
             recent_turns=recent_turns,

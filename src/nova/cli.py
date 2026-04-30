@@ -9,6 +9,7 @@ from typing import Any
 from nova.agent.action import ActionApproval
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.motive import JsonMotiveStateStore
+from nova.agent.motive_prompt import MotivePromptEngine
 from nova.agent.presence import JsonPresenceStore
 from nova.console import InteractionConsole
 from nova.config import DEFAULT_CONFIG_PATH, load_config
@@ -136,6 +137,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         threshold=config.eval.orientation_stability_threshold
     )
     claim_gate_engine = ClaimGateEngine()
+    motive_prompt_engine = MotivePromptEngine()
 
     return NovaRuntime(
         config=config,
@@ -156,6 +158,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         orientation_engine=orientation_engine,
         orientation_evaluator=orientation_evaluator,
         claim_gate_engine=claim_gate_engine,
+        motive_prompt_engine=motive_prompt_engine,
     )
 
 

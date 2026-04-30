@@ -171,11 +171,11 @@ Integrate motive-state and claim gating into the live response path without
 breaking Phase 6 continuity and contract guarantees.
 
 Stage 7.3 deliverables:
-- [ ] motive-aware prompt block or equivalent bounded response input
-- [ ] integration with private cognition and continuity recall paths
-- [ ] response shaping that prefers earned self-description over generic
+- [x] motive-aware prompt block or equivalent bounded response input
+- [x] integration with private cognition and continuity recall paths
+- [x] response shaping that prefers earned self-description over generic
   self-narration
-- [ ] regression tests for contract obedience and continuity preservation
+- [x] regression tests for contract obedience and continuity preservation
 
 Stage 7.3 restrictions:
 - no unbounded self-reasoning loop

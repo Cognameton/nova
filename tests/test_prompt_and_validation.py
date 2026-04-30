@@ -4,6 +4,8 @@ import unittest
 
 from nova.config import ContractConfig
 from nova.persona.defaults import default_persona_state, default_self_state
+from nova.agent.motive import default_motive_state
+from nova.agent.motive_prompt import MotivePromptEngine
 from nova.prompt.composer import NovaPromptComposer
 from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
@@ -20,6 +22,7 @@ class PromptAndValidationTests(unittest.TestCase):
         bundle = composer.compose(
             persona=persona,
             self_state=self_state,
+            motive_block="[Motive-State]\n- claim_posture: evidence-backed",
             private_cognition_block="[Private Cognition]\n- response_mode: continuity_recall",
             memory_hits=[
                 RetrievalHit(channel="episodic", text="Past memory", score=0.9, kind="note")
@@ -44,6 +47,7 @@ class PromptAndValidationTests(unittest.TestCase):
 
         self.assertIn("[Persona]", bundle.full_prompt)
         self.assertIn("[Self-State]", bundle.full_prompt)
+        self.assertIn("[Motive-State]", bundle.full_prompt)
         self.assertIn("[Private Cognition]", bundle.full_prompt)
         self.assertIn("[Memory:episodic]", bundle.full_prompt)
         self.assertIn("[Recent Conversation]", bundle.full_prompt)
@@ -283,6 +287,57 @@ class PromptAndValidationTests(unittest.TestCase):
 
         self.assertFalse(result.valid)
         self.assertIn("unsupported_claim:unsupported_desire", result.violations)
+
+    def test_motive_prompt_block_surfaces_allowed_priority_claims(self) -> None:
+        engine = MotivePromptEngine()
+        motive = default_motive_state(session_id="s1")
+        motive.claim_posture = "evidence-backed"
+        motive.current_priorities = ["preserve continuity under self-inquiry"]
+        motive.evidence_refs = ["motive.current_priorities"]
+
+        block = engine.build_block(
+            motive_state=motive,
+            claim_gate=ClaimGateDecision(
+                requested_claim_classes=["current_priority"],
+                allowed_claim_classes=["current_priority"],
+                evidence_refs=["motive.current_priorities"],
+                claim_posture="evidence-backed",
+            ),
+            private_cognition=None,
+        )
+
+        self.assertIn("[Motive-State]", block)
+        self.assertIn("allowed_claim_classes: current_priority", block)
+        self.assertIn("preserve continuity under self-inquiry", block)
+
+    def test_motive_prompt_block_stays_off_for_ordinary_factual_query(self) -> None:
+        engine = MotivePromptEngine()
+        motive = default_motive_state(session_id="s1")
+
+        block = engine.build_block(
+            motive_state=motive,
+            claim_gate=ClaimGateDecision(),
+            private_cognition=None,
+        )
+
+        self.assertEqual(block, "")
+
+    def test_motive_prompt_block_defers_to_continuity_memory_when_active(self) -> None:
+        engine = MotivePromptEngine()
+        motive = default_motive_state(session_id="s1")
+
+        block = engine.build_block(
+            motive_state=motive,
+            claim_gate=ClaimGateDecision(requested_claim_classes=["current_priority"]),
+            private_cognition=type(
+                "Packet",
+                (),
+                {"ran": True, "response_mode": "continuity_recall"},
+            )(),
+        )
+
+        self.assertIn("active continuity memory remain authoritative", block)
+        self.assertIn("must not replace governed continuity recall", block)
 
 
 if __name__ == "__main__":

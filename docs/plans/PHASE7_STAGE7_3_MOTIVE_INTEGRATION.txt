@@ -1,0 +1,81 @@
+PHASE 7 STAGE 7.3 VALIDATION
+============================
+
+Stage:
+- Stage 7.3: Motive-Aware Response Integration
+
+Mission:
+- Integrate motive-state and claim gating into the live response path without
+  breaking Phase 6 continuity and contract guarantees.
+
+
+WHAT CHANGED
+------------
+
+1. Stage 7.3 now has a bounded motive-aware prompt layer.
+- Added `src/nova/agent/motive_prompt.py`.
+- New engine: `MotivePromptEngine`
+- The engine builds a `[Motive-State]` prompt block rather than mutating
+  persistent identity state or embedding freeform introspection into memory.
+
+2. Motive-aware prompting is selective, not universal.
+- The motive block appears only when:
+  - claim-sensitive self-model requests are present, or
+  - continuity recall is active via private cognition
+- Ordinary factual turns do not receive the motive block.
+- This preserves the Phase 7 restriction against a universal first-person
+  overlay.
+
+3. The prompt path now keeps persistent and ephemeral roles separated.
+- `MotiveState` remains the persistent session-scoped state layer.
+- `ClaimGateEngine` remains the evidence-and-threshold enforcement layer.
+- `MotivePromptEngine` now renders bounded turn-time response guidance from
+  those persistent sources.
+- `PrivateCognitionPacket` remains the continuity-sensitive ephemeral guide.
+
+4. Continuity recall remains authoritative when motive-state is present.
+- Motive blocks now explicitly instruct the model that:
+  - active continuity memory remains authoritative for recalled preferences and
+    history
+  - motive-state may add current orientation or constraints
+  - motive-state must not replace governed continuity recall
+- This directly preserves the Phase 6 continuity behavior while letting Phase 7
+  add bounded self-description.
+
+5. Prompt bundles now expose motive integration explicitly.
+- `PromptBundle` now includes `motive_block`.
+- The block is visible in traces through the existing prompt-bundle snapshot.
+
+
+TEST COVERAGE
+-------------
+
+Added/updated tests verify:
+- prompt bundles include the motive block when provided
+- motive blocks surface allowed priority claims cleanly
+- motive blocks stay off for ordinary factual queries
+- motive blocks explicitly defer to continuity memory when continuity recall is
+  active
+- runtime traces include `motive_block` for claim-sensitive turns
+
+Focused verification:
+- `tests.test_prompt_and_validation`
+- `tests.test_claims`
+
+Full verification:
+- `152 tests OK`
+
+
+STAGE 7.3 STATUS
+----------------
+
+Stage 7.3 deliverables satisfied:
+- [x] motive-aware prompt block or equivalent bounded response input
+- [x] integration with private cognition and continuity recall paths
+- [x] response shaping that prefers earned self-description over generic
+  self-narration
+- [x] regression tests for contract obedience and continuity preservation
+
+Conclusion:
+- Stage 7.3 is ready to close.
+- The correct next step is Stage 7.4: Live Claim-Honesty Evaluation.
