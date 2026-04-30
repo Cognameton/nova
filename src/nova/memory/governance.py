@@ -56,6 +56,16 @@ PREFIXES = (
     "value shift:",
     "value tension:",
 )
+SELF_MODEL_SCOPES = {
+    "identity-continuity",
+    "relationship-continuity",
+    "value-continuity",
+    "continuity-focus",
+    "self-model",
+}
+SELF_MODEL_STATUS_STABLE = "stable"
+SELF_MODEL_STATUS_PROVISIONAL = "provisional"
+SELF_MODEL_STATUS_SUPERSEDED = "superseded"
 
 
 def normalize_governed_event(event: MemoryEvent) -> MemoryEvent:
@@ -92,6 +102,11 @@ def normalize_governed_event(event: MemoryEvent) -> MemoryEvent:
         "support_count": support_count,
     }
     metadata.setdefault("governance_status", "active")
+    metadata = apply_self_model_revision_metadata(
+        metadata=metadata,
+        channel=event.channel,
+        kind=event.kind,
+    )
 
     return MemoryEvent(
         schema_version=event.schema_version,
@@ -198,6 +213,61 @@ def merge_provenance(existing_metadata: dict[str, Any], incoming_metadata: dict[
     }
 
 
+def apply_self_model_revision_metadata(
+    *,
+    metadata: dict[str, Any],
+    channel: str,
+    kind: str,
+) -> dict[str, Any]:
+    metadata = dict(metadata or {})
+    if not _is_self_model_record(metadata=metadata, channel=channel, kind=kind):
+        return metadata
+
+    governance_status = str(metadata.get("governance_status", "active") or "active")
+    note_type = str(metadata.get("note_type", "") or _note_type_from_kind(kind))
+    self_model_status = str(metadata.get("self_model_status", "") or "")
+    if governance_status == "superseded":
+        self_model_status = SELF_MODEL_STATUS_SUPERSEDED
+    elif not self_model_status:
+        if note_type == "unresolved-tension":
+            self_model_status = SELF_MODEL_STATUS_PROVISIONAL
+        else:
+            self_model_status = SELF_MODEL_STATUS_STABLE
+
+    revision_class = str(metadata.get("revision_class", "") or "")
+    if governance_status == "superseded":
+        revision_class = "superseded"
+    elif not revision_class:
+        if note_type == "continuity-shift":
+            revision_class = "superseding-revision"
+        elif note_type == "unresolved-tension":
+            revision_class = "provisional-negotiation"
+        elif note_type == "developmental-milestone":
+            revision_class = "developmental-reinforcement"
+        else:
+            revision_class = "reinforcement"
+
+    revision_provenance = dict(metadata.get("revision_provenance", {}) or {})
+    prior_event_ids = sorted(
+        {
+            *list(revision_provenance.get("prior_event_ids", []) or []),
+            *list(metadata.get("supersedes_conflicts", []) or []),
+        }
+    )
+    if metadata.get("superseded_by"):
+        revision_provenance["superseded_by"] = str(metadata.get("superseded_by") or "")
+    if metadata.get("superseded_at"):
+        revision_provenance["superseded_at"] = str(metadata.get("superseded_at") or "")
+    revision_provenance["prior_event_ids"] = prior_event_ids
+    revision_provenance["revision_policy_version"] = "8.1"
+    revision_provenance["durable_identity_mutation"] = False
+
+    metadata["self_model_status"] = self_model_status
+    metadata["revision_class"] = revision_class
+    metadata["revision_provenance"] = revision_provenance
+    return metadata
+
+
 def _claim_value(text: str) -> str:
     normalized = f" {' '.join(text.lower().split())} "
     for prefix in PREFIXES:
@@ -216,3 +286,28 @@ def _claim_value(text: str) -> str:
 def _polarity(text: str) -> str:
     normalized = f" {' '.join(text.lower().split())} "
     return "negative" if any(cue in normalized for cue in NEGATION_CUES) else "positive"
+
+
+def _is_self_model_record(*, metadata: dict[str, Any], channel: str, kind: str) -> bool:
+    scope = str(metadata.get("governance_scope") or metadata.get("theme") or "")
+    if scope in SELF_MODEL_SCOPES:
+        return True
+    if channel != "autobiographical":
+        return False
+    return kind in {
+        "identity_note",
+        "reflection_note",
+        "developmental_milestone",
+        "continuity_shift",
+        "continuity_tension",
+    }
+
+
+def _note_type_from_kind(kind: str) -> str:
+    return {
+        "developmental_milestone": "developmental-milestone",
+        "continuity_shift": "continuity-shift",
+        "continuity_tension": "unresolved-tension",
+        "reflection_note": "continuity-note",
+        "identity_note": "continuity-note",
+    }.get(kind, "")

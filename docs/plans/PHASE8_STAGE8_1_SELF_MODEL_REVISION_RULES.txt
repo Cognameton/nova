@@ -1,0 +1,121 @@
+PHASE 8, STAGE 1: SELF-MODEL REVISION RULES
+===========================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 8.1 introduces explicit revision semantics for self-model records so
+Nova can distinguish reinforcement, provisional tension, and superseding
+revision without silently mutating durable identity.
+
+
+What changed
+------------
+
+- `src/nova/memory/governance.py`
+  Adds self-model revision metadata defaults for governed autobiographical
+  records.
+
+- `src/nova/memory/reflection.py`
+  Reflection-built autobiographical candidates now carry explicit revision
+  classes and self-model status.
+
+- `src/nova/memory/autobiographical.py`
+  Autobiographical merge and archive behavior now preserve revision metadata,
+  mark superseded records explicitly, and rank stable records above provisional
+  ones during retrieval.
+
+
+Revision model added in Stage 8.1
+---------------------------------
+
+Self-model status:
+- `stable`
+- `provisional`
+- `superseded`
+
+Revision classes:
+- `reinforcement`
+- `developmental-reinforcement`
+- `provisional-negotiation`
+- `superseding-revision`
+- `superseded`
+
+Revision provenance fields:
+- `prior_event_ids`
+- `revision_policy_version`
+- `durable_identity_mutation`
+- `superseded_by`
+- `superseded_at`
+
+
+Current rule mapping
+--------------------
+
+- continuity-note -> `stable` + `reinforcement`
+- developmental-milestone -> `stable` + `developmental-reinforcement`
+- unresolved-tension -> `provisional` + `provisional-negotiation`
+- continuity-shift -> `stable` + `superseding-revision`
+- archived superseded self-model record -> `superseded` + `superseded`
+
+This keeps revision meaning explicit even before Phase 8 adds a dedicated
+identity-history store.
+
+
+Boundary preserved
+------------------
+
+Stage 8.1 does not mutate `SelfState` automatically.
+
+The new revision rules live on governed autobiographical self-model records,
+which means:
+- durable identity is not silently overwritten
+- revised self-description remains visible as memory history
+- later Phase 8 stages can build identity-history and conflict handling on top
+  of a defined revision vocabulary
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_memory_maintenance`
+- `tests.test_session_and_memory`
+- `tests.test_orientation`
+- `tests.test_orientation_context_pressure`
+
+Full verification:
+- `159 tests OK`
+
+
+What the new tests prove
+------------------------
+
+- autobiographical reflection candidates now carry explicit self-model status
+  and revision class metadata
+- unresolved tensions remain provisional instead of being treated as stable
+  identity truth
+- conflicting autobiographical continuity updates archive prior active records
+  with explicit supersession metadata
+- superseding records retain revision provenance to prior active claim IDs
+- the revision-rule path does not silently mutate durable `SelfState`
+
+
+Limits
+------
+
+- Stage 8.1 defines revision semantics but not yet a full append-only
+  identity-history interface
+- contradiction negotiation is not implemented yet; that belongs to Stage 8.3
+- live revision-pressure evaluation is not implemented yet; that belongs to
+  Stage 8.4
+
+
+Closure judgment
+----------------
+
+Stage 8.1 is complete. Nova now has explicit revision-rule metadata for
+self-model records, with stable/provisional/superseded distinctions and
+provenance strong enough for Phase 8 identity-history work.

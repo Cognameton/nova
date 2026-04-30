@@ -7,6 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from nova.memory.governance import (
+    SELF_MODEL_STATUS_PROVISIONAL,
+    SELF_MODEL_STATUS_STABLE,
+    SELF_MODEL_STATUS_SUPERSEDED,
+    apply_self_model_revision_metadata,
     merge_provenance,
     normalize_governed_event,
     payload_conflicts,
@@ -85,6 +89,13 @@ class JsonlAutobiographicalMemoryStore:
             metadata = dict(payload.get("metadata", {}) or {})
             if str(metadata.get("governance_status", "active") or "active") == "active":
                 score += 0.2
+            self_model_status = str(metadata.get("self_model_status", "") or "")
+            if self_model_status == SELF_MODEL_STATUS_STABLE:
+                score += 0.1
+            elif self_model_status == SELF_MODEL_STATUS_PROVISIONAL:
+                score *= 0.9
+            elif self_model_status == SELF_MODEL_STATUS_SUPERSEDED:
+                score *= 0.6
             if retention == "demoted":
                 score *= 0.7
             elif retention == "archived":
@@ -213,6 +224,11 @@ class JsonlAutobiographicalMemoryStore:
                 },
             }
         )
+        existing["metadata"] = apply_self_model_revision_metadata(
+            metadata=dict(existing.get("metadata", {}) or {}),
+            channel=str(existing.get("channel", "autobiographical") or "autobiographical"),
+            kind=str(existing.get("kind", "") or ""),
+        )
         return existing
 
     def _archive_superseded_payload(self, payload: dict, successor_id: str, timestamp: str) -> dict:
@@ -220,6 +236,11 @@ class JsonlAutobiographicalMemoryStore:
         metadata["governance_status"] = "superseded"
         metadata["superseded_by"] = successor_id
         metadata["superseded_at"] = timestamp
+        metadata = apply_self_model_revision_metadata(
+            metadata=metadata,
+            channel=str(payload.get("channel", "autobiographical") or "autobiographical"),
+            kind=str(payload.get("kind", "") or ""),
+        )
         payload["retention"] = "archived"
         payload["metadata"] = metadata
         return payload

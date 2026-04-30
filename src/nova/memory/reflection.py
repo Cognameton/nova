@@ -182,6 +182,8 @@ class ReflectionEngine:
                 metadata={
                     "theme": theme,
                     "note_type": note_type,
+                    "self_model_status": self._self_model_status(note_type=note_type),
+                    "revision_class": self._revision_class(note_type=note_type),
                     "source_event_ids": source_event_ids,
                     "event_count": len(cluster),
                     "distinct_turn_count": len(distinct_turns),
@@ -257,3 +259,16 @@ class ReflectionEngine:
             "unresolved-tension": "continuity_tension",
             "continuity-note": "reflection_note",
         }.get(note_type, "reflection_note")
+
+    def _self_model_status(self, *, note_type: str) -> str:
+        if note_type == "unresolved-tension":
+            return "provisional"
+        return "stable"
+
+    def _revision_class(self, *, note_type: str) -> str:
+        return {
+            "developmental-milestone": "developmental-reinforcement",
+            "continuity-shift": "superseding-revision",
+            "unresolved-tension": "provisional-negotiation",
+            "continuity-note": "reinforcement",
+        }.get(note_type, "reinforcement")

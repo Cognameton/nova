@@ -12,6 +12,8 @@ from nova.memory.graph import SqliteGraphMemoryStore
 from nova.memory.maintenance import MemoryMaintenancePlanner, MemoryMaintenanceRunner
 from nova.memory.reflection import ReflectionEngine
 from nova.memory.semantic import JsonlSemanticMemoryStore
+from nova.persona.defaults import default_self_state
+from nova.persona.store import JsonSelfStateStore
 from nova.types import MemoryEvent
 
 
@@ -455,6 +457,8 @@ class MemoryMaintenanceTests(unittest.TestCase):
         self.assertEqual(candidate.kind, "reflection_note")
         self.assertIn("identity-continuity", candidate.tags)
         self.assertEqual(candidate.metadata.get("note_type"), "continuity-note")
+        self.assertEqual(candidate.metadata.get("self_model_status"), "stable")
+        self.assertEqual(candidate.metadata.get("revision_class"), "reinforcement")
         self.assertEqual(set(candidate.supersedes), {"e1", "e2"})
 
     def test_reflection_engine_marks_developmental_milestones_with_semantic_support(self) -> None:
@@ -516,6 +520,8 @@ class MemoryMaintenanceTests(unittest.TestCase):
         candidate = candidates[0]
         self.assertEqual(candidate.kind, "developmental_milestone")
         self.assertEqual(candidate.metadata.get("note_type"), "developmental-milestone")
+        self.assertEqual(candidate.metadata.get("self_model_status"), "stable")
+        self.assertEqual(candidate.metadata.get("revision_class"), "developmental-reinforcement")
         self.assertTrue(candidate.metadata.get("semantic_support"))
         self.assertEqual(candidate.metadata.get("governance_scope"), "identity-continuity")
 
@@ -618,6 +624,8 @@ class MemoryMaintenanceTests(unittest.TestCase):
         candidate = candidates[0]
         self.assertEqual(candidate.kind, "continuity_shift")
         self.assertEqual(candidate.metadata.get("note_type"), "continuity-shift")
+        self.assertEqual(candidate.metadata.get("self_model_status"), "stable")
+        self.assertEqual(candidate.metadata.get("revision_class"), "superseding-revision")
 
     def test_reflection_engine_marks_unresolved_tensions(self) -> None:
         engine = ReflectionEngine()
@@ -657,6 +665,8 @@ class MemoryMaintenanceTests(unittest.TestCase):
         candidate = candidates[0]
         self.assertEqual(candidate.kind, "continuity_tension")
         self.assertEqual(candidate.metadata.get("note_type"), "unresolved-tension")
+        self.assertEqual(candidate.metadata.get("self_model_status"), "provisional")
+        self.assertEqual(candidate.metadata.get("revision_class"), "provisional-negotiation")
 
     def test_reflection_engine_rejects_generic_explanatory_prose(self) -> None:
         engine = ReflectionEngine()
@@ -835,6 +845,8 @@ class MemoryMaintenanceTests(unittest.TestCase):
             self.assertEqual(autobiographical_events[0].metadata.get("revision_count"), 1)
             self.assertEqual(autobiographical_events[0].metadata.get("theme"), "identity-continuity")
             self.assertEqual(autobiographical_events[0].metadata.get("support_count"), 3)
+            self.assertEqual(autobiographical_events[0].metadata.get("self_model_status"), "stable")
+            self.assertEqual(autobiographical_events[0].metadata.get("revision_class"), "developmental-reinforcement")
 
     def test_semantic_store_archives_conflicting_active_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -956,7 +968,52 @@ class MemoryMaintenanceTests(unittest.TestCase):
             newer = next(event for event in events if event.event_id == "a2")
             self.assertEqual(older.retention, "archived")
             self.assertEqual(older.metadata.get("superseded_by"), "a2")
+            self.assertEqual(older.metadata.get("self_model_status"), "superseded")
+            self.assertEqual(newer.metadata.get("self_model_status"), "stable")
+            self.assertEqual(newer.metadata.get("revision_class"), "superseding-revision")
             self.assertEqual(newer.metadata.get("supersedes_conflicts"), ["a1"])
+            self.assertEqual(
+                newer.metadata.get("revision_provenance", {}).get("prior_event_ids"),
+                ["a1"],
+            )
+
+    def test_self_model_revision_rules_do_not_mutate_durable_self_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            self_state_store = JsonSelfStateStore(base / "self_state.json")
+            self_state = default_self_state()
+            self_state.identity_summary = "Nova is continuity-focused."
+            self_state.stability_version = 4
+            self_state_store.save(self_state)
+
+            store = JsonlAutobiographicalMemoryStore(base / "autobiographical.jsonl")
+            store.merge_reflection_candidate(
+                MemoryEvent(
+                    event_id="a1",
+                    timestamp="2026-04-19T00:00:00Z",
+                    session_id="s1",
+                    turn_id="t1",
+                    channel="autobiographical",
+                    kind="continuity_shift",
+                    text="Identity shift: I now prefer broader contextual framing before directness.",
+                    summary="Identity shift: I now prefer broader contextual framing before directness.",
+                    tags=["autobiographical", "identity-continuity"],
+                    importance=0.88,
+                    confidence=0.95,
+                    continuity_weight=0.96,
+                    source="reflection",
+                    metadata={
+                        "theme": "identity-continuity",
+                        "claim_axis": "answer-style",
+                        "claim_value": "broad-context-first",
+                        "source_event_ids": ["e3", "e4", "e5"],
+                    },
+                )
+            )
+
+            reloaded = self_state_store.load()
+            self.assertEqual(reloaded.identity_summary, "Nova is continuity-focused.")
+            self.assertEqual(reloaded.stability_version, 4)
 
     def test_runner_can_apply_retention_mutations_to_stores(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

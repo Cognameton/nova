@@ -92,10 +92,10 @@ Define when a self-description becomes stable, when it remains provisional,
 and when a new claim supersedes an older one.
 
 Stage 8.1 deliverables:
-- [ ] explicit revision classes for self-model claims
-- [ ] schema support for stable, provisional, and superseded self-description
-- [ ] revision provenance rules
-- [ ] tests for safe revision vs silent overwrite
+- [x] explicit revision classes for self-model claims
+- [x] schema support for stable, provisional, and superseded self-description
+- [x] revision provenance rules
+- [x] tests for safe revision vs silent overwrite
 
 Stage 8.1 restrictions:
 - no silent mutation of durable identity
