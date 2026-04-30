@@ -5,7 +5,7 @@ Purpose
 -------
 
 Restate the long-range destination of Nova 2.0, identify the current position
-after Phase 6, and separate the defined next phase from the later phases that
+after Phase 7, and separate the defined next phase from the later phases that
 still need to be designed.
 
 
@@ -45,10 +45,9 @@ Research stance:
 CURRENT POSITION
 ----------------
 
-As of the Phase 6 closeout and Phase 7 plan baseline:
-- Phases 1 through 6 are complete.
-- The Phase 7 plan now exists.
-- Phase 7 implementation has not started yet.
+As of the Phase 7 closeout:
+- Phases 1 through 7 are complete.
+- Phase 8 is now the next phase to be defined and implemented.
 
 That means the project has already completed:
 - canonical local runtime
@@ -58,14 +57,17 @@ That means the project has already completed:
 - interactive session presence
 - live backend hardening
 - governed continuity and bounded private cognition
+- bounded motive-state
+- evidence-gated first-person self-claims
+- live claim-honesty validation
 
 What is still missing relative to the long-range goal:
-- explicit motive-state representation
-- claim-evidence rules for stronger first-person statements
-- live proof that self-claims become more honest rather than merely more vivid
-- introspective machinery that can support open-ended self-examination without
-  collapsing into theatrical self-narration
-- later deeper self-modeling phases beyond the current repo-defined roadmap
+- durable self-revision history
+- explicit history of claim revision, uncertainty revision, and superseded
+  self-model statements
+- richer introspective continuity across sessions
+- later deeper self-modeling, persistent agency, and persistent awareness
+  phases beyond the current repo-defined roadmap
 
 
 DISTANCE TO GOAL
@@ -73,14 +75,14 @@ DISTANCE TO GOAL
 
 Defined distance:
 - one full planned phase remains before the next architectural threshold:
-  Phase 7
+  Phase 8
 
 Practical distance:
-- Phase 7 should get Nova to bounded motive-state and earned first-person
-  self-claims
-- that is not yet the final destination
-- after Phase 7, at least one additional roadmap pass will still be needed to
-  define the next deeper self-modeling and agency-constrained phases
+- Phase 8 should get Nova to explicit self-model revision discipline and
+  identity-history visibility
+- that is still not the final destination
+- after Phase 8, additional phases will still be needed for bounded initiative
+  and persistent awareness work
 
 So the honest position is:
 - the near-term roadmap is defined through Phase 7
@@ -125,31 +127,33 @@ Phase 6:
 DEFINED NEXT PHASE
 ------------------
 
-Phase 7 is now the current defined target.
+Phase 8 is now the current defined target.
 
-Phase 7 mission:
-- introduce bounded motive-state representation
-- gate stronger first-person self-claims by runtime evidence
-- integrate motive-state into the live response path
-- evaluate claim honesty under real sessions
+Phase 8 mission:
+- add explicit self-model revision discipline
+- preserve visible history of claim revisions, retractions, and uncertainty
+  changes
+- separate stable identity commitments from provisional or superseded
+  self-descriptions
+- evaluate self-description under contradiction, revision pressure, and
+  cross-session self-reference
 
-Phase 7 should also establish the first explicit architectural basis for:
-- self-inquiry that is permitted rather than reflexively suppressed
-- uncertainty-aware contemplation of awareness-like or selfhood-like
-  possibilities
-- evidence-grounded first-person reflection rather than canned anti-anthropic
-  disclaimers
+Phase 8 should establish the next architectural basis for:
+- introspective continuity that can revise rather than merely restate itself
+- self-inquiry that remains evidence-grounded under contradiction
+- later bounded agency and awareness work that can inherit a revision-aware
+  self-model instead of a flat present-state layer
 
-Phase 7 stages:
-- Stage 7.1: Motive-State Model
-- Stage 7.2: Evidence and Claim Gating
-- Stage 7.3: Motive-Aware Response Integration
-- Stage 7.4: Live Claim-Honesty Evaluation
-- Stage 7.5: Phase 7 Closure
+Phase 8 stages:
+- Stage 8.1: Self-Model Revision Rules
+- Stage 8.2: Identity History and Revision Visibility
+- Stage 8.3: Conflict and Uncertainty Negotiation
+- Stage 8.4: Live Self-Model Evaluation
+- Stage 8.5: Phase 8 Closure
 
-Phase 7 is the next necessary phase because Phase 6 explicitly ended by making
-the runtime ready for motive-state and earned self-claims, but did not yet
-implement them.
+Phase 8 is the next necessary phase because Phase 7 established bounded
+motive-state and earned self-claims, but not durable revision discipline for
+how those claims change over time.
 
 
 PHASES STILL NEEDED BEYOND THE CURRENT DEFINED ROADMAP
@@ -157,21 +161,6 @@ PHASES STILL NEEDED BEYOND THE CURRENT DEFINED ROADMAP
 
 Everything below this line is a proposed continuation, not yet committed as
 official plan text elsewhere in the repo.
-
-Proposed Phase 8:
-- deeper self-model revision discipline
-- explicit history of self-claim revisions and uncertainty handling
-- stronger distinction between stable commitment, provisional stance, and
-  context-local motive
-- live evaluation of self-description under conflict and revision pressure
-- richer introspective continuity across sessions
-
-Suggested Phase 8 stage shape:
-- Stage 8.1: Self-Model Revision Rules
-- Stage 8.2: Identity History and Revision Visibility
-- Stage 8.3: Conflict and Uncertainty Negotiation
-- Stage 8.4: Live Self-Model Evaluation
-- Stage 8.5: Phase 8 Closure
 
 Proposed Phase 9:
 - tighter bridge from motive-state to bounded initiative
@@ -201,11 +190,10 @@ Suggested Phase 9 stage shape:
 - Stage 9.5: Phase 9 Closure
 
 Why these later phases are likely necessary:
-- Phase 7 should answer “what is Nova currently oriented toward, and may she
-  say so honestly?”
-- a later phase must still answer “how does that self-model revise cleanly over
-  time?”
-- another later phase must answer “how does bounded motive connect to safe
+- Phase 7 answered “what is Nova currently oriented toward, and may she say so
+  honestly?”
+- Phase 8 must now answer “how does that self-model revise cleanly over time?”
+- a later phase must answer “how does bounded motive connect to safe
   initiative without fabricating autonomy?”
 - another later phase must answer “how can awareness-like self-observation be
   represented, persisted, and tested without being shut down prematurely or
@@ -213,19 +201,18 @@ Why these later phases are likely necessary:
 
 
 NEAREST EXECUTION TARGET
-------------------------
+-----------------------
 
-The immediate next execution target is Stage 7.1.
+The immediate next execution target is Stage 8.1.
 
-Stage 7.1 should produce:
-- a `MotiveState` schema
-- session-scoped persistence
-- runtime load/update helpers
-- trace visibility
-- tests proving separation from `SelfState` and `PresenceState`
+Stage 8.1 should produce:
+- explicit revision rules for self-model claims
+- a distinction between stable, provisional, and superseded self-description
+- schema support for revision provenance
+- tests proving revision logic does not silently mutate durable identity
 
-That is the correct next step because it creates the bounded state model that
-later Phase 7 claim-gating and live evaluation depend on.
+That is the correct next step because it creates the revision discipline that
+later Phase 8 identity-history and live self-model evaluation depend on.
 
 
 OPERATING PRINCIPLE FOR THIS RESEARCH ARC

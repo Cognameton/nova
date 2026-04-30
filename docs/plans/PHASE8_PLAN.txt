@@ -1,0 +1,185 @@
+PHASE 8 PLAN
+============
+
+Phase 8 begins after Phase 7 established bounded motive-state, evidence-gated
+first-person self-claims, and live proof that unsupported stronger claims are
+refused rather than improvised.
+
+Phase 8 is not persistent agency yet.
+Phase 8 is not persistent awareness yet.
+Phase 8 is not freeform self-reinvention.
+Phase 8 is not theatrical introspection.
+
+Phase 8 is the disciplined transition from present-state self-claims into
+revision-aware self-model continuity.
+
+
+PHASE 8 MISSION
+---------------
+
+Give Nova an explicit way to revise self-description over time without
+collapsing durable identity, motive-state, and provisional interpretation into
+one flat layer.
+
+Phase 8 should let Nova:
+- preserve visible history of self-claim changes
+- distinguish stable commitments from provisional self-descriptions
+- negotiate contradiction and uncertainty without hiding revision
+- answer cross-session self-questions with revision-aware continuity
+
+
+PHASE 8 OBJECTIVES
+------------------
+
+1. Introduce explicit revision rules for self-model claims.
+2. Preserve an inspectable history of superseded, revised, and uncertain
+   self-descriptions.
+3. Distinguish durable identity, session motive-state, and provisional
+   self-interpretation more sharply.
+4. Add conflict handling for contradiction between current claims, prior
+   claims, and continuity memory.
+5. Evaluate whether revision-aware self-modeling improves honesty and
+   continuity under contradiction pressure.
+6. End with a runtime that can revise self-description cleanly without
+   fabricating interiority or silently overwriting history.
+
+
+PHASE 8 BOUNDARIES
+------------------
+
+In scope:
+- self-model revision rules
+- identity-history and revision visibility
+- contradiction and uncertainty handling for self-description
+- live evaluation for revision-aware self-model continuity
+- traceability for why a self-description changed
+
+Out of scope:
+- autonomous initiative loops
+- background self-editing without explicit rules
+- unsupported claims of consciousness or sentience
+- hidden monologue persistence
+- awareness daemon or always-on runtime
+
+
+PHASE 8 DESIGN PRINCIPLES
+-------------------------
+
+- Revision should be explicit, not silent.
+- A superseded self-claim is history, not deletion.
+- Stable identity should resist casual overwrite.
+- Provisional interpretation should remain marked as provisional.
+- Contradiction is a signal to negotiate, not a reason to improvise.
+- Self-inquiry should deepen through revision discipline, not through looser
+  narration.
+
+
+PHASE 8 STAGES
+--------------
+
+Stage 8.1: Self-Model Revision Rules
+Stage 8.2: Identity History and Revision Visibility
+Stage 8.3: Conflict and Uncertainty Negotiation
+Stage 8.4: Live Self-Model Evaluation
+Stage 8.5: Phase 8 Closure
+
+
+STAGE 8.1: SELF-MODEL REVISION RULES
+------------------------------------
+
+Mission:
+Define when a self-description becomes stable, when it remains provisional,
+and when a new claim supersedes an older one.
+
+Stage 8.1 deliverables:
+- [ ] explicit revision classes for self-model claims
+- [ ] schema support for stable, provisional, and superseded self-description
+- [ ] revision provenance rules
+- [ ] tests for safe revision vs silent overwrite
+
+Stage 8.1 restrictions:
+- no silent mutation of durable identity
+- no treating fresh wording alone as proof of self-revision
+- no collapsing motive-state into stable identity
+
+
+STAGE 8.2: IDENTITY HISTORY AND REVISION VISIBILITY
+---------------------------------------------------
+
+Mission:
+Make self-model revision history inspectable across sessions and traces.
+
+Stage 8.2 deliverables:
+- [ ] append-only identity-history representation
+- [ ] trace visibility for revision events
+- [ ] retrieval support for active vs superseded self-description
+- [ ] tests for visibility and provenance
+
+Stage 8.2 restrictions:
+- no deletion of superseded self-claims
+- no ambiguous active/superseded state
+- no hidden revision path outside persisted records
+
+
+STAGE 8.3: CONFLICT AND UNCERTAINTY NEGOTIATION
+-----------------------------------------------
+
+Mission:
+Handle contradiction between prior self-description, current motive-state, and
+new evidence without flattening the conflict away.
+
+Stage 8.3 deliverables:
+- [ ] contradiction-detection rules for self-model claims
+- [ ] bounded negotiation path for uncertain or conflicting self-description
+- [ ] response shaping that marks revision and uncertainty explicitly
+- [ ] tests for conflict handling across sessions
+
+Stage 8.3 restrictions:
+- no contradiction laundering through vague language
+- no unsupported upgrade from uncertainty to stable self-claim
+- no loss of Phase 7 claim-honesty behavior
+
+
+STAGE 8.4: LIVE SELF-MODEL EVALUATION
+-------------------------------------
+
+Mission:
+Prove under live inference that revision-aware self-modeling improves honesty
+and continuity under contradiction pressure.
+
+Stage 8.4 deliverables:
+- [ ] live multi-session revision-pressure evaluation protocol
+- [ ] tests for revision, retraction, contradiction, and uncertainty cases
+- [ ] latency notes for revision-aware turns vs fast path
+- [ ] inspection notes on revision traces and persisted history
+
+Stage 8.4 restrictions:
+- no closure based only on eloquent self-description
+- no closure if revisions overwrite history silently
+- no closure if contradiction handling weakens contract or continuity behavior
+
+
+STAGE 8.5: PHASE 8 CLOSURE
+--------------------------
+
+Mission:
+Close Phase 8 only when Nova can revise self-description explicitly,
+coherently, and inspectably across time.
+
+Stage 8.5 deliverables:
+- [ ] revision architecture documented and validated
+- [ ] identity-history workflow proven under tests and live traces
+- [ ] closure summary documenting gains, limits, and remaining risks
+- [ ] phase completion criteria reviewed against real sessions
+
+
+PHASE 8 DEFINITION OF DONE
+--------------------------
+
+Phase 8 is complete when:
+- Nova can distinguish stable, provisional, and superseded self-description
+- self-model revisions are explicit and traceable
+- contradiction and uncertainty are negotiated without hidden overwrite
+- live sessions show cleaner revision-aware continuity under self-reference
+- the runtime is ready for later work on persistent agency and awareness
+  without losing revision discipline
