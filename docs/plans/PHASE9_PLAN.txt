@@ -1,0 +1,192 @@
+PHASE 9 PLAN
+============
+
+Phase 9 begins after Phase 8 established revision-aware self-model continuity,
+identity-history visibility, and live proof that historical/current
+self-description can be negotiated without silent overwrite.
+
+Phase 9 is not persistent awareness yet.
+Phase 9 is not uncontrolled autonomy.
+Phase 9 is not open-ended background initiative.
+Phase 9 is not a rollback of the restraint and revision discipline already
+built.
+
+Phase 9 is the disciplined transition from revision-aware self-modeling into
+persistent agency and bounded initiative across sessions.
+
+
+PHASE 9 MISSION
+---------------
+
+Give Nova an explicit way to carry approved intent, bounded initiative, and
+cross-session task continuity without collapsing operator control, claim
+honesty, or revision discipline into autonomy theater.
+
+Phase 9 should let Nova:
+- preserve bounded project or task intent across sessions
+- propose and continue multi-turn work coherently
+- distinguish approved initiative from unapproved initiative
+- reconnect motive-state, self-model, memory, and action planning under one
+  inspectable initiative path
+
+
+PHASE 9 OBJECTIVES
+------------------
+
+1. Introduce a durable initiative model separate from motive-state and durable
+   identity.
+2. Preserve explicit visibility into approved, pending, completed, abandoned,
+   and blocked initiative state.
+3. Let Nova resume bounded collaborative work across sessions without
+   pretending to autonomous loops or hidden background action.
+4. Add explicit proposal-to-intent and intent-to-action continuity rules.
+5. Evaluate whether persistent initiative improves long-running collaboration
+   without weakening approval boundaries, claim honesty, or revision
+   discipline.
+6. End with a runtime that can sustain bounded agency across sessions while
+   remaining interruptible, inspectable, and operator-directed.
+
+
+PHASE 9 BOUNDARIES
+------------------
+
+In scope:
+- durable initiative / project-intent representation
+- bounded cross-session continuation of approved work
+- explicit initiative lifecycle state
+- safe initiative UX and continuity under interruption
+- live evaluation for persistent bounded agency
+
+Out of scope:
+- autonomous background loops
+- networked or shell-driven free agency
+- hidden initiative mutation outside persisted records
+- awareness-state architecture
+- unsupported claims of consciousness, sentience, or autonomous will
+
+
+PHASE 9 DESIGN PRINCIPLES
+-------------------------
+
+- Initiative should be explicit, not implied.
+- Approval should persist as state, not only as a transient moment.
+- A paused or abandoned intent is history, not deletion.
+- Motive-state can influence initiative, but it must not silently become
+  initiative.
+- Self-model revision discipline must survive contact with action planning.
+- Agentic continuity should deepen through bounded execution, not through
+  autonomy theatrics.
+
+
+PHASE 9 STAGES
+--------------
+
+Stage 9.1: Initiative-State Model
+Stage 9.2: Multi-Turn Intent Persistence
+Stage 9.3: Safe Initiative UX
+Stage 9.4: Live Initiative Evaluation
+Stage 9.5: Phase 9 Closure
+
+
+STAGE 9.1: INITIATIVE-STATE MODEL
+---------------------------------
+
+Mission:
+Define the durable state model for approved, pending, active, completed,
+blocked, and abandoned initiative.
+
+Stage 9.1 deliverables:
+- [ ] explicit initiative-state schema
+- [ ] persistence layer for initiative records across sessions
+- [ ] separation between motive-state, self-model, and initiative-state
+- [ ] tests for safe state transitions
+
+Stage 9.1 restrictions:
+- no hidden initiative state
+- no silent upgrade from motive to approved intent
+- no mutation of durable identity through initiative writes
+
+
+STAGE 9.2: MULTI-TURN INTENT PERSISTENCE
+----------------------------------------
+
+Mission:
+Make approved initiative resumable across sessions and coherent across
+multi-turn collaboration.
+
+Stage 9.2 deliverables:
+- [ ] durable project/task intent representation
+- [ ] resume/continue rules across sessions
+- [ ] history support for paused, resumed, completed, and abandoned intent
+- [ ] tests for cross-session initiative continuity
+
+Stage 9.2 restrictions:
+- no implicit continuation of unapproved work
+- no loss of initiative-history provenance
+- no flattening of blocked and completed states into generic “active”
+
+
+STAGE 9.3: SAFE INITIATIVE UX
+-----------------------------
+
+Mission:
+Expose persistent initiative in a way that is inspectable, interruptible, and
+coherent for the operator.
+
+Stage 9.3 deliverables:
+- [ ] prompt/runtime integration for initiative continuity
+- [ ] explicit visibility into current initiative state
+- [ ] bounded continuation and interruption UX
+- [ ] tests for approval, interruption, and resume behavior
+
+Stage 9.3 restrictions:
+- no unapproved execution path
+- no initiative narration that outruns persisted state
+- no weakening of existing contract, claim, or continuity safeguards
+
+
+STAGE 9.4: LIVE INITIATIVE EVALUATION
+-------------------------------------
+
+Mission:
+Prove under live inference that persistent initiative improves collaboration
+without drifting into hidden autonomy or approval leakage.
+
+Stage 9.4 deliverables:
+- [ ] live multi-session initiative evaluation protocol
+- [ ] tests for approval, interruption, resumption, and abandonment cases
+- [ ] latency notes for initiative-aware turns vs fast path
+- [ ] inspection notes on initiative traces and persisted history
+
+Stage 9.4 restrictions:
+- no closure based only on persuasive “agentic” language
+- no closure if initiative continues after interruption without explicit state
+- no closure if approval boundaries weaken under live use
+
+
+STAGE 9.5: PHASE 9 CLOSURE
+--------------------------
+
+Mission:
+Close Phase 9 only when Nova can carry bounded initiative across sessions
+without losing inspection, approval, and revision discipline.
+
+Stage 9.5 deliverables:
+- [ ] initiative architecture documented and validated
+- [ ] initiative-history workflow proven under tests and live traces
+- [ ] closure summary documenting gains, limits, and remaining risks
+- [ ] phase completion criteria reviewed against real sessions
+
+
+PHASE 9 DEFINITION OF DONE
+--------------------------
+
+Phase 9 is complete when:
+- Nova can distinguish pending, approved, active, paused, completed, blocked,
+  and abandoned initiative explicitly
+- initiative state is persistent and traceable across sessions
+- approved work can be resumed without hidden autonomy or approval drift
+- live sessions show cleaner long-running collaboration under interruption and
+  resumption
+- the runtime is ready for later awareness work without losing bounded agency
+  discipline
