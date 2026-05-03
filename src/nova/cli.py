@@ -8,6 +8,7 @@ from typing import Any
 
 from nova.agent.action import ActionApproval
 from nova.agent.initiative import JsonInitiativeStateStore
+from nova.agent.initiative_prompt import InitiativePromptEngine
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.motive import JsonMotiveStateStore
 from nova.agent.motive_prompt import MotivePromptEngine
@@ -149,6 +150,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     )
     claim_gate_engine = ClaimGateEngine()
     motive_prompt_engine = MotivePromptEngine()
+    initiative_prompt_engine = InitiativePromptEngine()
 
     return NovaRuntime(
         config=config,
@@ -171,6 +173,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         orientation_evaluator=orientation_evaluator,
         claim_gate_engine=claim_gate_engine,
         motive_prompt_engine=motive_prompt_engine,
+        initiative_prompt_engine=initiative_prompt_engine,
     )
 
 
@@ -277,6 +280,49 @@ def build_parser() -> argparse.ArgumentParser:
         "--presence-eval",
         action="store_true",
         help="Run Phase 4.5 presence and interaction evaluation without inference.",
+    )
+    parser.add_argument(
+        "--initiative",
+        action="store_true",
+        help="Print the current session-scoped initiative state and resumable initiatives.",
+    )
+    parser.add_argument(
+        "--initiative-create",
+        metavar="GOAL",
+        help="Create a pending initiative in the current session without inference.",
+    )
+    parser.add_argument(
+        "--initiative-title",
+        help="Optional short title used with --initiative-create.",
+    )
+    parser.add_argument(
+        "--initiative-transition",
+        metavar="INITIATIVE_ID",
+        help="Transition one initiative in the current session without inference.",
+    )
+    parser.add_argument(
+        "--initiative-status",
+        choices=("pending", "approved", "active", "paused", "completed", "blocked", "abandoned"),
+        help="Target initiative status used with --initiative-transition.",
+    )
+    parser.add_argument(
+        "--initiative-reason",
+        default="CLI initiative update",
+        help="Reason recorded for initiative creation, transition, or continuation.",
+    )
+    parser.add_argument(
+        "--initiative-approved-by",
+        default="",
+        help="Approval attribution used for approved-like initiative transitions or continuation.",
+    )
+    parser.add_argument(
+        "--continue-initiative",
+        metavar="INITIATIVE_ID",
+        help="Continue one approved or paused initiative into the current session without inference.",
+    )
+    parser.add_argument(
+        "--initiative-source-session",
+        help="Source session id used with --continue-initiative.",
     )
     parser.add_argument(
         "--continuity-eval",
@@ -642,6 +688,7 @@ def main() -> int:
             print(f"mode: {presence.mode}")
             print(f"current_focus: {presence.current_focus}")
             print(f"interaction_summary: {presence.interaction_summary}")
+            print(f"current_initiative: {presence.current_initiative}")
             print(f"pending_proposal: {presence.pending_proposal}")
             print(f"last_action_status: {presence.last_action_status}")
             print(f"visible_uncertainties: {presence.visible_uncertainties}")
@@ -674,6 +721,107 @@ def main() -> int:
             print(f"commands_run: {report.commands_run}")
             print(f"reasons: {report.reasons}")
             return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.initiative:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.session_id
+        runtime.session_id = runtime.session_store.start_session(session_id=session_id)
+        try:
+            initiative_state = runtime.initiative_status()
+            resumable = runtime.resumable_initiatives(limit=10)
+            print("Nova 2.0 Initiative")
+            print(f"session_id: {initiative_state.session_id}")
+            print(f"active_initiative_id: {initiative_state.active_initiative_id}")
+            print(f"initiative_count: {len(initiative_state.initiatives)}")
+            for index, record in enumerate(initiative_state.initiatives[-5:], start=1):
+                print(f"initiative_{index}: {record.to_dict()}")
+            print(f"resumable_count: {len(resumable)}")
+            for index, record in enumerate(resumable[-5:], start=1):
+                print(
+                    f"resumable_{index}: "
+                    f"{ {'initiative_id': record.initiative_id, 'intent_id': record.intent_id, 'session_id': record.session_id, 'status': record.status, 'title': record.title} }"
+                )
+            return 0
+        finally:
+            runtime.close()
+
+    if args.initiative_create:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.session_id
+        runtime.session_id = runtime.session_store.start_session(session_id=session_id)
+        try:
+            goal = args.initiative_create
+            title = args.initiative_title or goal[:80]
+            record = runtime.create_initiative(
+                title=title,
+                goal=goal,
+                source="cli",
+                notes=[args.initiative_reason],
+            )
+            print("Nova 2.0 Initiative Created")
+            print(f"session_id: {record.session_id}")
+            print(f"initiative_id: {record.initiative_id}")
+            print(f"intent_id: {record.intent_id}")
+            print(f"title: {record.title}")
+            print(f"goal: {record.goal}")
+            print(f"status: {record.status}")
+            return 0
+        finally:
+            runtime.close()
+
+    if args.initiative_transition:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.session_id
+        runtime.session_id = runtime.session_store.start_session(session_id=session_id)
+        try:
+            if not args.initiative_status:
+                print("--initiative-status is required with --initiative-transition")
+                return 1
+            record = runtime.transition_initiative(
+                initiative_id=args.initiative_transition,
+                to_status=args.initiative_status,
+                reason=args.initiative_reason,
+                approved_by=args.initiative_approved_by,
+                notes=[args.initiative_reason],
+            )
+            print("Nova 2.0 Initiative Transition")
+            print(f"session_id: {record.session_id}")
+            print(f"initiative_id: {record.initiative_id}")
+            print(f"intent_id: {record.intent_id}")
+            print(f"status: {record.status}")
+            print(f"approved_by: {record.approved_by}")
+            return 0
+        finally:
+            runtime.close()
+
+    if args.continue_initiative:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.session_id
+        runtime.session_id = runtime.session_store.start_session(session_id=session_id)
+        try:
+            if not args.initiative_source_session:
+                print("--initiative-source-session is required with --continue-initiative")
+                return 1
+            if not args.initiative_approved_by:
+                print("--initiative-approved-by is required with --continue-initiative")
+                return 1
+            record = runtime.continue_initiative(
+                source_session_id=args.initiative_source_session,
+                initiative_id=args.continue_initiative,
+                approved_by=args.initiative_approved_by,
+                reason=args.initiative_reason,
+                notes=[args.initiative_reason],
+            )
+            print("Nova 2.0 Initiative Continued")
+            print(f"session_id: {record.session_id}")
+            print(f"initiative_id: {record.initiative_id}")
+            print(f"intent_id: {record.intent_id}")
+            print(f"continued_from_session_id: {record.continued_from_session_id}")
+            print(f"continued_from_initiative_id: {record.continued_from_initiative_id}")
+            print(f"status: {record.status}")
+            return 0
         finally:
             runtime.close()
 

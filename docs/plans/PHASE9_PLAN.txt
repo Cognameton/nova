@@ -134,10 +134,10 @@ Expose persistent initiative in a way that is inspectable, interruptible, and
 coherent for the operator.
 
 Stage 9.3 deliverables:
-- [ ] prompt/runtime integration for initiative continuity
-- [ ] explicit visibility into current initiative state
-- [ ] bounded continuation and interruption UX
-- [ ] tests for approval, interruption, and resume behavior
+- [x] prompt/runtime integration for initiative continuity
+- [x] explicit visibility into current initiative state
+- [x] bounded continuation and interruption UX
+- [x] tests for approval, interruption, and resume behavior
 
 Stage 9.3 restrictions:
 - no unapproved execution path

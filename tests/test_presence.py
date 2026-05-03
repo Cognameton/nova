@@ -71,6 +71,7 @@ class PresenceTests(unittest.TestCase):
             self.assertEqual(presence.session_id, "session-a")
             self.assertEqual(presence.mode, "conversation")
             self.assertEqual(presence.current_focus, "schema check")
+            self.assertIsNone(presence.current_initiative)
             self.assertIsNone(presence.pending_proposal)
             self.assertEqual(presence.visible_uncertainties, [])
             self.assertEqual(presence.user_confirmations_needed, ["1", "confirm"])
@@ -104,12 +105,14 @@ class PresenceTests(unittest.TestCase):
                 updated = runtime.update_presence(
                     mode="diagnostics",
                     current_focus="presence test",
+                    current_initiative={"initiative_id": "init-1", "status": "approved"},
                     visible_uncertainties=["presence is session scoped"],
                     user_confirmations_needed=["continue Stage 4.1"],
                 )
 
                 self.assertEqual(updated.mode, "diagnostics")
                 self.assertEqual(updated.current_focus, "presence test")
+                self.assertEqual(updated.current_initiative, {"initiative_id": "init-1", "status": "approved"})
                 self.assertEqual(runtime.self_state.to_dict(), self_before)
                 self.assertTrue(
                     (data_dir / "presence" / f"{runtime.session_id}.presence.json").exists()
@@ -123,15 +126,18 @@ class PresenceTests(unittest.TestCase):
             runtime = build_runtime(config_override=str(config_path))
             try:
                 runtime.update_presence(
+                    current_initiative={"initiative_id": "init-1", "status": "approved"},
                     pending_proposal={"goal": "review orientation"},
                     last_action_status="proposed",
                 )
 
                 cleared = runtime.update_presence(
+                    current_initiative=None,
                     pending_proposal=None,
                     last_action_status=None,
                 )
 
+                self.assertIsNone(cleared.current_initiative)
                 self.assertIsNone(cleared.pending_proposal)
                 self.assertIsNone(cleared.last_action_status)
             finally:
@@ -157,6 +163,7 @@ class PresenceTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("Nova 2.0 Presence", output.getvalue())
             self.assertIn("session_id: presence-cli", output.getvalue())
+            self.assertIn("current_initiative: None", output.getvalue())
             self.assertFalse((_data_dir / "persona_state.json").exists())
             self.assertFalse((_data_dir / "self_state.json").exists())
             self.assertTrue((_data_dir / "presence" / "presence-cli.presence.json").exists())

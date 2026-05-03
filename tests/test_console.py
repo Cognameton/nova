@@ -46,6 +46,32 @@ class ConsoleTests(unittest.TestCase):
             finally:
                 runtime.close()
 
+    def test_console_initiative_command_reports_current_initiative_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                record = runtime.create_initiative(
+                    title="Console initiative",
+                    goal="Surface current initiative state in the console.",
+                    source="cli",
+                )
+                runtime.transition_initiative(
+                    initiative_id=record.initiative_id,
+                    to_status="approved",
+                    reason="approved",
+                    approved_by="user",
+                )
+                result = console.handle("/initiative")
+
+                self.assertTrue(result.handled)
+                self.assertIn("Nova Initiative", result.output)
+                self.assertIn(record.initiative_id, result.output)
+                self.assertIn("resumable_count", result.output)
+            finally:
+                runtime.close()
+
     def test_console_unknown_command_is_handled_without_chat_generation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
@@ -252,6 +278,44 @@ class ConsoleTests(unittest.TestCase):
                 self.assertIn("Nova Action Proposal Rejected", result.output)
                 self.assertIsNone(presence.pending_proposal)
                 self.assertEqual(presence.last_action_status, "proposal_rejected")
+            finally:
+                runtime.close()
+
+    def test_console_pause_and_resume_initiative_update_presence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                record = runtime.create_initiative(
+                    title="Pause resume flow",
+                    goal="Exercise pause and resume UX.",
+                    source="cli",
+                )
+                runtime.transition_initiative(
+                    initiative_id=record.initiative_id,
+                    to_status="approved",
+                    reason="approved",
+                    approved_by="user",
+                )
+                runtime.transition_initiative(
+                    initiative_id=record.initiative_id,
+                    to_status="active",
+                    reason="start",
+                    approved_by="user",
+                )
+
+                paused = console.handle(f"/pause-initiative {record.initiative_id}")
+                presence = runtime.presence_status()
+                self.assertTrue(paused.handled)
+                self.assertIn("status: paused", paused.output)
+                self.assertEqual(presence.current_initiative["status"], "paused")
+
+                resumed = console.handle(f"/resume-initiative {record.initiative_id}")
+                presence = runtime.presence_status()
+                self.assertTrue(resumed.handled)
+                self.assertIn("status: active", resumed.output)
+                self.assertEqual(presence.current_initiative["status"], "active")
             finally:
                 runtime.close()
 

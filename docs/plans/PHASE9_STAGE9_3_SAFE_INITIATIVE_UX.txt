@@ -1,0 +1,128 @@
+PHASE 9, STAGE 3: SAFE INITIATIVE UX
+====================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 9.3 exposes Nova's persisted initiative state to the operator and the
+prompt path without turning initiative into hidden background execution or
+autonomy theater.
+
+
+What changed
+------------
+
+- `src/nova/agent/initiative_prompt.py`
+  Adds `InitiativePromptEngine`, which renders a bounded `[Initiative-State]`
+  block only for initiative-relevant turns or active initiative.
+
+- `src/nova/types.py`
+  `PromptBundle` now carries an `initiative_block` field.
+
+- `src/nova/prompt/composer.py`
+  Prompt composition now includes the bounded initiative block alongside the
+  existing motive and private-cognition blocks.
+
+- `src/nova/agent/presence.py`
+  `PresenceState` now carries `current_initiative` for explicit
+  operator-visible initiative status.
+
+- `src/nova/runtime.py`
+  Adds initiative-to-presence synchronization so initiative lifecycle changes
+  surface as:
+  - current initiative summary
+  - current focus
+  - last action status
+  - confirmation prompts for pending, approved, and paused initiative
+
+- `src/nova/cli.py`
+  Adds non-chat initiative inspection and control commands:
+  - `--initiative`
+  - `--initiative-create`
+  - `--initiative-transition`
+  - `--continue-initiative`
+
+- `src/nova/console.py`
+  Adds interactive initiative commands:
+  - `/initiative`
+  - `/pause-initiative`
+  - `/resume-initiative`
+  - `/abandon-initiative`
+
+
+Safe initiative UX added in Stage 9.3
+-------------------------------------
+
+New operator-visible behaviors:
+- current initiative state is visible in presence and console status output
+- approved or paused initiative can be resumed explicitly
+- active initiative can be paused explicitly
+- initiative abandonment is explicit and persisted
+
+New prompt behavior:
+- initiative state is surfaced only when relevant
+- prompt instructions limit Nova to the persisted initiative record
+- approved or paused work is described as resumable, not secretly executing
+- active work can be acknowledged without implying hidden background progress
+
+
+Boundary preserved
+------------------
+
+Stage 9.3 does not create background autonomy.
+
+Initiative continuity remains:
+- explicit
+- interruptible
+- persisted
+- approval-bounded
+- subordinate to the existing contract and claim-honesty layers
+
+It does not:
+- auto-start approved work
+- claim progress beyond persisted initiative state
+- continue abandoned or blocked work implicitly
+- weaken the Phase 7 claim gate or Phase 8 revision discipline
+
+
+What the new tests prove
+------------------------
+
+- initiative CLI flows can create, inspect, and continue initiative without
+  requiring model startup
+- console initiative commands surface current initiative state
+- pause and resume commands update initiative and presence state coherently
+- runtime traces now carry the initiative prompt block on current-work turns
+- initiative updates do not mutate self-state or motive-state
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_initiative`
+- `tests.test_presence`
+- `tests.test_console`
+- `tests.test_runtime_smoke`
+
+Full verification:
+- `183 tests OK`
+
+Live verification:
+- backend check passed under `configs/nova.local.yaml`
+- active initiative session reported:
+  `Currently, I'm focused on validating live initiative continuity across runtime surfaces. This initiative is active and requires user approval.`
+- paused initiative continued into a fresh session as `approved`, not silently
+  `active`
+- approved continuation session reported:
+  `Yes, the current initiative is approved and resumable. Would you like to continue with it now?`
+
+
+Closure judgment
+----------------
+
+Stage 9.3 is complete. Nova can now expose, pause, resume, and continue
+persisted initiative coherently across prompt, CLI, console, presence, and
+trace surfaces without overstating autonomy or outrunning persisted state.

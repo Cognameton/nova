@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.initiative import JsonInitiativeStateStore
+from nova.agent.initiative_prompt import InitiativePromptEngine
 from nova.agent.motive_prompt import MotivePromptEngine
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
@@ -76,6 +77,7 @@ class NovaRuntime:
         private_cognition_engine: PrivateCognitionEngine | None = None,
         claim_gate_engine: ClaimGateEngine | None = None,
         motive_prompt_engine: MotivePromptEngine | None = None,
+        initiative_prompt_engine: InitiativePromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -101,6 +103,7 @@ class NovaRuntime:
         self.private_cognition_engine = private_cognition_engine or PrivateCognitionEngine()
         self.claim_gate_engine = claim_gate_engine or ClaimGateEngine()
         self.motive_prompt_engine = motive_prompt_engine or MotivePromptEngine()
+        self.initiative_prompt_engine = initiative_prompt_engine or InitiativePromptEngine()
         self.tool_registry = tool_registry or default_tool_registry()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
@@ -181,6 +184,7 @@ class NovaRuntime:
         mode: str | None = None,
         current_focus: str | None = None,
         interaction_summary: str | None = None,
+        current_initiative: dict | None | object = _UNCHANGED,
         pending_proposal: dict | None | object = _UNCHANGED,
         last_action_status: str | None | object = _UNCHANGED,
         visible_uncertainties: list[str] | None = None,
@@ -193,6 +197,8 @@ class NovaRuntime:
             presence.current_focus = current_focus
         if interaction_summary is not None:
             presence.interaction_summary = interaction_summary
+        if current_initiative is not _UNCHANGED:
+            presence.current_initiative = current_initiative
         if pending_proposal is not _UNCHANGED:
             presence.pending_proposal = pending_proposal
         if last_action_status is not _UNCHANGED:
@@ -255,6 +261,7 @@ class NovaRuntime:
         )
         self.initiative_store.save(initiative_state)
         self.initiative_state = initiative_state
+        self._sync_presence_with_initiative(record)
         return record
 
     def transition_initiative(
@@ -279,6 +286,7 @@ class NovaRuntime:
         )
         self.initiative_store.save(initiative_state)
         self.initiative_state = initiative_state
+        self._sync_presence_with_initiative(record)
         return record
 
     def resumable_initiatives(self, *, limit: int | None = None) -> list[InitiativeRecord]:
@@ -307,6 +315,7 @@ class NovaRuntime:
             notes=notes,
         )
         self.initiative_state = self.initiative_store.load(session_id=self.session_id)
+        self._sync_presence_with_initiative(record)
         return record
 
     def orientation_snapshot(self) -> OrientationSnapshot:
@@ -604,8 +613,13 @@ class NovaRuntime:
         return execution
 
     def respond(self, user_text: str) -> TurnRecord:
-        if self.session_id is None:
-            self.start()
+        if (
+            self.session_id is None
+            or self.persona is None
+            or self.self_state is None
+            or self.motive_state is None
+        ):
+            self.start(session_id=self.session_id)
         assert self.session_id is not None
         assert self.persona is not None
         assert self.self_state is not None
@@ -636,10 +650,15 @@ class NovaRuntime:
             claim_gate=claim_gate,
             private_cognition=private_cognition,
         )
+        initiative_block = self.initiative_prompt_engine.build_block(
+            initiative_state=self.initiative_status(),
+            user_text=user_text,
+        )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,
             motive_block=motive_block,
+            initiative_block=initiative_block,
             private_cognition_block=self.private_cognition_engine.build_prompt_block(private_cognition),
             memory_hits=memory_hits,
             recent_turns=recent_turns,
@@ -801,10 +820,40 @@ class NovaRuntime:
 
     def _ensure_initiative_loaded(self) -> None:
         if self.session_id is None:
-            self.start()
+            self.session_id = self.session_store.start_session()
         assert self.session_id is not None
         if self.initiative_state is None or self.initiative_state.session_id != self.session_id:
             self.initiative_state = self.initiative_store.load(session_id=self.session_id)
+
+    def _sync_presence_with_initiative(self, record: InitiativeRecord | None) -> None:
+        if record is None:
+            self.update_presence(
+                current_initiative=None,
+                user_confirmations_needed=[],
+            )
+            return
+        confirmations: list[str] = []
+        if record.status == "pending":
+            confirmations.append(f"approve initiative {record.initiative_id}")
+        elif record.status == "approved":
+            confirmations.append(f"start initiative {record.initiative_id}")
+        elif record.status == "paused":
+            confirmations.append(f"resume initiative {record.initiative_id}")
+        self.update_presence(
+            current_focus=f"initiative: {record.title}",
+            interaction_summary=f"Current initiative is {record.status}: {record.title}",
+            current_initiative={
+                "initiative_id": record.initiative_id,
+                "intent_id": record.intent_id,
+                "title": record.title,
+                "goal": record.goal,
+                "status": record.status,
+                "approved_by": record.approved_by,
+                "continued_from_session_id": record.continued_from_session_id,
+            },
+            last_action_status=f"initiative_{record.status}",
+            user_confirmations_needed=confirmations,
+        )
 
     def _should_force_claim_refusal(
         self,

@@ -31,6 +31,7 @@ class PresenceState:
     mode: str = "conversation"
     current_focus: str = "open conversation"
     interaction_summary: str = ""
+    current_initiative: dict[str, Any] | None = None
     pending_proposal: dict[str, Any] | None = None
     last_action_status: str | None = None
     visible_uncertainties: list[str] = field(default_factory=list)
@@ -86,6 +87,7 @@ def default_presence_state(*, session_id: str) -> PresenceState:
         mode="conversation",
         current_focus="open conversation",
         interaction_summary="",
+        current_initiative=None,
         pending_proposal=None,
         last_action_status=None,
         visible_uncertainties=[],
@@ -114,6 +116,9 @@ def presence_state_from_payload(*, payload: dict[str, Any], session_id: str) -> 
         merged.get("user_confirmations_needed")
     )
     pending_proposal = merged.get("pending_proposal")
+    current_initiative = merged.get("current_initiative")
+    if current_initiative is not None and not isinstance(current_initiative, dict):
+        merged["current_initiative"] = None
     if pending_proposal is not None and not isinstance(pending_proposal, dict):
         merged["pending_proposal"] = None
     if merged.get("last_action_status") is not None:

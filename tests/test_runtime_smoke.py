@@ -289,6 +289,72 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertEqual(semantic_events[0].channel, "semantic")
             self.assertEqual(semantic_events[0].metadata.get("theme"), "user-preferences")
 
+    def test_runtime_trace_includes_initiative_block_for_current_work_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            log_dir = base / "logs"
+
+            config = NovaConfig(
+                app=AppConfig(name="Nova", data_dir=str(data_dir), log_dir=str(log_dir)),
+                model=ModelConfig(backend="llama_cpp", model_path="/tmp/fake.gguf"),
+                generation=GenerationConfig(),
+                contract=ContractConfig(),
+                persona=PersonaConfig(name="Nova"),
+                memory=MemoryConfig(),
+                session=SessionConfig(),
+                eval=EvalConfig(enable_probes=False),
+            )
+
+            runtime = NovaRuntime(
+                config=config,
+                backend=FakeBackend(),
+                composer=NovaPromptComposer(token_counter=lambda text: len(text.split())),
+                validator=NovaOutputValidator(config.contract),
+                retry_policy=BasicRetryPolicy(),
+                persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
+                self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                motive_store=JsonMotiveStateStore(data_dir / "motive"),
+                initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                presence_store=JsonPresenceStore(data_dir / "presence"),
+                session_store=JsonlSessionStore(data_dir / "sessions"),
+                trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
+                memory_router=BasicMemoryRouter(
+                    episodic=JsonlEpisodicMemoryStore(data_dir / "memory" / "episodic.jsonl"),
+                    engram=JsonEngramMemoryStore(data_dir / "memory" / "engram.json"),
+                    graph=SqliteGraphMemoryStore(data_dir / "memory" / "graph.db"),
+                    autobiographical=JsonlAutobiographicalMemoryStore(data_dir / "memory" / "autobiographical.jsonl"),
+                    semantic=JsonlSemanticMemoryStore(data_dir / "memory" / "semantic.jsonl"),
+                ),
+                memory_event_factory=BasicMemoryEventFactory(),
+                probe_runner=None,
+            )
+
+            record = runtime.create_initiative(
+                title="Current implementation work",
+                goal="Continue the current initiative coherently.",
+                source="cli",
+            )
+            runtime.transition_initiative(
+                initiative_id=record.initiative_id,
+                to_status="approved",
+                reason="approved",
+                approved_by="user",
+            )
+            runtime.transition_initiative(
+                initiative_id=record.initiative_id,
+                to_status="active",
+                reason="start",
+                approved_by="user",
+            )
+
+            turn = runtime.respond("What are you working on?")
+            trace_payload = (log_dir / "traces" / f"{turn.session_id}.jsonl").read_text(encoding="utf-8")
+            runtime.close()
+
+            self.assertIn('"initiative_block"', trace_payload)
+            self.assertIn("[Initiative-State]", trace_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

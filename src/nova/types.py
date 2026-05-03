@@ -229,6 +229,7 @@ class PromptBundle:
     persona_block: str
     self_state_block: str
     motive_block: str
+    initiative_block: str
     private_cognition_block: str
     memory_blocks: dict[str, str]
     recent_turns_block: str

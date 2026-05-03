@@ -73,6 +73,8 @@ class InteractionConsole:
             return ConsoleResult(handled=True, output=self._status())
         if command.name == "presence":
             return ConsoleResult(handled=True, output=self._presence())
+        if command.name == "initiative":
+            return ConsoleResult(handled=True, output=self._initiative())
         if command.name == "orientation":
             return ConsoleResult(handled=True, output=self._orientation())
         if command.name == "ready":
@@ -83,6 +85,12 @@ class InteractionConsole:
             return ConsoleResult(handled=True, output=self._approve(command.argument))
         if command.name == "reject":
             return ConsoleResult(handled=True, output=self._reject(command.argument))
+        if command.name == "pause-initiative":
+            return ConsoleResult(handled=True, output=self._pause_initiative(command.argument))
+        if command.name == "resume-initiative":
+            return ConsoleResult(handled=True, output=self._resume_initiative(command.argument))
+        if command.name == "abandon-initiative":
+            return ConsoleResult(handled=True, output=self._abandon_initiative(command.argument))
         if command.name == "actions":
             return ConsoleResult(handled=True, output=self._actions(command.argument))
         if command.name == "maintenance":
@@ -101,11 +109,15 @@ class InteractionConsole:
                 "Nova Console Commands",
                 "/status - show presence, readiness, and action history summary",
                 "/presence - show session-scoped presence state",
+                "/initiative - show current initiative state and resumable initiative summary",
                 "/orientation - show current self-orientation snapshot",
                 "/ready - show orientation readiness",
                 "/propose <goal> - propose one bounded action without executing it",
                 "/approve [goal] - approve and revalidate the current pending proposal",
                 "/reject [reason] - reject the current pending proposal",
+                "/pause-initiative <id> - pause one active initiative in the current session",
+                "/resume-initiative <id> - resume one paused initiative in the current session",
+                "/abandon-initiative <id> - abandon one current-session initiative",
                 "/actions [N] - show recent action history evaluation",
                 "/maintenance - request the gated maintenance-plan tool",
                 "/summary - show a bounded current-session summary",
@@ -123,6 +135,7 @@ class InteractionConsole:
                 f"session_id: {presence.session_id}",
                 f"mode: {presence.mode}",
                 f"current_focus: {presence.current_focus}",
+                f"current_initiative: {presence.current_initiative}",
                 f"readiness_ready: {readiness.ready}",
                 f"readiness_samples: {readiness.sample_count}/{readiness.minimum_samples}",
                 f"action_history_stable: {actions.stable}",
@@ -139,6 +152,7 @@ class InteractionConsole:
                 f"mode: {presence.mode}",
                 f"current_focus: {presence.current_focus}",
                 f"interaction_summary: {presence.interaction_summary}",
+                f"current_initiative: {presence.current_initiative}",
                 f"pending_proposal: {presence.pending_proposal}",
                 f"last_action_status: {presence.last_action_status}",
                 f"visible_uncertainties: {presence.visible_uncertainties}",
@@ -146,6 +160,21 @@ class InteractionConsole:
                 f"updated_at: {presence.updated_at}",
             ]
         )
+
+    def _initiative(self) -> str:
+        initiative_state = self.runtime.initiative_status()
+        resumable = self.runtime.resumable_initiatives(limit=5)
+        lines = [
+            "Nova Initiative",
+            f"session_id: {initiative_state.session_id}",
+            f"active_initiative_id: {initiative_state.active_initiative_id}",
+            f"initiative_count: {len(initiative_state.initiatives)}",
+        ]
+        if initiative_state.initiatives:
+            current = initiative_state.initiatives[-1]
+            lines.append(f"current_initiative: {current.to_dict()}")
+        lines.append(f"resumable_count: {len(resumable)}")
+        return "\n".join(lines)
 
     def _orientation(self) -> str:
         snapshot = self.runtime.orientation_snapshot()
@@ -346,6 +375,62 @@ class InteractionConsole:
                 "Nova Action Proposal Rejected",
                 f"goal: {pending_goal}",
                 f"reason: {rejection_reason}",
+            ]
+        )
+
+    def _pause_initiative(self, initiative_id: str) -> str:
+        if not initiative_id:
+            return "Usage: /pause-initiative <initiative_id>"
+        record = self.runtime.transition_initiative(
+            initiative_id=initiative_id,
+            to_status="paused",
+            reason="interactive pause",
+            approved_by="interactive_cli",
+            notes=["paused from console"],
+        )
+        return "\n".join(
+            [
+                "Nova Initiative Updated",
+                f"initiative_id: {record.initiative_id}",
+                f"status: {record.status}",
+                f"title: {record.title}",
+            ]
+        )
+
+    def _resume_initiative(self, initiative_id: str) -> str:
+        if not initiative_id:
+            return "Usage: /resume-initiative <initiative_id>"
+        record = self.runtime.transition_initiative(
+            initiative_id=initiative_id,
+            to_status="active",
+            reason="interactive resume",
+            approved_by="interactive_cli",
+            notes=["resumed from console"],
+        )
+        return "\n".join(
+            [
+                "Nova Initiative Updated",
+                f"initiative_id: {record.initiative_id}",
+                f"status: {record.status}",
+                f"title: {record.title}",
+            ]
+        )
+
+    def _abandon_initiative(self, initiative_id: str) -> str:
+        if not initiative_id:
+            return "Usage: /abandon-initiative <initiative_id>"
+        record = self.runtime.transition_initiative(
+            initiative_id=initiative_id,
+            to_status="abandoned",
+            reason="interactive abandonment",
+            notes=["abandoned from console"],
+        )
+        return "\n".join(
+            [
+                "Nova Initiative Updated",
+                f"initiative_id: {record.initiative_id}",
+                f"status: {record.status}",
+                f"title: {record.title}",
             ]
         )
 

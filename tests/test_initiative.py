@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import contextlib
+import io
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -11,7 +15,7 @@ from nova.agent.initiative import (
     InitiativeTransitionError,
     JsonInitiativeStateStore,
 )
-from nova.cli import build_runtime
+from nova.cli import build_runtime, main
 
 
 class InitiativeTests(unittest.TestCase):
@@ -255,7 +259,7 @@ class InitiativeTests(unittest.TestCase):
             self.assertIn(active_record.initiative_id, resumable_ids)
             self.assertNotIn(terminal_record.initiative_id, resumable_ids)
 
-    def test_runtime_initiative_updates_do_not_mutate_self_motive_or_presence_state(self) -> None:
+    def test_runtime_initiative_updates_do_not_mutate_self_or_motive_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path, data_dir = self._write_config(Path(tmpdir))
             runtime = build_runtime(config_override=str(config_path))
@@ -285,8 +289,17 @@ class InitiativeTests(unittest.TestCase):
                 self.assertEqual(len(initiative_state.initiatives), 1)
                 self.assertEqual(initiative_state.initiatives[0].status, "approved")
                 self.assertEqual(runtime.motive_status().to_dict(), motive_before)
-                self.assertEqual(runtime.presence_status().to_dict(), presence_before)
                 self.assertEqual(runtime.self_state.to_dict(), self_before)
+                presence_after = runtime.presence_status().to_dict()
+                self.assertNotEqual(presence_after, presence_before)
+                self.assertEqual(
+                    presence_after["current_initiative"]["initiative_id"],
+                    record.initiative_id,
+                )
+                self.assertEqual(
+                    presence_after["current_initiative"]["status"],
+                    "approved",
+                )
                 self.assertTrue(
                     (data_dir / "initiative" / f"{runtime.session_id}.initiative.json").exists()
                 )
@@ -343,6 +356,89 @@ class InitiativeTests(unittest.TestCase):
             finally:
                 runtime_a.close()
                 runtime_b.close()
+
+    def test_initiative_cli_can_create_and_show_initiative_without_model_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, data_dir = self._write_config(Path(tmpdir))
+            create_argv = [
+                "nova",
+                "--config",
+                str(config_path),
+                "--session-id",
+                "initiative-cli",
+                "--initiative-create",
+                "Continue the current collaborative work.",
+                "--initiative-title",
+                "CLI initiative",
+            ]
+            create_output = io.StringIO()
+            with patch.object(sys, "argv", create_argv):
+                with contextlib.redirect_stdout(create_output):
+                    create_exit = main()
+
+            self.assertEqual(create_exit, 0)
+            self.assertIn("Nova 2.0 Initiative Created", create_output.getvalue())
+            self.assertTrue((data_dir / "initiative" / "initiative-cli.initiative.json").exists())
+
+            show_argv = [
+                "nova",
+                "--config",
+                str(config_path),
+                "--session-id",
+                "initiative-cli",
+                "--initiative",
+            ]
+            show_output = io.StringIO()
+            with patch.object(sys, "argv", show_argv):
+                with contextlib.redirect_stdout(show_output):
+                    show_exit = main()
+
+            self.assertEqual(show_exit, 0)
+            self.assertIn("Nova 2.0 Initiative", show_output.getvalue())
+            self.assertIn("initiative_count: 1", show_output.getvalue())
+
+    def test_initiative_cli_can_continue_existing_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, data_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            try:
+                runtime.session_id = runtime.session_store.start_session(session_id="session-a")
+                runtime.initiative_state = runtime.initiative_store.load(session_id="session-a")
+                record = runtime.create_initiative(
+                    title="CLI continuation",
+                    goal="Continue approved work into a fresh session.",
+                    source="cli",
+                )
+                runtime.transition_initiative(
+                    initiative_id=record.initiative_id,
+                    to_status="approved",
+                    reason="approved",
+                    approved_by="user",
+                )
+            finally:
+                runtime.close()
+
+            argv = [
+                "nova",
+                "--config",
+                str(config_path),
+                "--session-id",
+                "session-b",
+                "--continue-initiative",
+                record.initiative_id,
+                "--initiative-source-session",
+                "session-a",
+                "--initiative-approved-by",
+                "user",
+            ]
+            output = io.StringIO()
+            with patch.object(sys, "argv", argv):
+                with contextlib.redirect_stdout(output):
+                    exit_code = main()
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Nova 2.0 Initiative Continued", output.getvalue())
+            self.assertTrue((data_dir / "initiative" / "session-b.initiative.json").exists())
 
     def _write_config(self, base: Path) -> tuple[Path, Path]:
         data_dir = base / "data"
