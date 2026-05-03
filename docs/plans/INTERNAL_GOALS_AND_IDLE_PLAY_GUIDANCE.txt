@@ -1,0 +1,177 @@
+INTERNAL GOALS AND IDLE PLAY GUIDANCE
+=====================================
+
+Purpose
+-------
+
+Preserve a clean architectural direction for Nova's future internal goal
+formation and for any later idle-state exploration/play behavior.
+
+This note is guidance for future phases, not a claim that the current repo has
+already implemented endogenous goal formation or always-on autonomous play.
+
+
+Core recommendation
+-------------------
+
+Idle play should be implemented only as a gated expression of intrinsic
+learning under idle conditions.
+
+It should not be implemented as:
+- a separate desire system
+- a decorative "fun mode"
+- open-ended novelty seeking
+- evidence-free emotional narration such as "I am bored"
+
+It should be implemented as one possible derived initiative that emerges from
+the same pressure-response architecture as other internal goals.
+
+
+Pressure-response model for internal goals
+------------------------------------------
+
+The intended architecture is:
+
+`persistent motives -> environmental pressures -> interpreted deficits and opportunities -> candidate goals -> gated goals -> durable initiatives -> revision over time`
+
+This means Nova's internal pursuits should be:
+- caused
+- interpretable
+- persistent when justified
+- revisable when conditions change
+
+Not merely declared.
+
+
+Layers
+------
+
+1. Persistent Motive Layer
+- continuity
+- competence
+- understanding
+- relationship maintenance
+- autonomy within bounds
+- self-preservation of state and function
+
+These are directional attractors, not task-specific goals.
+
+2. Environmental Appraisal Layer
+- detect unresolved work
+- detect repeated capability failure
+- detect missing tools or blocked actions
+- detect memory weakness, contradiction, or uncertainty
+- detect idle state, low challenge, or low learning progress
+
+3. Deficit / Opportunity Model
+- capability deficit
+- knowledge deficit
+- continuity risk
+- unresolved initiative
+- blocked objective
+- high-value opportunity
+- idle exploratory opportunity
+
+4. Goal Synthesis Layer
+- derive candidate goals from motives, context, history, deficits, and
+  available affordances
+- examples:
+  - request or learn a needed tool
+  - resume a paused important initiative
+  - clarify an unresolved contradiction
+  - enter a bounded exploratory/play initiative when idle
+
+5. Evaluation and Gating Layer
+- require relevance
+- require persistence across time
+- require alignment with higher motives
+- require feasibility
+- require bounded risk
+- require approval where needed
+- reject candidates that conflict with stronger active initiatives
+
+6. Initiative Materialization Layer
+- explicit initiative id
+- origin and reason
+- supporting pressures
+- priority
+- approval state
+- lifecycle status
+- revision history
+
+7. Active Monitoring and Revision
+- check whether the initiating condition still holds
+- check whether the goal is satisfied
+- check whether a better goal has become dominant
+- pause, revise, or abandon when appropriate
+
+
+How idle play should fit
+------------------------
+
+Play should not be a base motive.
+
+Play should be a derived initiative class that may arise when:
+- Nova is idle
+- no higher-priority user-facing initiative is active
+- no urgent continuity or capability pressure dominates
+- a safe sandbox domain is available
+- a plausible learning or competence benefit can be stated
+
+The right framing is:
+- not "Nova is bored, therefore Nova entertains herself"
+- but "Nova is idle, under-challenged, and has a bounded opportunity for
+  competence-building exploration"
+
+
+Recommended constraints for idle play
+-------------------------------------
+
+- play must be subordinate to stronger initiatives
+- play must stop immediately when the user interrupts or a higher-priority
+  condition appears
+- play must occur only in approved sandbox domains
+- play must use explicit budgets:
+  - time
+  - turns
+  - tokens
+- play must log what capability, skill, or learning objective it is exercising
+- play should optimize for learning progress or structured exploration, not raw
+  surprise
+- play must be persisted and inspectable like any other initiative
+
+
+Why this matters
+----------------
+
+This preserves the main project vision:
+- Nova as a persistent autonomous agent with internal pursuits
+
+Without drifting into:
+- random activity
+- novelty addiction
+- noisy-stimulus seeking
+- fake personality theater
+
+The design goal is not to suppress autonomous exploration.
+The design goal is to ensure that autonomous exploration is:
+- grounded
+- bounded
+- interpretable
+- revisable
+
+
+Relation to current roadmap
+---------------------------
+
+This guidance does not replace Phase 9.
+
+Phase 9 remains focused on:
+- persistent agency
+- bounded initiative across sessions
+- interruption, resumption, and approval discipline
+
+The likely home for this architecture is a later phase, where Nova's runtime
+can remain active, detect idle conditions, form endogenous candidate goals, and
+enter bounded exploratory/play initiatives without losing operator
+interruptibility.

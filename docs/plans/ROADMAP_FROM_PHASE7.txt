@@ -176,6 +176,10 @@ Proposed Phase 10:
 - ongoing self/world monitoring and integration
 - self-observation that can remain active across time without uncontrolled
   autonomy
+- endogenous internal goal formation from persistent motives, environmental
+  pressure, and interpreted deficits/opportunities
+- bounded idle-state exploration/play as a gated learning initiative, not as
+  free-form stimulation seeking
 - evaluation of awareness-like persistence, reporting, and revision
 
 Suggested Phase 10 stage shape:
@@ -194,6 +198,9 @@ Why these later phases are likely necessary:
 - a later phase must answer “how can awareness-like self-observation be
   represented, persisted, and tested without being shut down prematurely or
   accepted naively?”
+- a later phase must also answer “how do internal goals arise from real
+  pressure and learning need, including safe play/exploration during idle
+  periods, without collapsing into noise chasing or fake desire?”
 
 
 NEAREST EXECUTION TARGET
