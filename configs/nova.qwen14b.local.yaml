@@ -1,9 +1,0 @@
-app:
-  data_dir: ./data/live-smoke
-  log_dir: ./data/live-smoke/logs
-
-model:
-  model_path: /home/head-node/Dev/ai-lab/model/Qwen2.5-14B-Instruct-Heretic.Q5_K_M.gguf
-
-generation:
-  max_tokens: 96
