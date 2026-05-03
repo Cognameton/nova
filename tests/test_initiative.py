@@ -148,6 +148,113 @@ class InitiativeTests(unittest.TestCase):
                     reason="approval missing",
                 )
 
+    def test_initiative_store_can_continue_approved_work_across_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            source_state = store.load(session_id="session-a")
+            record = store.create_record(
+                initiative_state=source_state,
+                title="Long-running collaboration",
+                goal="Carry approved work into a later session.",
+                evidence_refs=["turn:create"],
+            )
+            store.transition(
+                initiative_state=source_state,
+                initiative_id=record.initiative_id,
+                to_status="approved",
+                reason="user approved the task",
+                approved_by="user",
+                evidence_refs=["turn:approve"],
+            )
+            store.transition(
+                initiative_state=source_state,
+                initiative_id=record.initiative_id,
+                to_status="active",
+                reason="runtime began work",
+                approved_by="user",
+                evidence_refs=["turn:start"],
+            )
+            store.save(source_state)
+
+            continued = store.continue_record(
+                source_session_id="session-a",
+                initiative_id=record.initiative_id,
+                target_session_id="session-b",
+                approved_by="user",
+                reason="resume work in a fresh session",
+                evidence_refs=["turn:resume"],
+                notes=["continued into session-b"],
+            )
+
+            reloaded_source = store.load(session_id="session-a")
+            reloaded_target = store.load(session_id="session-b")
+            self.assertEqual(reloaded_source.initiatives[0].status, "paused")
+            self.assertIn("session-b", reloaded_source.initiatives[0].continuation_session_ids)
+            self.assertEqual(len(reloaded_target.initiatives), 1)
+            target_record = reloaded_target.initiatives[0]
+            self.assertEqual(target_record.status, "approved")
+            self.assertEqual(target_record.intent_id, record.intent_id)
+            self.assertEqual(target_record.origin_session_id, "session-a")
+            self.assertEqual(target_record.continued_from_session_id, "session-a")
+            self.assertEqual(target_record.continued_from_initiative_id, record.initiative_id)
+            self.assertEqual(continued.initiative_id, target_record.initiative_id)
+
+    def test_resumable_initiatives_exclude_terminal_states(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            source_state = store.load(session_id="session-a")
+            active_record = store.create_record(
+                initiative_state=source_state,
+                title="Active work",
+                goal="Resume later.",
+            )
+            store.transition(
+                initiative_state=source_state,
+                initiative_id=active_record.initiative_id,
+                to_status="approved",
+                reason="approved",
+                approved_by="user",
+            )
+            store.transition(
+                initiative_state=source_state,
+                initiative_id=active_record.initiative_id,
+                to_status="active",
+                reason="active",
+                approved_by="user",
+            )
+            terminal_record = store.create_record(
+                initiative_state=source_state,
+                title="Finished work",
+                goal="Do not resume.",
+            )
+            store.transition(
+                initiative_state=source_state,
+                initiative_id=terminal_record.initiative_id,
+                to_status="approved",
+                reason="approved",
+                approved_by="user",
+            )
+            store.transition(
+                initiative_state=source_state,
+                initiative_id=terminal_record.initiative_id,
+                to_status="active",
+                reason="active",
+                approved_by="user",
+            )
+            store.transition(
+                initiative_state=source_state,
+                initiative_id=terminal_record.initiative_id,
+                to_status="completed",
+                reason="done",
+                approved_by="user",
+            )
+            store.save(source_state)
+
+            resumable = store.resumable_records()
+            resumable_ids = {record.initiative_id for record in resumable}
+            self.assertIn(active_record.initiative_id, resumable_ids)
+            self.assertNotIn(terminal_record.initiative_id, resumable_ids)
+
     def test_runtime_initiative_updates_do_not_mutate_self_motive_or_presence_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path, data_dir = self._write_config(Path(tmpdir))
@@ -185,6 +292,57 @@ class InitiativeTests(unittest.TestCase):
                 )
             finally:
                 runtime.close()
+
+    def test_runtime_can_continue_approved_initiative_into_new_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, data_dir = self._write_config(Path(tmpdir))
+            runtime_a = build_runtime(config_override=str(config_path))
+            runtime_b = build_runtime(config_override=str(config_path))
+            try:
+                runtime_a.session_id = runtime_a.session_store.start_session(session_id="session-a")
+                runtime_a.initiative_state = runtime_a.initiative_store.load(session_id="session-a")
+                record = runtime_a.create_initiative(
+                    title="Cross-session implementation",
+                    goal="Resume approved work in a later session.",
+                    source="user-approved",
+                    evidence_refs=["turn:create"],
+                )
+                runtime_a.transition_initiative(
+                    initiative_id=record.initiative_id,
+                    to_status="approved",
+                    reason="user approved the initiative",
+                    approved_by="user",
+                    evidence_refs=["turn:approve"],
+                )
+                runtime_a.transition_initiative(
+                    initiative_id=record.initiative_id,
+                    to_status="active",
+                    reason="runtime began work",
+                    approved_by="user",
+                    evidence_refs=["turn:start"],
+                )
+
+                runtime_b.session_id = runtime_b.session_store.start_session(session_id="session-b")
+                runtime_b.initiative_state = runtime_b.initiative_store.load(session_id="session-b")
+
+                continued = runtime_b.continue_initiative(
+                    source_session_id="session-a",
+                    initiative_id=record.initiative_id,
+                    approved_by="user",
+                    reason="resume work after interruption",
+                    evidence_refs=["turn:resume"],
+                )
+
+                current = runtime_b.initiative_status()
+                self.assertEqual(len(current.initiatives), 1)
+                self.assertEqual(current.initiatives[0].initiative_id, continued.initiative_id)
+                self.assertEqual(current.initiatives[0].continued_from_session_id, "session-a")
+                self.assertEqual(current.initiatives[0].continued_from_initiative_id, record.initiative_id)
+                self.assertTrue((data_dir / "initiative" / "session-a.initiative.json").exists())
+                self.assertTrue((data_dir / "initiative" / "session-b.initiative.json").exists())
+            finally:
+                runtime_a.close()
+                runtime_b.close()
 
     def _write_config(self, base: Path) -> tuple[Path, Path]:
         data_dir = base / "data"

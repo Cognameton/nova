@@ -99,7 +99,11 @@ class JsonInitiativeStateStore:
         timestamp = utc_now_iso()
         record = InitiativeRecord(
             initiative_id=uuid4().hex,
+            intent_id=uuid4().hex,
             session_id=initiative_state.session_id,
+            origin_session_id=initiative_state.session_id,
+            continued_from_session_id=None,
+            continued_from_initiative_id=None,
             title=title.strip(),
             goal=goal.strip(),
             status="pending",
@@ -111,6 +115,7 @@ class JsonInitiativeStateStore:
             evidence_refs=_string_list(evidence_refs),
             related_motive_refs=_string_list(related_motive_refs),
             related_self_model_refs=_string_list(related_self_model_refs),
+            continuation_session_ids=[],
             notes=_string_list(notes),
             transitions=[
                 InitiativeTransition(
@@ -124,6 +129,125 @@ class JsonInitiativeStateStore:
         )
         initiative_state.initiatives.append(record)
         return record
+
+    def resumable_records(self, *, limit: int | None = None) -> list[InitiativeRecord]:
+        records: list[InitiativeRecord] = []
+        for path in sorted(self.base_dir.glob("*.initiative.json")):
+            try:
+                with path.open("r", encoding="utf-8") as handle:
+                    payload = json.load(handle)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            session_id = path.name.removesuffix(".initiative.json")
+            initiative_state = initiative_state_from_payload(payload=payload, session_id=session_id)
+            for record in initiative_state.initiatives:
+                if normalize_initiative_status(record.status) in {"approved", "active", "paused"}:
+                    records.append(record)
+        records.sort(key=lambda item: item.updated_at or item.created_at)
+        if limit is not None and limit > 0:
+            return records[-limit:]
+        return records
+
+    def continue_record(
+        self,
+        *,
+        source_session_id: str,
+        initiative_id: str,
+        target_session_id: str,
+        approved_by: str,
+        reason: str,
+        evidence_refs: list[str] | None = None,
+        notes: list[str] | None = None,
+    ) -> InitiativeRecord:
+        source_state = self.load(session_id=source_session_id)
+        target_state = self.load(session_id=target_session_id)
+        source_record = self._find_record(
+            initiative_state=source_state,
+            initiative_id=initiative_id,
+        )
+        source_status = normalize_initiative_status(source_record.status)
+        if source_status not in {"approved", "active", "paused"}:
+            raise InitiativeTransitionError(
+                f"Initiative {initiative_id} in {source_session_id} is not resumable from status {source_status}."
+            )
+        if not approved_by.strip():
+            raise InitiativeTransitionError("Cross-session continuation requires explicit approved_by.")
+
+        timestamp = utc_now_iso()
+        if target_session_id in source_record.continuation_session_ids:
+            raise InitiativeTransitionError(
+                f"Initiative {initiative_id} already continued into session {target_session_id}."
+            )
+
+        if source_status == "active":
+            self.transition(
+                initiative_state=source_state,
+                initiative_id=initiative_id,
+                to_status="paused",
+                reason=f"continued_to_session:{target_session_id}",
+                approved_by=approved_by,
+                evidence_refs=evidence_refs,
+                notes=_merge_string_lists(_string_list(notes), [reason]),
+            )
+            source_record = self._find_record(
+                initiative_state=source_state,
+                initiative_id=initiative_id,
+            )
+
+        source_record.continuation_session_ids = _merge_string_lists(
+            source_record.continuation_session_ids,
+            [target_session_id],
+        )
+        source_record.updated_at = timestamp
+        source_record.notes = _merge_string_lists(
+            source_record.notes,
+            [f"continued_to_session:{target_session_id}"],
+        )
+
+        target_record = InitiativeRecord(
+            initiative_id=uuid4().hex,
+            intent_id=source_record.intent_id,
+            session_id=target_session_id,
+            origin_session_id=source_record.origin_session_id or source_session_id,
+            continued_from_session_id=source_session_id,
+            continued_from_initiative_id=source_record.initiative_id,
+            title=source_record.title,
+            goal=source_record.goal,
+            status="approved",
+            approval_required=source_record.approval_required,
+            approved_by=approved_by.strip(),
+            source=source_record.source,
+            created_at=timestamp,
+            updated_at=timestamp,
+            last_transition_at=timestamp,
+            evidence_refs=_merge_string_lists(source_record.evidence_refs, evidence_refs),
+            related_motive_refs=list(source_record.related_motive_refs),
+            related_self_model_refs=list(source_record.related_self_model_refs),
+            continuation_session_ids=list(source_record.continuation_session_ids),
+            notes=_merge_string_lists(
+                source_record.notes,
+                _merge_string_lists(_string_list(notes), [reason]),
+            ),
+            transitions=[
+                InitiativeTransition(
+                    from_status="",
+                    to_status="approved",
+                    reason=f"continued_from:{source_session_id}:{source_record.initiative_id}",
+                    timestamp=timestamp,
+                    approved_by=approved_by.strip(),
+                    evidence_refs=_string_list(evidence_refs),
+                    notes=_merge_string_lists(_string_list(notes), [reason]),
+                )
+            ],
+        )
+        target_state.initiatives.append(target_record)
+        target_state.active_initiative_id = _derived_active_initiative_id(target_state.initiatives)
+
+        self.save(source_state)
+        self.save(target_state)
+        return target_record
 
     def transition(
         self,
@@ -234,8 +358,16 @@ def initiative_record_from_payload(*, payload: dict[str, Any], session_id: str) 
     merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
     merged["session_id"] = session_id
     merged["initiative_id"] = str(merged.get("initiative_id", "") or uuid4().hex)
+    merged["intent_id"] = str(merged.get("intent_id", "") or uuid4().hex)
     merged["title"] = str(merged.get("title", "") or "")
     merged["goal"] = str(merged.get("goal", "") or "")
+    merged["origin_session_id"] = str(merged.get("origin_session_id", "") or session_id)
+    merged["continued_from_session_id"] = _normalize_optional_string(
+        merged.get("continued_from_session_id")
+    )
+    merged["continued_from_initiative_id"] = _normalize_optional_string(
+        merged.get("continued_from_initiative_id")
+    )
     merged["status"] = normalize_initiative_status(str(merged.get("status", "pending")))
     merged["approval_required"] = bool(merged.get("approval_required", True))
     merged["approved_by"] = str(merged.get("approved_by", "") or "")
@@ -246,6 +378,7 @@ def initiative_record_from_payload(*, payload: dict[str, Any], session_id: str) 
     merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
     merged["related_motive_refs"] = _string_list(merged.get("related_motive_refs"))
     merged["related_self_model_refs"] = _string_list(merged.get("related_self_model_refs"))
+    merged["continuation_session_ids"] = _string_list(merged.get("continuation_session_ids"))
     merged["notes"] = _string_list(merged.get("notes"))
     merged["transitions"] = _initiative_transitions(merged.get("transitions"))
     return InitiativeRecord(**merged)

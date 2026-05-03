@@ -1,0 +1,112 @@
+PHASE 9, STAGE 2: MULTI-TURN INTENT PERSISTENCE
+===============================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 9.2 extends the initiative layer so approved work can survive session
+boundaries as the same durable intent rather than turning into unrelated
+session-local task fragments.
+
+
+What changed
+------------
+
+- `src/nova/types.py`
+  `InitiativeRecord` now carries:
+  - `intent_id`
+  - `origin_session_id`
+  - `continued_from_session_id`
+  - `continued_from_initiative_id`
+  - `continuation_session_ids`
+
+- `src/nova/agent/initiative.py`
+  Adds:
+  - resumable-record discovery across initiative files
+  - `continue_record(...)` for explicit cross-session continuation
+  - source-session pause behavior when active work is continued elsewhere
+
+- `src/nova/runtime.py`
+  Adds:
+  - `resumable_initiatives(...)`
+  - `continue_initiative(...)`
+
+- `tests/test_initiative.py`
+  Adds cross-session continuity coverage for:
+  - resumable initiative discovery
+  - source-session pause history
+  - intent lineage across resumed sessions
+  - runtime continuation helper behavior
+
+
+Intent persistence model added in Stage 9.2
+-------------------------------------------
+
+New durable continuity fields:
+- `intent_id`
+  shared identity for the same project/task across sessions
+- `origin_session_id`
+  first session where the durable intent was created
+- `continued_from_session_id`
+  immediate prior session in the continuation chain
+- `continued_from_initiative_id`
+  immediate prior initiative record in the continuation chain
+- `continuation_session_ids`
+  downstream session history where the initiative was resumed
+
+New continuation rules:
+- only `approved`, `active`, or `paused` initiative may continue into a new
+  session
+- continuation into a new session requires explicit `approved_by`
+- continuing an `active` initiative pauses the source-session record
+- the target-session continuation starts as `approved`, not silently `active`
+- terminal states are not resumable
+
+
+Boundary preserved
+------------------
+
+Stage 9.2 does not introduce background autonomy.
+
+Cross-session continuation is still:
+- explicit
+- approval-bounded
+- traceable through persisted lineage fields
+- separate from motive-state and self-model state
+
+It does not:
+- auto-resume work on its own
+- continue blocked, completed, or abandoned initiative implicitly
+- collapse cross-session continuation into generic “active” state
+
+
+What the new tests prove
+------------------------
+
+- approved work can be continued into a new session while preserving shared
+  `intent_id`
+- source-session active work is paused when it is continued elsewhere
+- resumable initiative discovery excludes terminal states
+- runtime continuation helper can carry initiative across sessions without
+  requiring model startup
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_initiative`
+- adjacent runtime and claim regressions remained clean
+
+Full verification:
+- full suite passed after Stage 9.2 implementation
+
+
+Closure judgment
+----------------
+
+Stage 9.2 is complete. Nova can now preserve a durable project/task intent
+across sessions with explicit continuation lineage and approval-bounded
+resume rules, ready for the later operator-facing initiative UX layer.

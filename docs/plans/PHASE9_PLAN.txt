@@ -115,10 +115,10 @@ Make approved initiative resumable across sessions and coherent across
 multi-turn collaboration.
 
 Stage 9.2 deliverables:
-- [ ] durable project/task intent representation
-- [ ] resume/continue rules across sessions
-- [ ] history support for paused, resumed, completed, and abandoned intent
-- [ ] tests for cross-session initiative continuity
+- [x] durable project/task intent representation
+- [x] resume/continue rules across sessions
+- [x] history support for paused, resumed, completed, and abandoned intent
+- [x] tests for cross-session initiative continuity
 
 Stage 9.2 restrictions:
 - no implicit continuation of unapproved work

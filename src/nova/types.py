@@ -79,7 +79,11 @@ class InitiativeTransition:
 class InitiativeRecord:
     schema_version: str = SCHEMA_VERSION
     initiative_id: str = ""
+    intent_id: str = ""
     session_id: str = ""
+    origin_session_id: str = ""
+    continued_from_session_id: str | None = None
+    continued_from_initiative_id: str | None = None
     title: str = ""
     goal: str = ""
     status: str = "pending"
@@ -92,6 +96,7 @@ class InitiativeRecord:
     evidence_refs: list[str] = field(default_factory=list)
     related_motive_refs: list[str] = field(default_factory=list)
     related_self_model_refs: list[str] = field(default_factory=list)
+    continuation_session_ids: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     transitions: list[InitiativeTransition] = field(default_factory=list)
 

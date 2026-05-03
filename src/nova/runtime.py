@@ -281,6 +281,34 @@ class NovaRuntime:
         self.initiative_state = initiative_state
         return record
 
+    def resumable_initiatives(self, *, limit: int | None = None) -> list[InitiativeRecord]:
+        return self.initiative_store.resumable_records(limit=limit)
+
+    def continue_initiative(
+        self,
+        *,
+        source_session_id: str,
+        initiative_id: str,
+        approved_by: str,
+        reason: str,
+        evidence_refs: list[str] | None = None,
+        notes: list[str] | None = None,
+    ) -> InitiativeRecord:
+        if self.session_id is None:
+            self.start()
+        assert self.session_id is not None
+        record = self.initiative_store.continue_record(
+            source_session_id=source_session_id,
+            initiative_id=initiative_id,
+            target_session_id=self.session_id,
+            approved_by=approved_by,
+            reason=reason,
+            evidence_refs=evidence_refs,
+            notes=notes,
+        )
+        self.initiative_state = self.initiative_store.load(session_id=self.session_id)
+        return record
+
     def orientation_snapshot(self) -> OrientationSnapshot:
         self._ensure_state_loaded()
         assert self.persona is not None
