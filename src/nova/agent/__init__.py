@@ -9,6 +9,10 @@ from nova.agent.action import (
     ActionProposalEngine,
     ActionProposalEvaluation,
 )
+from nova.agent.initiative import (
+    InitiativeTransitionError,
+    JsonInitiativeStateStore,
+)
 from nova.agent.awareness import AwarenessClassifier, AwarenessResult
 from nova.agent.boundaries import BoundaryPolicy, OperationalLatitude
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
@@ -42,6 +46,8 @@ __all__ = [
     "ContextPressureOrientationChecker",
     "ContextPressureOrientationReport",
     "InternalToolExecutor",
+    "InitiativeTransitionError",
+    "JsonInitiativeStateStore",
     "JsonPresenceStore",
     "MaintenanceOrientationReport",
     "MaintenanceOrientationStabilityChecker",

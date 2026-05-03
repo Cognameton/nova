@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from nova.agent.action import ActionApproval
+from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.motive import JsonMotiveStateStore
 from nova.agent.motive_prompt import MotivePromptEngine
@@ -68,6 +69,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
     persona_store = JsonPersonaStore(data_dir / "persona_state.json")
     self_state_store = JsonSelfStateStore(data_dir / "self_state.json")
     motive_store = JsonMotiveStateStore(data_dir / "motive")
+    initiative_store = JsonInitiativeStateStore(data_dir / "initiative")
     presence_store = JsonPresenceStore(data_dir / "presence")
     session_store = JsonlSessionStore(sessions_dir)
     trace_logger = JsonlTraceLogger(traces_dir, probe_path=probes_path)
@@ -107,6 +109,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
         "persona_store": persona_store,
         "self_state_store": self_state_store,
         "motive_store": motive_store,
+        "initiative_store": initiative_store,
         "presence_store": presence_store,
         "session_store": session_store,
         "trace_logger": trace_logger,
@@ -129,6 +132,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     persona_store = components["persona_store"]
     self_state_store = components["self_state_store"]
     motive_store = components["motive_store"]
+    initiative_store = components["initiative_store"]
     presence_store = components["presence_store"]
     session_store = components["session_store"]
 
@@ -155,6 +159,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         persona_store=persona_store,
         self_state_store=self_state_store,
         motive_store=motive_store,
+        initiative_store=initiative_store,
         presence_store=presence_store,
         session_store=session_store,
         trace_logger=trace_logger,

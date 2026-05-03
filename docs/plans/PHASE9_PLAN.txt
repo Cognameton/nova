@@ -96,10 +96,10 @@ Define the durable state model for approved, pending, active, completed,
 blocked, and abandoned initiative.
 
 Stage 9.1 deliverables:
-- [ ] explicit initiative-state schema
-- [ ] persistence layer for initiative records across sessions
-- [ ] separation between motive-state, self-model, and initiative-state
-- [ ] tests for safe state transitions
+- [x] explicit initiative-state schema
+- [x] persistence layer for initiative records across sessions
+- [x] separation between motive-state, self-model, and initiative-state
+- [x] tests for safe state transitions
 
 Stage 9.1 restrictions:
 - no hidden initiative state

@@ -1,0 +1,120 @@
+PHASE 9, STAGE 1: INITIATIVE-STATE MODEL
+========================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 9.1 introduces a durable initiative-state layer so Nova can persist
+approved or pending work continuity across sessions without collapsing
+motive-state, self-model, and action proposals into one flat state surface.
+
+
+What changed
+------------
+
+- `src/nova/types.py`
+  Adds:
+  - `InitiativeTransition`
+  - `InitiativeRecord`
+  - `InitiativeState`
+
+- `src/nova/agent/initiative.py`
+  Adds `JsonInitiativeStateStore`, lifecycle normalization, initiative record
+  creation, and explicit safe transition rules.
+
+- `src/nova/runtime.py`
+  Runtime now loads initiative-state at session start and exposes:
+  - `initiative_status()`
+  - `create_initiative(...)`
+  - `transition_initiative(...)`
+
+- `src/nova/cli.py`
+  Build path now wires a persistent initiative store under `data/initiative`.
+
+- `tests/test_initiative.py`
+  Adds store, compatibility, malformed-json recovery, transition-safety, and
+  runtime separation tests.
+
+
+Initiative model added in Stage 9.1
+-----------------------------------
+
+New durable state:
+- `pending`
+- `approved`
+- `active`
+- `paused`
+- `completed`
+- `blocked`
+- `abandoned`
+
+New explicit record structure:
+- initiative id
+- title
+- goal
+- status
+- approval requirement
+- approval attribution
+- evidence references
+- related motive references
+- related self-model references
+- transition history
+
+Safe transition rules added:
+- `pending -> approved | blocked | abandoned`
+- `approved -> active | blocked | abandoned`
+- `active -> paused | completed | blocked | abandoned`
+- `paused -> active | blocked | abandoned`
+- approved-like states require explicit `approved_by`
+
+
+Boundary preserved
+------------------
+
+Stage 9.1 does not create persistent autonomous execution.
+
+The initiative layer is still:
+- explicit
+- persisted
+- session-addressable
+- operator-bounded
+- separate from action proposal and execution logs
+
+It does not:
+- auto-derive approved initiative from motive-state
+- mutate durable identity or self-model state
+- bypass existing approval constraints
+
+
+What the new tests prove
+------------------------
+
+- initiative-state is created and round-trips through persistence
+- minor schema drift is tolerated safely
+- malformed JSON recovers to a valid default initiative-state
+- approved-like transitions require explicit approval attribution
+- runtime initiative updates do not mutate self-state, motive-state, or
+  presence-state
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_initiative`
+- `tests.test_motive`
+- `tests.test_runtime_smoke`
+- `tests.test_claims`
+
+Full verification:
+- full suite passed after Stage 9.1 implementation
+
+
+Closure judgment
+----------------
+
+Stage 9.1 is complete. Nova now has a distinct durable initiative-state model
+with explicit lifecycle rules and persistence, ready for later Phase 9
+cross-session intent and initiative UX work.

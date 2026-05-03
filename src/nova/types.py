@@ -61,6 +61,57 @@ class MotiveState:
 
 
 @dataclass(slots=True)
+class InitiativeTransition:
+    schema_version: str = SCHEMA_VERSION
+    from_status: str = ""
+    to_status: str = "pending"
+    reason: str = ""
+    timestamp: str = ""
+    approved_by: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class InitiativeRecord:
+    schema_version: str = SCHEMA_VERSION
+    initiative_id: str = ""
+    session_id: str = ""
+    title: str = ""
+    goal: str = ""
+    status: str = "pending"
+    approval_required: bool = True
+    approved_by: str = ""
+    source: str = "runtime"
+    created_at: str = ""
+    updated_at: str = ""
+    last_transition_at: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    related_motive_refs: list[str] = field(default_factory=list)
+    related_self_model_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    transitions: list[InitiativeTransition] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class InitiativeState:
+    schema_version: str = SCHEMA_VERSION
+    session_id: str = ""
+    active_initiative_id: str | None = None
+    initiatives: list[InitiativeRecord] = field(default_factory=list)
+    updated_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ClaimGateDecision:
     schema_version: str = SCHEMA_VERSION
     requested_claim_classes: list[str] = field(default_factory=list)
@@ -280,6 +331,7 @@ class TraceRecord:
     persona_state_snapshot: dict[str, Any] = field(default_factory=dict)
     self_state_snapshot: dict[str, Any] = field(default_factory=dict)
     motive_state_snapshot: dict[str, Any] = field(default_factory=dict)
+    initiative_state_snapshot: dict[str, Any] = field(default_factory=dict)
     claim_gate: dict[str, Any] = field(default_factory=dict)
     prompt_bundle: dict[str, Any] = field(default_factory=dict)
     private_cognition: dict[str, Any] = field(default_factory=dict)

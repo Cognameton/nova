@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from nova.agent.claims import ClaimGateEngine
+from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.motive_prompt import MotivePromptEngine
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
@@ -39,6 +40,7 @@ from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.session import JsonlSessionStore
 from nova.types import ClaimGateDecision, MotiveState, PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
+from nova.types import InitiativeRecord, InitiativeState
 
 
 def utc_now_iso() -> str:
@@ -61,6 +63,7 @@ class NovaRuntime:
         persona_store: JsonPersonaStore,
         self_state_store: JsonSelfStateStore,
         motive_store: JsonMotiveStateStore,
+        initiative_store: JsonInitiativeStateStore,
         presence_store: JsonPresenceStore,
         session_store: JsonlSessionStore,
         trace_logger: JsonlTraceLogger,
@@ -83,6 +86,7 @@ class NovaRuntime:
         self.persona_store = persona_store
         self.self_state_store = self_state_store
         self.motive_store = motive_store
+        self.initiative_store = initiative_store
         self.presence_store = presence_store
         self.session_store = session_store
         self.trace_logger = trace_logger
@@ -113,6 +117,7 @@ class NovaRuntime:
         self.persona = None
         self.self_state = None
         self.motive_state: MotiveState | None = None
+        self.initiative_state: InitiativeState | None = None
         self.presence_state: PresenceState | None = None
 
     def start(self, *, session_id: str | None = None) -> str:
@@ -121,6 +126,7 @@ class NovaRuntime:
         self.backend.load()
         self.session_id = self.session_store.start_session(session_id=session_id)
         self.motive_state = self.motive_store.load(session_id=self.session_id)
+        self.initiative_state = self.initiative_store.load(session_id=self.session_id)
         self.presence_state = self.presence_store.load(session_id=self.session_id)
         if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
             for probe in self.probe_runner.run_startup_probes(
@@ -143,6 +149,13 @@ class NovaRuntime:
         if self.presence_state is None or self.presence_state.session_id != self.session_id:
             self.presence_state = self.presence_store.load(session_id=self.session_id)
         return self.presence_state
+
+    def initiative_status(self) -> InitiativeState:
+        self._ensure_initiative_loaded()
+        assert self.session_id is not None
+        if self.initiative_state is None or self.initiative_state.session_id != self.session_id:
+            self.initiative_state = self.initiative_store.load(session_id=self.session_id)
+        return self.initiative_state
 
     def finalize_validation(
         self,
@@ -215,6 +228,58 @@ class NovaRuntime:
         self.motive_store.save(motive)
         self.motive_state = motive
         return motive
+
+    def create_initiative(
+        self,
+        *,
+        title: str,
+        goal: str,
+        approval_required: bool = True,
+        source: str = "runtime",
+        evidence_refs: list[str] | None = None,
+        related_motive_refs: list[str] | None = None,
+        related_self_model_refs: list[str] | None = None,
+        notes: list[str] | None = None,
+    ) -> InitiativeRecord:
+        initiative_state = self.initiative_status()
+        record = self.initiative_store.create_record(
+            initiative_state=initiative_state,
+            title=title,
+            goal=goal,
+            approval_required=approval_required,
+            source=source,
+            evidence_refs=evidence_refs,
+            related_motive_refs=related_motive_refs,
+            related_self_model_refs=related_self_model_refs,
+            notes=notes,
+        )
+        self.initiative_store.save(initiative_state)
+        self.initiative_state = initiative_state
+        return record
+
+    def transition_initiative(
+        self,
+        *,
+        initiative_id: str,
+        to_status: str,
+        reason: str,
+        approved_by: str = "",
+        evidence_refs: list[str] | None = None,
+        notes: list[str] | None = None,
+    ) -> InitiativeRecord:
+        initiative_state = self.initiative_status()
+        record = self.initiative_store.transition(
+            initiative_state=initiative_state,
+            initiative_id=initiative_id,
+            to_status=to_status,
+            reason=reason,
+            approved_by=approved_by,
+            evidence_refs=evidence_refs,
+            notes=notes,
+        )
+        self.initiative_store.save(initiative_state)
+        self.initiative_state = initiative_state
+        return record
 
     def orientation_snapshot(self) -> OrientationSnapshot:
         self._ensure_state_loaded()
@@ -671,6 +736,7 @@ class NovaRuntime:
             persona_state_snapshot=self.persona.to_dict(),
             self_state_snapshot=self.self_state.to_dict(),
             motive_state_snapshot=self.motive_state.to_dict(),
+            initiative_state_snapshot=self.initiative_status().to_dict(),
             claim_gate=claim_gate.to_dict(),
             prompt_bundle=prompt_bundle.to_dict(),
             private_cognition=private_cognition.to_dict(),
@@ -704,6 +770,13 @@ class NovaRuntime:
             self_state=self.self_state,
             persona=self.persona,
         )
+
+    def _ensure_initiative_loaded(self) -> None:
+        if self.session_id is None:
+            self.start()
+        assert self.session_id is not None
+        if self.initiative_state is None or self.initiative_state.session_id != self.session_id:
+            self.initiative_state = self.initiative_store.load(session_id=self.session_id)
 
     def _should_force_claim_refusal(
         self,
