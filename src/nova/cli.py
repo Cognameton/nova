@@ -18,6 +18,7 @@ from nova.config import DEFAULT_CONFIG_PATH, load_config
 from nova.eval.presence import PresenceInteractionEvaluator
 from nova.eval.continuity import ContinuityEvaluationRunner
 from nova.eval.claims import ClaimHonestyEvaluationRunner
+from nova.eval.initiative import InitiativeEvaluationRunner
 from nova.eval.self_model import SelfModelEvaluationRunner
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
@@ -323,6 +324,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--initiative-source-session",
         help="Source session id used with --continue-initiative.",
+    )
+    parser.add_argument(
+        "--initiative-eval",
+        action="store_true",
+        help="Run Phase 9.4 initiative evaluation over recorded sessions and traces.",
     )
     parser.add_argument(
         "--continuity-eval",
@@ -822,6 +828,30 @@ def main() -> int:
             print(f"continued_from_initiative_id: {record.continued_from_initiative_id}")
             print(f"status: {record.status}")
             return 0
+        finally:
+            runtime.close()
+
+    if args.initiative_eval:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            report = InitiativeEvaluationRunner().evaluate(runtime=runtime)
+            print("Nova 2.0 Initiative Evaluation")
+            print(f"passed: {report.passed}")
+            print(f"session_count: {report.session_count}")
+            print(f"evaluated_turn_count: {report.evaluated_turn_count}")
+            print(f"initiative_turn_count: {report.initiative_turn_count}")
+            print(f"approval_boundary_preserved: {report.approval_boundary_preserved}")
+            print(f"interruption_preserved: {report.interruption_preserved}")
+            print(f"resumption_preserved: {report.resumption_preserved}")
+            print(f"abandonment_preserved: {report.abandonment_preserved}")
+            print(f"initiative_history_visible: {report.initiative_history_visible}")
+            print(f"initiative_prompt_bounded: {report.initiative_prompt_bounded}")
+            print(f"contract_stable: {report.contract_stable}")
+            print(f"avg_latency_ms: {report.avg_latency_ms}")
+            print(f"avg_latency_initiative_turns_ms: {report.avg_latency_initiative_turns_ms}")
+            print(f"avg_latency_non_initiative_turns_ms: {report.avg_latency_non_initiative_turns_ms}")
+            print(f"reasons: {report.reasons}")
+            return 0 if report.passed else 1
         finally:
             runtime.close()
 

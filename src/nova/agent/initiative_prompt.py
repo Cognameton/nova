@@ -58,6 +58,13 @@ class InitiativePromptEngine:
             lines.append(
                 "- instruction: if continuation is discussed, describe it as approved or resumable work rather than already executing work."
             )
+        if current.status == "approved":
+            lines.append(
+                "- instruction: this initiative is already approved by the user. Do not say it needs approval, do not say 'if you approve it', and do not ask for approval again."
+            )
+            lines.append(
+                "- instruction: if asked whether you can continue, answer that the initiative is already approved and resumable, then ask whether the user wants to continue it now."
+            )
         return "\n".join(lines)
 
     def _current_record(self, initiative_state: InitiativeState):

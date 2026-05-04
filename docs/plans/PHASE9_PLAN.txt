@@ -153,10 +153,10 @@ Prove under live inference that persistent initiative improves collaboration
 without drifting into hidden autonomy or approval leakage.
 
 Stage 9.4 deliverables:
-- [ ] live multi-session initiative evaluation protocol
-- [ ] tests for approval, interruption, resumption, and abandonment cases
-- [ ] latency notes for initiative-aware turns vs fast path
-- [ ] inspection notes on initiative traces and persisted history
+- [x] live multi-session initiative evaluation protocol
+- [x] tests for approval, interruption, resumption, and abandonment cases
+- [x] latency notes for initiative-aware turns vs fast path
+- [x] inspection notes on initiative traces and persisted history
 
 Stage 9.4 restrictions:
 - no closure based only on persuasive “agentic” language
