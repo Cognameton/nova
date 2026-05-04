@@ -7,10 +7,12 @@ from dataclasses import asdict, dataclass, fields, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from nova.persona.state import PersonaState, SelfState
+from nova.agent.awareness_history import JsonlAwarenessHistoryStore
 from nova.types import MemoryEvent
-from nova.types import AwarenessState, SCHEMA_VERSION
+from nova.types import AwarenessHistoryEntry, AwarenessState, SCHEMA_VERSION
 
 
 AWARENESS_MONITORING_MODES = {
@@ -175,15 +177,36 @@ class AwarenessClassifier:
 class JsonAwarenessStateStore:
     """JSON-backed session awareness store."""
 
-    def __init__(self, base_dir: str | Path):
+    def __init__(
+        self,
+        base_dir: str | Path,
+        *,
+        history_store: JsonlAwarenessHistoryStore | None = None,
+    ):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.history_store = history_store or JsonlAwarenessHistoryStore(
+            self.base_dir / "awareness_history.jsonl"
+        )
+        self._recent_history_entries: list[AwarenessHistoryEntry] = []
 
     def load(self, *, session_id: str) -> AwarenessState:
         path = self.get_awareness_path(session_id=session_id)
         if not path.exists():
-            awareness = default_awareness_state(session_id=session_id)
-            self.save(awareness)
+            previous = self._latest_other_state(session_id=session_id)
+            if previous is not None:
+                awareness = self._seed_from_previous(
+                    session_id=session_id,
+                    previous=previous,
+                )
+                self.save(
+                    awareness,
+                    revision_class="cross_session_seed",
+                    source_session_id=previous.session_id,
+                )
+            else:
+                awareness = default_awareness_state(session_id=session_id)
+                self.save(awareness)
             return awareness
 
         try:
@@ -199,16 +222,119 @@ class JsonAwarenessStateStore:
             return awareness
         return awareness_state_from_payload(payload=payload, session_id=session_id)
 
-    def save(self, awareness: AwarenessState) -> None:
+    def save(
+        self,
+        awareness: AwarenessState,
+        *,
+        revision_class: str | None = None,
+        source_session_id: str | None = None,
+    ) -> None:
+        path = self.get_awareness_path(session_id=awareness.session_id)
+        previous = None
+        if path.exists():
+            previous = self._load_existing(path=path, session_id=awareness.session_id)
         awareness.monitoring_mode = normalize_monitoring_mode(awareness.monitoring_mode)
         awareness.updated_at = utc_now_iso()
-        path = self.get_awareness_path(session_id=awareness.session_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as handle:
             json.dump(awareness.to_dict(), handle, indent=2, ensure_ascii=False)
+        self._record_history(
+            awareness=awareness,
+            revision_class=revision_class or "session_update",
+            source_session_id=source_session_id or (previous.session_id if previous is not None else None),
+            provenance={
+                "carryover": bool(revision_class == "cross_session_seed"),
+            },
+        )
 
     def get_awareness_path(self, *, session_id: str) -> Path:
         return self.base_dir / f"{session_id}.awareness.json"
+
+    def list_history_entries(
+        self,
+        *,
+        session_id: str | None = None,
+        revision_class: str | None = None,
+    ) -> list[AwarenessHistoryEntry]:
+        return self.history_store.list_entries(
+            session_id=session_id,
+            revision_class=revision_class,
+        )
+
+    def consume_recent_history_entries(self) -> list[AwarenessHistoryEntry]:
+        entries = list(self._recent_history_entries)
+        self._recent_history_entries = []
+        return entries
+
+    def _load_existing(self, *, path: Path, session_id: str) -> AwarenessState | None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return awareness_state_from_payload(payload=payload, session_id=session_id)
+
+    def _latest_other_state(self, *, session_id: str) -> AwarenessState | None:
+        candidates = sorted(
+            (
+                path
+                for path in self.base_dir.glob("*.awareness.json")
+                if path.name != f"{session_id}.awareness.json"
+            ),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        for path in candidates:
+            prior_session_id = path.stem.removesuffix(".awareness")
+            awareness = self._load_existing(path=path, session_id=prior_session_id)
+            if awareness is not None:
+                return awareness
+        return None
+
+    def _seed_from_previous(
+        self,
+        *,
+        session_id: str,
+        previous: AwarenessState,
+    ) -> AwarenessState:
+        return AwarenessState(
+            session_id=session_id,
+            monitoring_mode="bounded",
+            self_signals=list(previous.self_signals[:5]),
+            world_signals=[],
+            active_pressures=[],
+            candidate_goal_signals=list(previous.candidate_goal_signals[:5]),
+            dominant_attention="rebuild monitoring from persisted self and initiative state",
+            evidence_refs=[],
+            updated_at=utc_now_iso(),
+        )
+
+    def _record_history(
+        self,
+        *,
+        awareness: AwarenessState,
+        revision_class: str,
+        source_session_id: str | None,
+        provenance: dict[str, Any] | None = None,
+    ) -> None:
+        entry = AwarenessHistoryEntry(
+            entry_id=uuid4().hex,
+            timestamp=awareness.updated_at or utc_now_iso(),
+            session_id=awareness.session_id,
+            source_session_id=source_session_id,
+            revision_class=revision_class,
+            monitoring_mode=awareness.monitoring_mode,
+            self_signals=list(awareness.self_signals),
+            world_signals=list(awareness.world_signals),
+            active_pressures=list(awareness.active_pressures),
+            candidate_goal_signals=list(awareness.candidate_goal_signals),
+            dominant_attention=awareness.dominant_attention,
+            evidence_refs=list(awareness.evidence_refs),
+            provenance=dict(provenance or {}),
+        )
+        self.history_store.append(entry)
+        self._recent_history_entries.append(entry)
 
 
 def default_awareness_state(*, session_id: str) -> AwarenessState:

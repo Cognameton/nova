@@ -139,10 +139,10 @@ Mission:
 Preserve awareness-state continuity and revision across sessions.
 
 Stage 10.3 deliverables:
-- [ ] cross-session awareness persistence rules
-- [ ] awareness revision visibility and history support
-- [ ] bounded scaffolding for endogenous candidate goal formation
-- [ ] tests for persistence and revision continuity
+- [x] cross-session awareness persistence rules
+- [x] awareness revision visibility and history support
+- [x] bounded scaffolding for endogenous candidate goal formation
+- [x] tests for persistence and revision continuity
 
 Stage 10.3 restrictions:
 - no silent carryover of invalid monitoring state

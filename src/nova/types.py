@@ -346,6 +346,27 @@ class IdentityHistoryEntry:
 
 
 @dataclass(slots=True)
+class AwarenessHistoryEntry:
+    schema_version: str = SCHEMA_VERSION
+    entry_id: str = ""
+    timestamp: str = ""
+    session_id: str = ""
+    source_session_id: str | None = None
+    revision_class: str = ""
+    monitoring_mode: str = "bounded"
+    self_signals: list[str] = field(default_factory=list)
+    world_signals: list[str] = field(default_factory=list)
+    active_pressures: list[str] = field(default_factory=list)
+    candidate_goal_signals: list[str] = field(default_factory=list)
+    dominant_attention: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class TraceRecord:
     schema_version: str = SCHEMA_VERSION
     session_id: str = ""
@@ -366,6 +387,7 @@ class TraceRecord:
     retries: list[dict[str, Any]] = field(default_factory=list)
     persisted_memory_events: list[dict[str, Any]] = field(default_factory=list)
     identity_history_events: list[dict[str, Any]] = field(default_factory=list)
+    awareness_history_events: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

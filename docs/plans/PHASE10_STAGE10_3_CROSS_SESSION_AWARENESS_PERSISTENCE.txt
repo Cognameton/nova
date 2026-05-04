@@ -1,0 +1,155 @@
+PHASE 10, STAGE 3: CROSS-SESSION AWARENESS PERSISTENCE
+======================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 10.3 preserves bounded awareness continuity across sessions without
+silently carrying forward stale monitoring context or turning candidate goals
+into autonomous initiatives. Nova now keeps explicit awareness revision history,
+uses bounded cross-session seeding rules, and exposes candidate-goal scaffolding
+as visible pressure-response state rather than hidden desire.
+
+
+What changed
+------------
+
+- `src/nova/types.py`
+  Adds:
+  - `AwarenessHistoryEntry`
+  - `TraceRecord.awareness_history_events`
+
+- `src/nova/agent/awareness_history.py`
+  Adds `JsonlAwarenessHistoryStore`, an append-only awareness revision log.
+
+- `src/nova/agent/awareness.py`
+  Adds:
+  - embedded awareness-history support
+  - cross-session awareness seeding from the most recent prior awareness-state
+  - bounded carryover rules
+  - recent-history buffering for trace visibility
+
+- `src/nova/runtime.py`
+  Adds:
+  - bounded candidate-goal signal derivation
+  - awareness-history event capture into live traces
+
+- `tests/test_awareness.py`
+  Adds direct coverage for:
+  - bounded cross-session carryover
+  - awareness revision-history logging
+
+- `tests/test_runtime_smoke.py`
+  Adds trace coverage for `awareness_history_events`.
+
+
+Cross-session rules added in Stage 10.3
+---------------------------------------
+
+When a new session has no awareness-state yet, Nova now seeds it from the most
+recent prior awareness-state using explicit bounded rules:
+
+- carry forward durable `self_signals`
+- carry forward bounded `candidate_goal_signals`
+- reset `monitoring_mode` to `bounded`
+- clear `world_signals`
+- clear `active_pressures`
+- reset `dominant_attention` to rebuilding monitoring from current interaction
+  plus persisted self/initiative state
+
+This preserves continuity while avoiding silent carryover of stale contextual
+monitoring.
+
+
+Revision visibility added in Stage 10.3
+---------------------------------------
+
+Awareness-state changes now write append-only history entries with:
+- session id
+- source session id for cross-session seeding
+- revision class
+- monitoring mode
+- self/world signals
+- active pressures
+- candidate-goal signals
+- dominant attention
+- evidence refs
+
+Revision classes currently used:
+- `session_update`
+- `cross_session_seed`
+
+Live traces now include `awareness_history_events` so awareness revisions are
+visible turn by turn.
+
+
+Candidate-goal scaffolding added in Stage 10.3
+----------------------------------------------
+
+Nova now derives bounded candidate-goal signals from pressure-response
+conditions such as:
+- approved initiative remains resumable
+- paused initiative remains resumable
+- active uncertainty should be clarified before stronger claims
+- unresolved self-model tension should be revisited
+- continuity conflict should be resolved through governed recall
+
+These are scaffolds only.
+
+They do not:
+- create initiatives automatically
+- bypass approval
+- trigger action
+- claim standing desires or independent will
+
+
+Boundary preserved
+------------------
+
+Stage 10.3 still does not create always-on autonomy.
+
+The awareness persistence layer is:
+- explicit
+- append-only in its revision history
+- bounded in cross-session carryover
+- subordinate to initiative discipline
+- trace-visible
+
+It does not:
+- silently preserve stale world context
+- flatten provisional monitoring into stable facts
+- create initiatives without the Phase 9 path
+
+
+What the new tests prove
+------------------------
+
+- cross-session awareness carryover preserves only bounded durable fields
+- stale world context and active pressures do not silently persist
+- awareness revision history records both session updates and cross-session
+  seeding
+- candidate-goal scaffolding is visible but remains non-executing state
+- awareness-history entries are present in runtime traces
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_awareness`
+- `tests.test_runtime_smoke`
+- `tests.test_claims`
+- `tests.test_prompt_and_validation`
+
+Full verification:
+- full suite passed after Stage 10.3 implementation
+
+
+Closure judgment
+----------------
+
+Stage 10.3 is complete. Nova now preserves bounded awareness continuity across
+sessions with explicit revision history and candidate-goal scaffolding, ready
+for live awareness evaluation in Stage 10.4.

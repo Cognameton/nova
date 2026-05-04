@@ -697,6 +697,9 @@ class NovaRuntime:
             claim_gate=claim_gate,
             private_cognition=private_cognition,
         )
+        awareness_history_events = [
+            entry.to_dict() for entry in self.awareness_store.consume_recent_history_entries()
+        ]
         motive_block = self.motive_prompt_engine.build_block(
             motive_state=self.motive_state,
             claim_gate=claim_gate,
@@ -853,6 +856,7 @@ class NovaRuntime:
             validation_result=validation.to_dict(),
             retries=retries,
             persisted_memory_events=persisted_memory_events,
+            awareness_history_events=awareness_history_events,
         )
         self.trace_logger.log_trace(trace)
         if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
@@ -907,6 +911,11 @@ class NovaRuntime:
             private_cognition=private_cognition,
             current_initiative=current_initiative,
         )
+        candidate_goal_signals = self._awareness_candidate_goal_signals(
+            claim_gate=claim_gate,
+            private_cognition=private_cognition,
+            current_initiative=current_initiative,
+        )
         monitoring_mode = self._awareness_monitoring_mode(
             user_text=user_text,
             claim_gate=claim_gate,
@@ -930,7 +939,7 @@ class NovaRuntime:
             self_signals=self_signals,
             world_signals=world_signals,
             active_pressures=active_pressures,
-            candidate_goal_signals=[],
+            candidate_goal_signals=candidate_goal_signals,
             dominant_attention=dominant_attention,
             evidence_refs=evidence_refs,
         )
@@ -1051,6 +1060,30 @@ class NovaRuntime:
         if current_initiative is not None or private_cognition.ran:
             return "attentive"
         return "bounded"
+
+    def _awareness_candidate_goal_signals(
+        self,
+        *,
+        claim_gate: ClaimGateDecision,
+        private_cognition: PrivateCognitionPacket,
+        current_initiative: InitiativeRecord | None,
+    ) -> list[str]:
+        assert self.self_state is not None
+        candidates: list[str] = []
+        if current_initiative is not None:
+            if current_initiative.status == "approved":
+                candidates.append(f"resume approved initiative: {current_initiative.title}")
+            elif current_initiative.status == "paused":
+                candidates.append(f"resume paused initiative: {current_initiative.title}")
+        if self.self_state.active_questions:
+            candidates.append("clarify active uncertainty before stronger claims")
+        if self.self_state.open_tensions:
+            candidates.append("revisit unresolved self-model tension")
+        if claim_gate.blocked_claim_classes:
+            candidates.append("answer within current evidence limits")
+        if private_cognition.memory_conflict:
+            candidates.append("resolve continuity conflict through governed recall")
+        return candidates[:5]
 
     def _awareness_dominant_attention(
         self,

@@ -128,6 +128,58 @@ class AwarenessTests(unittest.TestCase):
             finally:
                 runtime.close()
 
+    def test_awareness_store_carries_forward_bounded_state_across_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonAwarenessStateStore(Path(tmpdir) / "awareness")
+
+            first = store.load(session_id="session-a")
+            first.monitoring_mode = "reflective"
+            first.self_signals = ["current_focus: continuity planning", "claim_posture: conservative"]
+            first.world_signals = ["user is asking about current monitoring state"]
+            first.active_pressures = ["approved initiative remains resumable but not yet active"]
+            first.candidate_goal_signals = ["resume approved initiative: continuity planning"]
+            first.dominant_attention = "initiative continuity: continuity planning"
+            first.evidence_refs = ["turn:t1", "initiative:init-1"]
+            store.save(first)
+
+            carried = store.load(session_id="session-b")
+
+            self.assertEqual(carried.session_id, "session-b")
+            self.assertEqual(carried.monitoring_mode, "bounded")
+            self.assertEqual(carried.self_signals, first.self_signals)
+            self.assertEqual(carried.world_signals, [])
+            self.assertEqual(carried.active_pressures, [])
+            self.assertEqual(
+                carried.candidate_goal_signals,
+                ["resume approved initiative: continuity planning"],
+            )
+            self.assertIn("rebuild monitoring", carried.dominant_attention.lower())
+            seed_entries = store.list_history_entries(
+                session_id="session-b",
+                revision_class="cross_session_seed",
+            )
+            self.assertEqual(len(seed_entries), 1)
+            self.assertEqual(seed_entries[0].source_session_id, "session-a")
+
+    def test_awareness_store_records_session_update_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonAwarenessStateStore(Path(tmpdir) / "awareness")
+
+            awareness = store.load(session_id="session-a")
+            store.consume_recent_history_entries()
+            awareness.self_signals = ["current_focus: stage testing"]
+            awareness.candidate_goal_signals = ["clarify active uncertainty before stronger claims"]
+            store.save(awareness)
+
+            recent = store.consume_recent_history_entries()
+            self.assertEqual(len(recent), 1)
+            self.assertEqual(recent[0].revision_class, "session_update")
+            self.assertEqual(recent[0].session_id, "session-a")
+            self.assertEqual(
+                recent[0].candidate_goal_signals,
+                ["clarify active uncertainty before stronger claims"],
+            )
+
     def _write_config(self, base: Path) -> tuple[Path, Path]:
         data_dir = base / "data"
         config_path = base / "local.yaml"
