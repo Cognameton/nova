@@ -119,12 +119,12 @@ Mission:
 Integrate bounded self/world monitoring signals into the active runtime.
 
 Stage 10.2 deliverables:
-- [ ] monitoring signals for self-state, initiative-state, context, and
+- [x] monitoring signals for self-state, initiative-state, context, and
   relevant world conditions
-- [ ] explicit awareness snapshots in traces
-- [ ] runtime integration that remains subordinate to initiative and contract
+- [x] explicit awareness snapshots in traces
+- [x] runtime integration that remains subordinate to initiative and contract
   rules
-- [ ] tests for bounded monitoring behavior
+- [x] tests for bounded monitoring behavior
 
 Stage 10.2 restrictions:
 - no hidden background execution

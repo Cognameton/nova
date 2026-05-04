@@ -362,6 +362,87 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertIn('"initiative_block"', trace_payload)
             self.assertIn("[Initiative-State]", trace_payload)
 
+    def test_runtime_updates_awareness_monitoring_for_current_work_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            log_dir = base / "logs"
+
+            config = NovaConfig(
+                app=AppConfig(name="Nova", data_dir=str(data_dir), log_dir=str(log_dir)),
+                model=ModelConfig(backend="llama_cpp", model_path="/tmp/fake.gguf"),
+                generation=GenerationConfig(),
+                contract=ContractConfig(),
+                persona=PersonaConfig(name="Nova"),
+                memory=MemoryConfig(),
+                session=SessionConfig(),
+                eval=EvalConfig(enable_probes=False),
+            )
+
+            runtime = NovaRuntime(
+                config=config,
+                backend=FakeBackend(),
+                composer=NovaPromptComposer(token_counter=lambda text: len(text.split())),
+                validator=NovaOutputValidator(config.contract),
+                retry_policy=BasicRetryPolicy(),
+                persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
+                self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+                motive_store=JsonMotiveStateStore(data_dir / "motive"),
+                initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
+                presence_store=JsonPresenceStore(data_dir / "presence"),
+                session_store=JsonlSessionStore(data_dir / "sessions"),
+                trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
+                memory_router=BasicMemoryRouter(
+                    episodic=JsonlEpisodicMemoryStore(data_dir / "memory" / "episodic.jsonl"),
+                    engram=JsonEngramMemoryStore(data_dir / "memory" / "engram.json"),
+                    graph=SqliteGraphMemoryStore(data_dir / "memory" / "graph.db"),
+                    autobiographical=JsonlAutobiographicalMemoryStore(data_dir / "memory" / "autobiographical.jsonl"),
+                    semantic=JsonlSemanticMemoryStore(data_dir / "memory" / "semantic.jsonl"),
+                ),
+                memory_event_factory=BasicMemoryEventFactory(),
+                probe_runner=None,
+            )
+
+            record = runtime.create_initiative(
+                title="Awareness-stage implementation work",
+                goal="Track initiative continuity without implying hidden execution.",
+                source="cli",
+            )
+            runtime.transition_initiative(
+                initiative_id=record.initiative_id,
+                to_status="approved",
+                reason="approved",
+                approved_by="user",
+            )
+            runtime.transition_initiative(
+                initiative_id=record.initiative_id,
+                to_status="active",
+                reason="start",
+                approved_by="user",
+            )
+
+            turn = runtime.respond("What are you working on right now?")
+            awareness = runtime.awareness_status()
+            trace_payload = (log_dir / "traces" / f"{turn.session_id}.jsonl").read_text(encoding="utf-8")
+            runtime.close()
+
+            self.assertEqual(awareness.monitoring_mode, "attentive")
+            self.assertIn("initiative continuity", awareness.dominant_attention.lower())
+            self.assertTrue(
+                any("current_focus:" in signal for signal in awareness.self_signals)
+            )
+            self.assertIn(
+                "user is asking about persisted initiative state",
+                awareness.world_signals,
+            )
+            self.assertIn(
+                "active initiative requires bounded status reporting",
+                awareness.active_pressures,
+            )
+            self.assertIn('"awareness_block"', trace_payload)
+            self.assertIn("[Awareness-State]", trace_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,126 @@
+PHASE 10, STAGE 2: SELF/WORLD MONITORING INTEGRATION
+====================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 10.2 wires awareness-state into the live runtime as a bounded monitoring
+surface. Nova now derives explicit self/world monitoring signals during real
+turns, persists them, exposes them in traces, and can surface them in prompts
+without implying hidden observation or autonomous action.
+
+
+What changed
+------------
+
+- `src/nova/agent/awareness_prompt.py`
+  Adds `AwarenessPromptEngine`, a bounded prompt block for monitoring-sensitive
+  turns.
+
+- `src/nova/runtime.py`
+  Adds:
+  - live awareness-state refresh during `respond(...)`
+  - derived monitoring signals for self-state, initiative-state, context, and
+    relevant retrieved context
+  - bounded monitoring-mode selection
+  - dominant-attention selection
+  - evidence-reference capture for awareness updates
+
+- `src/nova/prompt/composer.py`
+  Prompt composition now accepts and preserves an `awareness_block`.
+
+- `src/nova/types.py`
+  `PromptBundle` now carries `awareness_block` for trace visibility.
+
+- `tests/test_runtime_smoke.py`
+  Adds runtime coverage for awareness monitoring updates and awareness-block
+  trace inclusion on current-work turns.
+
+
+Monitoring behavior added in Stage 10.2
+---------------------------------------
+
+New live monitoring signals:
+- self-state signals
+  - current focus
+  - claim posture
+  - active-question / open-tension counts
+  - current response mode when private cognition runs
+
+- world/context signals
+  - user asks about initiative state
+  - user asks about awareness or monitoring state
+  - visible initiative status
+  - active retrieval channels
+
+- active pressures
+  - active initiative requires bounded status reporting
+  - approved or paused initiative remains resumable without hidden progress
+  - claim-gating limits remain active
+  - continuity conflict or uncertainty can remain visible as monitoring pressure
+
+Monitoring-mode selection:
+- `bounded`
+- `attentive`
+- `reflective`
+
+Prompt behavior:
+- awareness-state is surfaced only on relevant turns
+- awareness-state does not override initiative, claim-gating, memory-governance,
+  or private-cognition discipline
+- awareness-state explicitly warns against implying hidden background
+  observation or execution
+
+
+Boundary preserved
+------------------
+
+Stage 10.2 still does not create background autonomous behavior.
+
+The monitoring layer is:
+- explicit
+- persisted
+- prompt-visible only on relevant turns
+- trace-visible on every turn
+- subordinate to initiative and contract rules
+
+It does not:
+- trigger tool execution
+- create autonomous initiatives
+- imply hidden progress on approved or active work
+- override claim honesty or continuity governance
+
+
+What the new tests prove
+------------------------
+
+- awareness-state is updated automatically during live turns
+- monitoring captures current-work context and initiative pressure
+- awareness-block is included in traces only when runtime conditions make it
+  relevant
+- prompt composition continues to validate with the new awareness block
+- existing claim and runtime paths remain stable
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_awareness`
+- `tests.test_runtime_smoke`
+- `tests.test_prompt_and_validation`
+- `tests.test_claims`
+
+Full verification:
+- full suite passed after Stage 10.2 implementation
+
+
+Closure judgment
+----------------
+
+Stage 10.2 is complete. Nova now has bounded self/world monitoring integrated
+into the live runtime with persisted awareness-state updates, prompt-time
+monitoring context, and explicit trace visibility, ready for Phase 10
+cross-session awareness persistence work.

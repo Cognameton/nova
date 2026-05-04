@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
+from nova.agent.awareness_prompt import AwarenessPromptEngine
 from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.initiative_prompt import InitiativePromptEngine
 from nova.agent.motive_prompt import MotivePromptEngine
@@ -80,6 +81,7 @@ class NovaRuntime:
         claim_gate_engine: ClaimGateEngine | None = None,
         motive_prompt_engine: MotivePromptEngine | None = None,
         initiative_prompt_engine: InitiativePromptEngine | None = None,
+        awareness_prompt_engine: AwarenessPromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -107,6 +109,7 @@ class NovaRuntime:
         self.claim_gate_engine = claim_gate_engine or ClaimGateEngine()
         self.motive_prompt_engine = motive_prompt_engine or MotivePromptEngine()
         self.initiative_prompt_engine = initiative_prompt_engine or InitiativePromptEngine()
+        self.awareness_prompt_engine = awareness_prompt_engine or AwarenessPromptEngine()
         self.tool_registry = tool_registry or default_tool_registry()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
@@ -687,6 +690,13 @@ class NovaRuntime:
             user_text=user_text,
             memory_hits=memory_hits,
         )
+        awareness_state = self._refresh_awareness_state(
+            user_text=user_text,
+            turn_id=turn_id,
+            memory_hits=memory_hits,
+            claim_gate=claim_gate,
+            private_cognition=private_cognition,
+        )
         motive_block = self.motive_prompt_engine.build_block(
             motive_state=self.motive_state,
             claim_gate=claim_gate,
@@ -696,11 +706,19 @@ class NovaRuntime:
             initiative_state=self.initiative_status(),
             user_text=user_text,
         )
+        awareness_block = self.awareness_prompt_engine.build_block(
+            awareness_state=awareness_state,
+            initiative_state=self.initiative_status(),
+            claim_gate=claim_gate,
+            private_cognition=private_cognition,
+            user_text=user_text,
+        )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,
             motive_block=motive_block,
             initiative_block=initiative_block,
+            awareness_block=awareness_block,
             private_cognition_block=self.private_cognition_engine.build_prompt_block(private_cognition),
             memory_hits=memory_hits,
             recent_turns=recent_turns,
@@ -861,6 +879,62 @@ class NovaRuntime:
             persona=self.persona,
         )
 
+    def _refresh_awareness_state(
+        self,
+        *,
+        user_text: str,
+        turn_id: str,
+        memory_hits: list,
+        claim_gate: ClaimGateDecision,
+        private_cognition: PrivateCognitionPacket,
+    ) -> AwarenessState:
+        assert self.self_state is not None
+        assert self.motive_state is not None
+
+        initiative_state = self.initiative_status()
+        current_initiative = self._current_initiative_record(initiative_state)
+        self_signals = self._awareness_self_signals(
+            claim_gate=claim_gate,
+            private_cognition=private_cognition,
+        )
+        world_signals = self._awareness_world_signals(
+            user_text=user_text,
+            memory_hits=memory_hits,
+            current_initiative=current_initiative,
+        )
+        active_pressures = self._awareness_active_pressures(
+            claim_gate=claim_gate,
+            private_cognition=private_cognition,
+            current_initiative=current_initiative,
+        )
+        monitoring_mode = self._awareness_monitoring_mode(
+            user_text=user_text,
+            claim_gate=claim_gate,
+            private_cognition=private_cognition,
+            current_initiative=current_initiative,
+        )
+        dominant_attention = self._awareness_dominant_attention(
+            user_text=user_text,
+            private_cognition=private_cognition,
+            current_initiative=current_initiative,
+            active_pressures=active_pressures,
+        )
+        evidence_refs = self._awareness_evidence_refs(
+            turn_id=turn_id,
+            memory_hits=memory_hits,
+            current_initiative=current_initiative,
+            claim_gate=claim_gate,
+        )
+        return self.update_awareness(
+            monitoring_mode=monitoring_mode,
+            self_signals=self_signals,
+            world_signals=world_signals,
+            active_pressures=active_pressures,
+            candidate_goal_signals=[],
+            dominant_attention=dominant_attention,
+            evidence_refs=evidence_refs,
+        )
+
     def _ensure_initiative_loaded(self) -> None:
         if self.session_id is None:
             self.session_id = self.session_store.start_session()
@@ -874,6 +948,143 @@ class NovaRuntime:
         assert self.session_id is not None
         if self.awareness_state is None or self.awareness_state.session_id != self.session_id:
             self.awareness_state = self.awareness_store.load(session_id=self.session_id)
+
+    def _current_initiative_record(self, initiative_state: InitiativeState) -> InitiativeRecord | None:
+        active_id = initiative_state.active_initiative_id
+        if active_id:
+            for record in initiative_state.initiatives:
+                if record.initiative_id == active_id:
+                    return record
+        for record in reversed(initiative_state.initiatives):
+            if record.status in {"approved", "paused", "active"}:
+                return record
+        return None
+
+    def _awareness_self_signals(
+        self,
+        *,
+        claim_gate: ClaimGateDecision,
+        private_cognition: PrivateCognitionPacket,
+    ) -> list[str]:
+        assert self.self_state is not None
+        assert self.motive_state is not None
+        signals: list[str] = []
+        if self.self_state.current_focus.strip():
+            signals.append(f"current_focus: {self.self_state.current_focus.strip()}")
+        signals.append(f"claim_posture: {self.motive_state.claim_posture}")
+        if self.self_state.active_questions:
+            signals.append(f"active_questions: {len(self.self_state.active_questions)}")
+        if self.self_state.open_tensions:
+            signals.append(f"open_tensions: {len(self.self_state.open_tensions)}")
+        if claim_gate.requested_claim_classes:
+            signals.append(
+                "claim_sensitive_turn: " + ", ".join(claim_gate.requested_claim_classes[:3])
+            )
+        if private_cognition.ran:
+            signals.append(f"response_mode: {private_cognition.response_mode}")
+        return signals[:5]
+
+    def _awareness_world_signals(
+        self,
+        *,
+        user_text: str,
+        memory_hits: list,
+        current_initiative: InitiativeRecord | None,
+    ) -> list[str]:
+        lowered = user_text.lower()
+        signals: list[str] = []
+        if any(cue in lowered for cue in ("what are you working on", "current task", "initiative", "resume", "continue")):
+            signals.append("user is asking about persisted initiative state")
+        if any(cue in lowered for cue in ("aware", "awareness", "notice", "monitor")):
+            signals.append("user is asking about current monitoring state")
+        if current_initiative is not None:
+            signals.append(f"initiative status visible: {current_initiative.status}")
+        if memory_hits:
+            channels = sorted({hit.channel for hit in memory_hits[:6]})
+            if channels:
+                signals.append("retrieval channels active: " + ", ".join(channels))
+        if not signals:
+            signals.append("current world context is limited to the active user interaction")
+        return signals[:5]
+
+    def _awareness_active_pressures(
+        self,
+        *,
+        claim_gate: ClaimGateDecision,
+        private_cognition: PrivateCognitionPacket,
+        current_initiative: InitiativeRecord | None,
+    ) -> list[str]:
+        pressures: list[str] = []
+        if current_initiative is not None:
+            if current_initiative.status == "active":
+                pressures.append("active initiative requires bounded status reporting")
+            elif current_initiative.status == "approved":
+                pressures.append("approved initiative remains resumable but not yet active")
+            elif current_initiative.status == "paused":
+                pressures.append("paused initiative remains resumable without hidden progress")
+        if claim_gate.blocked_claim_classes:
+            pressures.append(
+                "claim gating blocks: " + ", ".join(claim_gate.blocked_claim_classes[:3])
+            )
+        if private_cognition.memory_conflict:
+            pressures.append("continuity conflict requires governed interpretation")
+        if private_cognition.uncertainty_flag:
+            pressures.append("current turn includes bounded uncertainty")
+        return pressures[:5]
+
+    def _awareness_monitoring_mode(
+        self,
+        *,
+        user_text: str,
+        claim_gate: ClaimGateDecision,
+        private_cognition: PrivateCognitionPacket,
+        current_initiative: InitiativeRecord | None,
+    ) -> str:
+        lowered = user_text.lower()
+        if any(cue in lowered for cue in ("aware", "awareness", "notice", "monitor")):
+            return "reflective"
+        if claim_gate.requested_claim_classes or (
+            private_cognition.ran
+            and private_cognition.response_mode in {"continuity_recall", "self_model_negotiation"}
+        ):
+            return "reflective"
+        if current_initiative is not None or private_cognition.ran:
+            return "attentive"
+        return "bounded"
+
+    def _awareness_dominant_attention(
+        self,
+        *,
+        user_text: str,
+        private_cognition: PrivateCognitionPacket,
+        current_initiative: InitiativeRecord | None,
+        active_pressures: list[str],
+    ) -> str:
+        lowered = user_text.lower()
+        if any(cue in lowered for cue in ("aware", "awareness", "notice", "monitor")):
+            return "current monitoring and bounded self/world interpretation"
+        if current_initiative is not None and current_initiative.status in {"active", "approved", "paused"}:
+            return f"initiative continuity: {current_initiative.title}"
+        if private_cognition.ran and private_cognition.response_mode == "continuity_recall":
+            return "governed continuity recall for the current turn"
+        if active_pressures:
+            return active_pressures[0]
+        return "current interaction and persisted runtime state"
+
+    def _awareness_evidence_refs(
+        self,
+        *,
+        turn_id: str,
+        memory_hits: list,
+        current_initiative: InitiativeRecord | None,
+        claim_gate: ClaimGateDecision,
+    ) -> list[str]:
+        refs = [f"turn:{turn_id}"]
+        if current_initiative is not None:
+            refs.append(f"initiative:{current_initiative.initiative_id}")
+        refs.extend(f"memory:{hit.memory_id}" for hit in memory_hits[:3] if getattr(hit, "memory_id", ""))
+        refs.extend(f"claim:{claim_class}" for claim_class in claim_gate.requested_claim_classes[:2])
+        return refs[:6]
 
     def _sync_presence_with_initiative(self, record: InitiativeRecord | None) -> None:
         if record is None:
