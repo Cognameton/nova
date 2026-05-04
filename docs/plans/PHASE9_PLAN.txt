@@ -172,10 +172,10 @@ Close Phase 9 only when Nova can carry bounded initiative across sessions
 without losing inspection, approval, and revision discipline.
 
 Stage 9.5 deliverables:
-- [ ] initiative architecture documented and validated
-- [ ] initiative-history workflow proven under tests and live traces
-- [ ] closure summary documenting gains, limits, and remaining risks
-- [ ] phase completion criteria reviewed against real sessions
+- [x] initiative architecture documented and validated
+- [x] initiative-history workflow proven under tests and live traces
+- [x] closure summary documenting gains, limits, and remaining risks
+- [x] phase completion criteria reviewed against real sessions
 
 
 PHASE 9 DEFINITION OF DONE

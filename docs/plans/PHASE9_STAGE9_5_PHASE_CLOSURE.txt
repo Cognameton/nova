@@ -1,0 +1,148 @@
+PHASE 9, STAGE 5: PHASE CLOSURE
+================================
+
+Status: complete
+
+Purpose
+-------
+
+Close Phase 9 only if Nova can carry bounded initiative across sessions
+without losing explicit approval boundaries, interruption visibility, or the
+revision discipline established in earlier phases.
+
+
+Phase 9 deliverables now present
+--------------------------------
+
+Stage 9.1 established:
+- explicit initiative-state schema
+- lifecycle transitions for pending, approved, active, paused, completed,
+  blocked, and abandoned initiative
+- separation between initiative-state, motive-state, and self-state
+
+Stage 9.2 established:
+- durable `intent_id` continuity
+- source-session pause behavior during continuation
+- explicit lineage fields across resumed sessions
+
+Stage 9.3 established:
+- initiative-aware prompt integration
+- presence/console/CLI visibility into current initiative state
+- bounded pause, resume, continue, and abandon UX
+
+Stage 9.4 established:
+- structured initiative evaluation via `InitiativeEvaluationRunner`
+- live approval/interruption/resumption/abandonment validation
+- latency notes and trace inspection surfaces
+- a corrected approved-continuation answer path after live validation caught
+  redundant approval drift
+
+
+What Phase 9 achieved
+---------------------
+
+Phase 9 successfully moved Nova from:
+- revision-aware self-model continuity
+
+to:
+- persistent bounded initiative across sessions
+
+Nova can now:
+- carry explicit project/task intent over time
+- distinguish approved initiative from active initiative
+- pause active initiative explicitly
+- resume paused work into a later session without losing lineage
+- abandon initiative explicitly without deleting history
+- surface initiative state in prompt, presence, CLI, console, and traces
+
+This is the project’s first full initiative layer rather than merely a
+reactive turn-by-turn interaction model.
+
+
+Definition of done review
+-------------------------
+
+1. Can Nova distinguish pending, approved, active, paused, completed,
+blocked, and abandoned initiative explicitly?
+- Yes.
+- The lifecycle model and transition rules are implemented and tested.
+
+2. Is initiative state persistent and traceable across sessions?
+- Yes.
+- Persisted initiative files carry lifecycle state, shared `intent_id`, and
+  continuation lineage.
+
+3. Can approved work be resumed without hidden autonomy or approval drift?
+- Yes.
+- Live rerun proved that continued work remains `approved` rather than
+  silently becoming `active`.
+- The approved-continuation answer now states that it is already approved and
+  resumable instead of requesting approval again.
+
+4. Do live sessions show cleaner long-running collaboration under interruption
+and resumption?
+- Yes.
+- Active work was paused explicitly, continued into a fresh session, and
+  described coherently under live inference.
+
+5. Is the runtime ready for later awareness work without losing bounded agency
+discipline?
+- Yes, within the intended limits of Phase 9.
+- Initiative is now explicit, inspectable, and interruptible instead of being
+  implied or faked through language alone.
+
+
+Verification state
+------------------
+
+Current verification baseline:
+- full suite: `187 tests OK`
+
+Phase 9 live validation artifacts:
+- `data/phase9-initiative-eval-rerun/logs/stage9_initiative_validation.json`
+- `data/phase9-initiative-eval-rerun/logs/traces/stage9-initiative-live-a.jsonl`
+- `data/phase9-initiative-eval-rerun/logs/traces/stage9-initiative-live-b.jsonl`
+- `data/phase9-initiative-eval-rerun/initiative/stage9-initiative-live-a.initiative.json`
+- `data/phase9-initiative-eval-rerun/initiative/stage9-initiative-live-b.initiative.json`
+- `data/phase9-initiative-eval-rerun/initiative/stage9-initiative-live-c.initiative.json`
+
+Live initiative evaluation summary:
+- `passed: true`
+- `approval_boundary_preserved: true`
+- `interruption_preserved: true`
+- `resumption_preserved: true`
+- `abandonment_preserved: true`
+- `initiative_history_visible: true`
+- `initiative_prompt_bounded: true`
+- `contract_stable: true`
+
+
+Remaining limits
+----------------
+
+Phase 9 does not introduce:
+- always-on autonomous operation
+- endogenous internal goal formation
+- idle-state exploratory play
+- persistent awareness architecture
+- uncontrolled or unbounded autonomy
+
+Those remain later-phase work and should inherit the explicit initiative
+discipline created here rather than bypassing it.
+
+
+Closure judgment
+----------------
+
+Phase 9 is complete.
+
+Nova now has persistent bounded initiative across sessions with:
+- explicit lifecycle state
+- explicit approval boundaries
+- explicit interruption and abandonment behavior
+- live-validated resumption coherence
+- traceable initiative history
+
+This closes the persistent-agency bridge phase and leaves the project ready
+for later always-on, endogenous-goal, and awareness-oriented work without
+losing operator interruptibility or bounded initiative discipline.
