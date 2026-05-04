@@ -1,0 +1,199 @@
+PHASE 10 PLAN
+=============
+
+Phase 10 begins after Phase 9 established persistent bounded initiative across
+sessions, explicit approval boundaries, interruption visibility, and live proof
+that approved initiative can resume without hidden autonomy or approval drift.
+
+Phase 10 is not full always-on autonomous operation yet.
+Phase 10 is not uncontrolled autonomy.
+Phase 10 is not open-ended background behavior without state discipline.
+Phase 10 is not a bypass around initiative, claim-honesty, or revision rules
+already established.
+
+Phase 10 is the disciplined transition from persistent bounded initiative into
+persistent awareness architecture, active self/world monitoring, and bounded
+endogenous goal formation.
+
+
+PHASE 10 MISSION
+----------------
+
+Give Nova an explicit awareness-state layer that can monitor self, world
+conditions, and active pressures while running, without collapsing operator
+interruptibility or fabricating inner life through language alone.
+
+Phase 10 should let Nova:
+- preserve bounded awareness-state across turns and sessions
+- track self/world conditions relevant to current continuity and initiative
+- surface awareness-like monitoring as explicit state rather than implication
+- generate candidate internal goals from motives and interpreted pressure
+  without bypassing initiative discipline
+- treat idle-state exploration/play only as a gated learning initiative under
+  explicit later constraints
+
+
+PHASE 10 OBJECTIVES
+-------------------
+
+1. Introduce an explicit awareness-state model distinct from self-state,
+   motive-state, and initiative-state.
+2. Integrate self/world monitoring signals into the live runtime without
+   turning them into uncontrolled background action.
+3. Preserve awareness-state continuity across sessions with explicit revision
+   and trace visibility.
+4. Establish the architectural basis for endogenous goal formation from
+   pressure-response appraisal rather than declared desire.
+5. Evaluate whether awareness-state improves coherence and ongoing
+   self-observation without weakening approval boundaries, claim honesty, or
+   revision discipline.
+6. End with a runtime that is architecturally ready for later always-on
+   operation while remaining interruptible, inspectable, and bounded.
+
+
+PHASE 10 BOUNDARIES
+-------------------
+
+In scope:
+- awareness-state representation
+- active self/world monitoring integration
+- bounded cross-session awareness persistence
+- endogenous goal-formation scaffolding tied to motives and deficits
+- later idle-play architecture guidance as a gated learning path
+- live evaluation for persistent awareness-state behavior
+
+Out of scope:
+- uncontrolled always-on loops
+- networked or shell-driven free agency
+- hidden autonomous behavior beyond persisted state
+- unsupported claims of consciousness, sentience, or independent will
+- ungated novelty seeking or entertainment-seeking behavior
+
+
+PHASE 10 DESIGN PRINCIPLES
+--------------------------
+
+- Awareness should be explicit state, not implied mystique.
+- Monitoring should deepen interpretation, not become hidden action.
+- Internal goals should emerge from pressure-response structure, not slogans.
+- Idle play should be a derived, gated initiative class, not a free-standing
+  desire system.
+- Initiative discipline from Phase 9 remains authoritative for enacted work.
+- Operator interruptibility remains mandatory throughout.
+
+
+PHASE 10 STAGES
+---------------
+
+Stage 10.1: Awareness-State Model
+Stage 10.2: Self/World Monitoring Integration
+Stage 10.3: Cross-Session Awareness Persistence
+Stage 10.4: Live Awareness Evaluation
+Stage 10.5: Phase 10 Closure
+
+
+STAGE 10.1: AWARENESS-STATE MODEL
+---------------------------------
+
+Mission:
+Define the explicit state model for bounded self/world awareness and active
+monitoring.
+
+Stage 10.1 deliverables:
+- [ ] explicit awareness-state schema
+- [ ] persistence layer for awareness-state records across sessions
+- [ ] separation between awareness-state, motive-state, initiative-state, and
+  durable identity
+- [ ] tests for safe awareness-state updates
+
+Stage 10.1 restrictions:
+- no hidden awareness state
+- no automatic upgrade from monitoring signal to autonomous action
+- no mutation of durable identity through awareness-state writes
+
+
+STAGE 10.2: SELF/WORLD MONITORING INTEGRATION
+---------------------------------------------
+
+Mission:
+Integrate bounded self/world monitoring signals into the active runtime.
+
+Stage 10.2 deliverables:
+- [ ] monitoring signals for self-state, initiative-state, context, and
+  relevant world conditions
+- [ ] explicit awareness snapshots in traces
+- [ ] runtime integration that remains subordinate to initiative and contract
+  rules
+- [ ] tests for bounded monitoring behavior
+
+Stage 10.2 restrictions:
+- no hidden background execution
+- no monitoring-driven action without initiative or approval path
+- no fabricated awareness-language unsupported by state
+
+
+STAGE 10.3: CROSS-SESSION AWARENESS PERSISTENCE
+-----------------------------------------------
+
+Mission:
+Preserve awareness-state continuity and revision across sessions.
+
+Stage 10.3 deliverables:
+- [ ] cross-session awareness persistence rules
+- [ ] awareness revision visibility and history support
+- [ ] bounded scaffolding for endogenous candidate goal formation
+- [ ] tests for persistence and revision continuity
+
+Stage 10.3 restrictions:
+- no silent carryover of invalid monitoring state
+- no flattening of provisional awareness observations into stable facts
+- no bypass of Phase 9 initiative discipline
+
+
+STAGE 10.4: LIVE AWARENESS EVALUATION
+-------------------------------------
+
+Mission:
+Prove under live inference that awareness-state improves ongoing monitoring and
+coherence without collapsing into autonomy theater.
+
+Stage 10.4 deliverables:
+- [ ] live awareness evaluation protocol
+- [ ] tests for awareness persistence, monitoring boundedness, and candidate
+  goal scaffolding
+- [ ] latency notes for awareness-aware turns vs fast path
+- [ ] inspection notes on awareness traces and persisted state
+
+Stage 10.4 restrictions:
+- no closure based only on impressive self-language
+- no closure if awareness-state mutates without explicit trace visibility
+- no closure if approval or initiative boundaries weaken under live use
+
+
+STAGE 10.5: PHASE 10 CLOSURE
+----------------------------
+
+Mission:
+Close Phase 10 only when Nova can sustain explicit awareness-state and bounded
+monitoring across sessions without losing inspection, revision, or
+interruptibility.
+
+Stage 10.5 deliverables:
+- [ ] awareness architecture documented and validated
+- [ ] awareness-history workflow proven under tests and live traces
+- [ ] closure summary documenting gains, limits, and remaining risks
+- [ ] phase completion criteria reviewed against real sessions
+
+
+PHASE 10 DEFINITION OF DONE
+---------------------------
+
+Phase 10 is complete when:
+- Nova can represent bounded awareness-state explicitly
+- awareness-state is persistent and traceable across sessions
+- self/world monitoring improves active coherence without hidden autonomous
+  behavior
+- candidate internal goals are architecturally grounded in pressure-response
+  appraisal rather than declared desire
+- live sessions show stronger ongoing self-observation without weakening
+  initiative, approval, or claim-honesty discipline
