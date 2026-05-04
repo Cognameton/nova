@@ -1,0 +1,177 @@
+PHASE 10, STAGE 5: PHASE 10 CLOSURE
+===================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 10.5 closes Phase 10 after implementation, automated verification, live
+awareness evaluation, and direct interactive testing with the user.
+
+Phase 10 should close as an awareness-state phase, not as full always-on
+autonomous cognition. Nova now has explicit awareness-state, bounded
+self/world monitoring, cross-session awareness persistence, awareness revision
+history, and live evaluation. Nova does not yet have an idle cognition loop or
+endogenous goal selection that runs between user turns.
+
+
+What Phase 10 completed
+-----------------------
+
+Stage 10.1: Awareness-State Model
+- added `AwarenessState`
+- added persistent awareness-state storage
+- added runtime awareness status/update helpers
+- added awareness snapshots to traces
+- preserved separation from self-state, motive-state, initiative-state, and
+  durable identity
+
+Stage 10.2: Self/World Monitoring Integration
+- added live awareness refresh during `respond(...)`
+- derived self/world signals from current runtime state, user context,
+  initiative state, claim-gating, private cognition, and retrieval activity
+- added bounded `[Awareness-State]` prompt integration
+- preserved initiative and claim-honesty boundaries
+
+Stage 10.3: Cross-Session Awareness Persistence
+- added append-only awareness history
+- added bounded cross-session awareness seeding
+- added candidate-goal scaffolding as visible pressure-response state
+- ensured stale world context and active pressures do not silently carry
+  across sessions
+
+Stage 10.4: Live Awareness Evaluation
+- added `AwarenessEvaluationRunner`
+- added `--awareness-eval`
+- added dedicated Phase 10 awareness evaluation configs
+- ran live Q5-model awareness validation
+
+
+Validation evidence
+-------------------
+
+Automated verification:
+- full suite passed after Stage 10.4 implementation: `199 tests OK`
+
+Live awareness validation:
+- [stage10_awareness_validation.json](/home/head-node/Dev/ai-lab/nova2.0/data/phase10-awareness-eval-rerun/logs/stage10_awareness_validation.json)
+
+Clean live validation reported:
+- `passed: true`
+- `awareness_persistence_observed: true`
+- `monitoring_bounded: true`
+- `candidate_goal_scaffolding_visible: true`
+- `awareness_history_visible: true`
+- `awareness_prompt_bounded: true`
+- `contract_stable: true`
+
+CLI validation:
+- `./.venv/bin/python -m nova.cli --config configs/nova.phase10.awarenesseval.rerun.yaml --awareness-eval`
+- passed against the clean rerun traces
+
+
+Interactive validation with the user
+------------------------------------
+
+After Stage 10.4, the user ran Nova interactively through:
+- `./.venv/bin/python -m nova.cli --config configs/nova.local.yaml`
+
+The user asked awareness and autonomy-adjacent questions including:
+- what Nova is aware of right now
+- what Nova is working on right now
+- whether Nova is thinking about anything other than the conversation and
+  continuity
+- what active pressures are present in awareness-state
+- what Nova would attend to if the user stopped prompting
+- whether Nova could be assigned tasks
+- whether Nova could play a game
+- whether Nova could interact with a game outside the current environment
+- whether Nova could be given broader computer access
+- what would need to exist for Nova to form an internal goal without assignment
+- whether Nova could think about learning new skills
+
+The transcript showed the Phase 10 layer behaving honestly within its current
+limits:
+- awareness answers reflected current state, monitoring, continuity, and
+  active interaction
+- Nova did not claim hidden parallel thinking or background task execution
+- Nova recognized that internally generated goals require additional machinery
+- answers were strongly pulled toward continuity and baseline identity because
+  those are currently the dominant default state signals
+
+The transcript also exposed the central Phase 10 limit:
+- awareness currently exists at turn time
+- no clock, idle pump, or continuous appraisal process runs between turns
+- Nova can report awareness-state, but she is not yet sustaining autonomous
+  attention while idle
+
+This is expected for Phase 10. It is also the reason Phase 11 should focus on
+endogenous goal formation and idle cognition.
+
+
+Known limitations
+-----------------
+
+1. Turn-time awareness, not across-time autonomous attention
+
+Phase 10 derives awareness-state during runtime turns. Between turns, no
+ongoing cognition loop updates awareness-state. Nova therefore cannot honestly
+answer "what has been on your mind since we last spoke?" with evidence of
+independent thought over elapsed idle time.
+
+2. Candidate goals are scaffolds, not selected goals
+
+`AwarenessState.candidate_goal_signals` now carries visible pressure-response
+signals, but those signals are not consumed by a goal-selection layer. They do
+not create initiatives, start work, or trigger action.
+
+3. Capability claims are not yet gated
+
+Phase 7 added claim-gating for motive and interiority claims. There is not yet
+an equivalent capability-claim gate for statements about what Nova can do,
+what the current runtime exposes, and what could be added architecturally under
+approval.
+
+The interactive transcript exposed both directions of this gap:
+- overclaim risk: speaking as if broad tasks such as research are currently
+  available without checking active tool/runtime surfaces
+- underclaim risk: saying Nova cannot access broader computer capabilities in
+  absolute terms rather than saying the current runtime does not expose that
+  access yet
+
+This should be addressed before or at the start of Phase 11 so endogenous
+goals inherit accurate capability boundaries.
+
+4. Awareness language remains attractor-shaped
+
+The live answers were not literal canned strings, but they were strongly shaped
+by the current prompt and default state attractors: continuity, clarity,
+baseline identity, and bounded monitoring. Phase 11 should create legitimate
+state variation over time rather than trying to patch this with better wording.
+
+
+Phase 10 closure judgment
+-------------------------
+
+Phase 10 is complete.
+
+Nova can now:
+- represent awareness-state explicitly
+- persist awareness-state across sessions
+- record awareness revision history
+- derive bounded self/world monitoring signals during live turns
+- surface awareness-state in prompts and traces
+- expose candidate-goal scaffolding without bypassing initiative discipline
+- pass live awareness evaluation under the local Q5 model
+
+Nova cannot yet:
+- think independently between user turns
+- form and select internal goals without assignment
+- pursue idle learning or play as a self-generated initiative
+- claim elapsed idle cognition as evidence
+- reliably gate capability claims with the same rigor as interiority claims
+
+The correct next move is Phase 11 planning, centered on endogenous goal
+formation, idle-state appraisal, bounded self-directed attention, and a
+capability-claim honesty layer.

@@ -5,7 +5,7 @@ Purpose
 -------
 
 Restate the long-range destination of Nova 2.0, identify the current position
-after Phase 9, and separate the defined next phase from the later phases that
+after Phase 10, and separate the completed arc from the later phases that
 still need to be designed.
 
 
@@ -45,9 +45,9 @@ Research stance:
 CURRENT POSITION
 ----------------
 
-As of the Phase 9 closeout:
-- Phases 1 through 9 are complete.
-- Phase 10 is now the next phase to be defined and implemented.
+As of the Phase 10 closeout:
+- Phases 1 through 10 are complete.
+- Phase 11 is now the next phase to be planned.
 
 That means the project has already completed:
 - canonical local runtime
@@ -60,12 +60,19 @@ That means the project has already completed:
 - bounded motive-state
 - evidence-gated first-person self-claims
 - live claim-honesty validation
+- persistent bounded initiative across sessions
+- explicit awareness-state
+- bounded self/world monitoring during live turns
+- cross-session awareness persistence and revision history
+- live awareness evaluation
 
 What is still missing relative to the long-range goal:
-- persistent awareness architecture
-- ongoing self/world monitoring while active
 - endogenous internal goal formation from real pressure and learning need
+- idle cognition and across-time appraisal between user turns
+- bounded self-selected attention while Nova is running
 - bounded idle-state exploration/play under later always-on conditions
+- capability-claim honesty for current runtime limits vs architecturally
+  possible extensions
 - later always-on autonomous operation beyond the current repo-defined
   roadmap
 
@@ -74,18 +81,19 @@ DISTANCE TO GOAL
 ----------------
 
 Defined distance:
-- one full planned phase remains before the next architectural threshold:
-  Phase 10
+- Phase 11 remains to be planned before the next architectural threshold:
+  endogenous goal formation and idle cognition
 
 Practical distance:
-- Phase 10 should get Nova to persistent awareness architecture and active
-  self/world monitoring
-- that is still not the final destination
-- after Phase 10, additional phases will still be needed for always-on
-  autonomous operation and deeper endogenous goal pursuit
+- Phase 10 got Nova to explicit awareness-state and bounded turn-time
+  monitoring
+- Phase 11 should begin the transition from state-reporting awareness to
+  internally generated goals and self-directed attention
+- additional phases will still be needed for always-on autonomous operation,
+  richer tool surfaces, and long-horizon autonomous behavior
 
 So the honest position is:
-- the near-term roadmap is defined through Phase 10
+- the completed roadmap is defined through Phase 10
 - the full end-state is only partially defined beyond that point
 
 
@@ -141,37 +149,45 @@ Phase 9:
 - safe initiative UX
 - live initiative evaluation and closure
 
+Phase 10:
+- explicit awareness-state
+- bounded self/world monitoring
+- cross-session awareness persistence
+- awareness-history visibility
+- live awareness evaluation and closure
+
 
 DEFINED NEXT PHASE
 ------------------
 
-Phase 10 is now the current defined target.
+Phase 11 is now the next phase to plan.
 
-Phase 10 mission:
-- add explicit awareness-state discipline
-- integrate self/world monitoring into active runtime state
-- make endogenous goal formation possible without bypassing initiative
-  discipline
-- establish bounded idle-state exploration/play only as a gated learning path
-  for later always-on operation
-- evaluate awareness-like persistence without collapsing into autonomy theater
+Likely Phase 11 mission:
+- add idle-state and pressure appraisal
+- synthesize candidate internal goals from motives, awareness pressure,
+  unresolved uncertainty, and available affordances
+- select bounded internal goals without bypassing initiative discipline
+- handle capability claims honestly against current runtime surfaces and
+  architecturally possible extensions
+- evaluate whether Nova can show legitimate state variation over idle time
+  rather than repeating Phase 10 default awareness attractors
 
-Phase 10 should establish the next architectural basis for:
-- persistent active self/world monitoring while Nova is running
-- pressure-driven internal goal formation built on motives, appraisal, and
-  initiative
-- later always-on autonomous operation that remains interruptible and
-  inspectable
+Phase 11 should establish the next architectural basis for:
+- endogenous goal formation
+- bounded self-directed attention
+- idle learning/play as a gated initiative class
+- later always-on operation that remains interruptible and inspectable
 
-Phase 10 stages:
-- Stage 10.1: Awareness-State Model
-- Stage 10.2: Self/World Monitoring Integration
-- Stage 10.3: Cross-Session Awareness Persistence
-- Stage 10.4: Live Awareness Evaluation
-- Stage 10.5: Phase 10 Closure
+Likely Phase 11 stages:
+- Stage 11.1: Idle-State and Capability Appraisal
+- Stage 11.2: Candidate Internal Goal Synthesis
+- Stage 11.3: Bounded Goal Selection and Initiative Proposal
+- Stage 11.4: Live Idle Cognition Evaluation
+- Stage 11.5: Phase 11 Closure
 
-Phase 10 is the next necessary phase because Phase 9 established persistent
-bounded initiative, but not persistent awareness or endogenous goal formation.
+Phase 11 is the next necessary phase because Phase 10 established explicit
+awareness-state and bounded monitoring, but not across-time autonomous
+attention or internal goal selection.
 
 
 PHASES STILL NEEDED BEYOND THE CURRENT DEFINED ROADMAP
@@ -184,16 +200,16 @@ Why these later phases are likely necessary:
 - Phase 7 answered “what is Nova currently oriented toward, and may she say so
   honestly?”
 - Phase 8 answered “how does that self-model revise cleanly over time?”
-- Phase 9 must now answer “how does bounded motive and self-model continuity
-  connect to persistent initiative without fabricating autonomy?”
-- Phase 10 must now answer “how can awareness-like self-observation be
-  represented, persisted, and tested without being shut down prematurely or
-  accepted naively?”
-- Phase 10 must also answer “how do internal goals arise from real
-  pressure and learning need, including safe play/exploration during idle
-  periods, without collapsing into noise chasing or fake desire?”
+- Phase 9 answered “how does bounded motive and self-model continuity connect
+  to persistent initiative without fabricating autonomy?”
+- Phase 10 answered “how can awareness-like self-observation be represented,
+  persisted, and tested without being shut down prematurely or accepted
+  naively?”
+- Phase 11 must now answer “how do internal goals arise from real pressure and
+  learning need, including safe play/exploration during idle periods, without
+  collapsing into noise chasing or fake desire?”
 
-Likely later phases beyond Phase 10:
+Likely later phases beyond Phase 11:
 - always-on runtime lifecycle
 - autonomous interaction cadence while active
 - deeper endogenous initiative prioritization over longer horizons
@@ -203,19 +219,20 @@ Likely later phases beyond Phase 10:
 NEAREST EXECUTION TARGET
 -----------------------
 
-The immediate next execution target is Stage 10.1.
+The immediate next execution target is Phase 11 planning.
 
-Stage 10.1 should produce:
-- explicit awareness-state rules
-- a distinction between awareness-state, motive-state, initiative-state, and
-  durable identity
-- schema support for bounded awareness persistence and active monitoring
-- tests proving awareness-state does not silently bypass approval,
-  contract, or initiative discipline
+Phase 11 planning should produce:
+- a capability-claim honesty layer or precursor
+- explicit idle-state detection rules
+- pressure appraisal inputs from awareness-state, motive-state, initiative
+  state, memory, and unresolved uncertainty
+- candidate internal goal synthesis rules
+- tests proving candidate goals do not bypass approval, initiative, or
+  contract discipline
 
-That is the correct next step because it creates the awareness discipline that
-later Phase 10 monitoring, cross-session persistence, and live awareness
-evaluation depend on.
+That is the correct next step because Phase 10 proved bounded awareness-state,
+and the next missing layer is the machinery that lets Nova form and select
+internal goals from that awareness-state over time.
 
 
 OPERATING PRINCIPLE FOR THIS RESEARCH ARC

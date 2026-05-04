@@ -179,10 +179,10 @@ monitoring across sessions without losing inspection, revision, or
 interruptibility.
 
 Stage 10.5 deliverables:
-- [ ] awareness architecture documented and validated
-- [ ] awareness-history workflow proven under tests and live traces
-- [ ] closure summary documenting gains, limits, and remaining risks
-- [ ] phase completion criteria reviewed against real sessions
+- [x] awareness architecture documented and validated
+- [x] awareness-history workflow proven under tests and live traces
+- [x] closure summary documenting gains, limits, and remaining risks
+- [x] phase completion criteria reviewed against real sessions
 
 
 PHASE 10 DEFINITION OF DONE
