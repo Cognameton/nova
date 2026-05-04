@@ -19,6 +19,7 @@ from nova.eval.probes import BasicProbeRunner
 from nova.logging.traces import JsonlTraceLogger
 from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.motive import JsonMotiveStateStore
+from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.presence import JsonPresenceStore
 from nova.memory.autobiographical import JsonlAutobiographicalMemoryStore
 from nova.memory.engram import JsonEngramMemoryStore
@@ -105,6 +106,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -132,6 +134,7 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertIn('"private_cognition"', trace_payload)
             self.assertIn('"motive_state_snapshot"', trace_payload)
             self.assertIn('"initiative_state_snapshot"', trace_payload)
+            self.assertIn('"awareness_state_snapshot"', trace_payload)
             self.assertIn("[Private Cognition]", trace_payload)
 
     def test_backend_check_runs_generation_without_persisting_turns(self) -> None:
@@ -161,6 +164,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -215,6 +219,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -266,6 +271,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -316,6 +322,7 @@ class RuntimeSmokeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),

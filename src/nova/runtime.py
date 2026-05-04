@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from nova.agent.claims import ClaimGateEngine
+from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.initiative_prompt import InitiativePromptEngine
 from nova.agent.motive_prompt import MotivePromptEngine
@@ -40,7 +41,7 @@ from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.session import JsonlSessionStore
-from nova.types import ClaimGateDecision, MotiveState, PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
+from nova.types import AwarenessState, ClaimGateDecision, MotiveState, PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
 from nova.types import InitiativeRecord, InitiativeState
 
 
@@ -65,6 +66,7 @@ class NovaRuntime:
         self_state_store: JsonSelfStateStore,
         motive_store: JsonMotiveStateStore,
         initiative_store: JsonInitiativeStateStore,
+        awareness_store: JsonAwarenessStateStore,
         presence_store: JsonPresenceStore,
         session_store: JsonlSessionStore,
         trace_logger: JsonlTraceLogger,
@@ -89,6 +91,7 @@ class NovaRuntime:
         self.self_state_store = self_state_store
         self.motive_store = motive_store
         self.initiative_store = initiative_store
+        self.awareness_store = awareness_store
         self.presence_store = presence_store
         self.session_store = session_store
         self.trace_logger = trace_logger
@@ -121,6 +124,7 @@ class NovaRuntime:
         self.self_state = None
         self.motive_state: MotiveState | None = None
         self.initiative_state: InitiativeState | None = None
+        self.awareness_state: AwarenessState | None = None
         self.presence_state: PresenceState | None = None
 
     def start(self, *, session_id: str | None = None) -> str:
@@ -130,6 +134,7 @@ class NovaRuntime:
         self.session_id = self.session_store.start_session(session_id=session_id)
         self.motive_state = self.motive_store.load(session_id=self.session_id)
         self.initiative_state = self.initiative_store.load(session_id=self.session_id)
+        self.awareness_state = self.awareness_store.load(session_id=self.session_id)
         self.presence_state = self.presence_store.load(session_id=self.session_id)
         if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
             for probe in self.probe_runner.run_startup_probes(
@@ -159,6 +164,13 @@ class NovaRuntime:
         if self.initiative_state is None or self.initiative_state.session_id != self.session_id:
             self.initiative_state = self.initiative_store.load(session_id=self.session_id)
         return self.initiative_state
+
+    def awareness_status(self) -> AwarenessState:
+        self._ensure_awareness_loaded()
+        assert self.session_id is not None
+        if self.awareness_state is None or self.awareness_state.session_id != self.session_id:
+            self.awareness_state = self.awareness_store.load(session_id=self.session_id)
+        return self.awareness_state
 
     def finalize_validation(
         self,
@@ -234,6 +246,36 @@ class NovaRuntime:
         self.motive_store.save(motive)
         self.motive_state = motive
         return motive
+
+    def update_awareness(
+        self,
+        *,
+        monitoring_mode: str | None = None,
+        self_signals: list[str] | None = None,
+        world_signals: list[str] | None = None,
+        active_pressures: list[str] | None = None,
+        candidate_goal_signals: list[str] | None = None,
+        dominant_attention: str | None = None,
+        evidence_refs: list[str] | None = None,
+    ) -> AwarenessState:
+        awareness = self.awareness_status()
+        if monitoring_mode is not None:
+            awareness.monitoring_mode = monitoring_mode
+        if self_signals is not None:
+            awareness.self_signals = list(self_signals)
+        if world_signals is not None:
+            awareness.world_signals = list(world_signals)
+        if active_pressures is not None:
+            awareness.active_pressures = list(active_pressures)
+        if candidate_goal_signals is not None:
+            awareness.candidate_goal_signals = list(candidate_goal_signals)
+        if dominant_attention is not None:
+            awareness.dominant_attention = dominant_attention
+        if evidence_refs is not None:
+            awareness.evidence_refs = list(evidence_refs)
+        self.awareness_store.save(awareness)
+        self.awareness_state = awareness
+        return awareness
 
     def create_initiative(
         self,
@@ -784,6 +826,7 @@ class NovaRuntime:
             self_state_snapshot=self.self_state.to_dict(),
             motive_state_snapshot=self.motive_state.to_dict(),
             initiative_state_snapshot=self.initiative_status().to_dict(),
+            awareness_state_snapshot=self.awareness_status().to_dict(),
             claim_gate=claim_gate.to_dict(),
             prompt_bundle=prompt_bundle.to_dict(),
             private_cognition=private_cognition.to_dict(),
@@ -824,6 +867,13 @@ class NovaRuntime:
         assert self.session_id is not None
         if self.initiative_state is None or self.initiative_state.session_id != self.session_id:
             self.initiative_state = self.initiative_store.load(session_id=self.session_id)
+
+    def _ensure_awareness_loaded(self) -> None:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        if self.awareness_state is None or self.awareness_state.session_id != self.session_id:
+            self.awareness_state = self.awareness_store.load(session_id=self.session_id)
 
     def _sync_presence_with_initiative(self, record: InitiativeRecord | None) -> None:
         if record is None:
@@ -954,6 +1004,7 @@ class NovaRuntime:
         if self.self_state is None:
             self.self_state = self.self_state_store.load(persona=self.persona)
         self._ensure_motive_loaded()
+        self._ensure_awareness_loaded()
         self._ensure_presence_loaded()
 
     def _ensure_motive_loaded(self) -> None:

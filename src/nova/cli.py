@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from nova.agent.action import ActionApproval
+from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.initiative_prompt import InitiativePromptEngine
 from nova.agent.claims import ClaimGateEngine
@@ -72,6 +73,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
     self_state_store = JsonSelfStateStore(data_dir / "self_state.json")
     motive_store = JsonMotiveStateStore(data_dir / "motive")
     initiative_store = JsonInitiativeStateStore(data_dir / "initiative")
+    awareness_store = JsonAwarenessStateStore(data_dir / "awareness")
     presence_store = JsonPresenceStore(data_dir / "presence")
     session_store = JsonlSessionStore(sessions_dir)
     trace_logger = JsonlTraceLogger(traces_dir, probe_path=probes_path)
@@ -112,6 +114,7 @@ def build_memory_components(*, config_override: str | None = None) -> dict[str, 
         "self_state_store": self_state_store,
         "motive_store": motive_store,
         "initiative_store": initiative_store,
+        "awareness_store": awareness_store,
         "presence_store": presence_store,
         "session_store": session_store,
         "trace_logger": trace_logger,
@@ -135,6 +138,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     self_state_store = components["self_state_store"]
     motive_store = components["motive_store"]
     initiative_store = components["initiative_store"]
+    awareness_store = components["awareness_store"]
     presence_store = components["presence_store"]
     session_store = components["session_store"]
 
@@ -163,6 +167,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
         self_state_store=self_state_store,
         motive_store=motive_store,
         initiative_store=initiative_store,
+        awareness_store=awareness_store,
         presence_store=presence_store,
         session_store=session_store,
         trace_logger=trace_logger,

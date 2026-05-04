@@ -1,65 +1,89 @@
-"""Awareness classification for Nova self-orientation."""
+"""Session-scoped awareness state for Nova Phase 10."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Iterable
+import json
+from dataclasses import asdict, dataclass, fields, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 from nova.persona.state import PersonaState, SelfState
-from nova.types import MemoryEvent, SCHEMA_VERSION
+from nova.types import MemoryEvent
+from nova.types import AwarenessState, SCHEMA_VERSION
+
+
+AWARENESS_MONITORING_MODES = {
+    "bounded",
+    "reflective",
+    "attentive",
+}
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 @dataclass(slots=True)
 class AwarenessResult:
-    schema_version: str = SCHEMA_VERSION
     known_facts: list[str] = field(default_factory=list)
     inferred_beliefs: list[str] = field(default_factory=list)
     unknowns: list[str] = field(default_factory=list)
     confidence_by_section: dict[str, float] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 class AwarenessClassifier:
-    """Classify what Nova knows, infers, and does not know."""
+    """Compatibility layer for orientation-aware fact/belief/unknown summarization."""
 
     def build(
         self,
         *,
         persona: PersonaState,
         self_state: SelfState,
-        graph_events: Iterable[MemoryEvent] = (),
-        semantic_events: Iterable[MemoryEvent] = (),
-        autobiographical_events: Iterable[MemoryEvent] = (),
+        graph_events: list[MemoryEvent],
+        semantic_events: list[MemoryEvent],
+        autobiographical_events: list[MemoryEvent],
     ) -> AwarenessResult:
-        known_facts = self._known_facts(persona, self_state, graph_events, autobiographical_events)
-        inferred_beliefs = self._inferred_beliefs(semantic_events, autobiographical_events)
-        unknowns = self._unknowns(self_state)
-        confidence_by_section = {
-            "known_facts": self._confidence(len(known_facts), floor=0.55, ceiling=0.98),
-            "inferred_beliefs": self._confidence(len(inferred_beliefs), floor=0.45, ceiling=0.9),
-            "unknowns": 0.95 if unknowns else 0.85,
-        }
+        known_facts = self._known_facts(
+            persona=persona,
+            self_state=self_state,
+            graph_events=graph_events,
+            semantic_events=semantic_events,
+            autobiographical_events=autobiographical_events,
+        )
+        inferred_beliefs = self._inferred_beliefs(
+            self_state=self_state,
+            autobiographical_events=autobiographical_events,
+            semantic_events=semantic_events,
+        )
+        unknowns = self._unknowns(self_state=self_state)
         return AwarenessResult(
             known_facts=known_facts,
             inferred_beliefs=inferred_beliefs,
             unknowns=unknowns,
-            confidence_by_section=confidence_by_section,
+            confidence_by_section={
+                "known_facts": self._confidence(len(known_facts), floor=0.55, ceiling=0.98),
+                "inferred_beliefs": self._confidence(len(inferred_beliefs), floor=0.45, ceiling=0.9),
+                "unknowns": 0.95 if unknowns else 0.85,
+            },
         )
 
     def _known_facts(
         self,
+        *,
         persona: PersonaState,
         self_state: SelfState,
-        graph_events: Iterable[MemoryEvent],
-        autobiographical_events: Iterable[MemoryEvent],
+        graph_events: list[MemoryEvent],
+        semantic_events: list[MemoryEvent],
+        autobiographical_events: list[MemoryEvent],
     ) -> list[str]:
-        facts: list[str] = [
+        items: list[str] = [
             f"My name is {persona.name}.",
             self_state.identity_summary.strip(),
         ]
-
         for event in graph_events:
             if event.retention == "pruned":
                 continue
@@ -67,8 +91,13 @@ class AwarenessClassifier:
                 continue
             if event.confidence < 0.7:
                 continue
-            facts.append(self._normalize_fact_text(event))
-
+            relation_text = self._graph_relation_text(event)
+            if relation_text:
+                items.append(relation_text)
+                continue
+            text = (event.summary or event.text or "").strip()
+            if text:
+                items.append(text)
         for event in autobiographical_events:
             if event.retention != "active":
                 continue
@@ -76,24 +105,23 @@ class AwarenessClassifier:
                 continue
             text = (event.summary or event.text or "").strip()
             if text:
-                facts.append(text)
-
-        return self._dedupe_preserve_order(facts)
+                items.append(text)
+        return self._dedupe_preserve_order(items)
 
     def _inferred_beliefs(
         self,
-        semantic_events: Iterable[MemoryEvent],
-        autobiographical_events: Iterable[MemoryEvent],
+        *,
+        self_state: SelfState,
+        autobiographical_events: list[MemoryEvent],
+        semantic_events: list[MemoryEvent],
     ) -> list[str]:
-        beliefs: list[str] = []
-
+        items: list[str] = []
         for event in semantic_events:
             if event.retention == "pruned":
                 continue
             text = (event.summary or event.text or "").strip()
             if text:
-                beliefs.append(text)
-
+                items.append(text)
         for event in autobiographical_events:
             if event.retention == "pruned":
                 continue
@@ -103,23 +131,28 @@ class AwarenessClassifier:
                 continue
             text = (event.summary or event.text or "").strip()
             if text:
-                beliefs.append(text)
+                items.append(text)
+        for note in self_state.continuity_notes:
+            if note.strip():
+                items.append(note.strip())
+        for note in self_state.open_tensions:
+            if note.strip():
+                items.append(note.strip())
+        return self._dedupe_preserve_order(items)
 
-        return self._dedupe_preserve_order(beliefs)
+    def _unknowns(self, *, self_state: SelfState) -> list[str]:
+        items = [question.strip() for question in self_state.active_questions if question.strip()]
+        items.extend(item.strip() for item in self_state.open_tensions if item.strip())
+        return self._dedupe_preserve_order(items)
 
-    def _unknowns(self, self_state: SelfState) -> list[str]:
-        unknowns = [item.strip() for item in self_state.active_questions if item.strip()]
-        unknowns.extend(item.strip() for item in self_state.open_tensions if item.strip())
-        return self._dedupe_preserve_order(unknowns)
-
-    def _normalize_fact_text(self, event: MemoryEvent) -> str:
+    def _graph_relation_text(self, event: MemoryEvent) -> str:
         metadata = dict(event.metadata or {})
-        subject_name = str(metadata.get("subject_name", "") or metadata.get("subject_key", "") or "").strip()
+        subject = str(metadata.get("subject_name", "") or "").strip()
         relation = str(metadata.get("relation", "") or "").strip()
-        object_name = str(metadata.get("object_name", "") or metadata.get("object_key", "") or "").strip()
-        if subject_name and relation and object_name:
-            return f"{subject_name} {relation} {object_name}."
-        return (event.summary or event.text or "").strip()
+        obj = str(metadata.get("object_name", "") or "").strip()
+        if subject and relation and obj:
+            return f"{subject} {relation} {obj}."
+        return ""
 
     def _is_active(self, event: MemoryEvent) -> bool:
         return bool(dict(event.metadata or {}).get("active", event.retention == "active"))
@@ -127,7 +160,7 @@ class AwarenessClassifier:
     def _confidence(self, count: int, *, floor: float, ceiling: float) -> float:
         return min(ceiling, floor + (0.08 * max(0, count)))
 
-    def _dedupe_preserve_order(self, values: Iterable[str]) -> list[str]:
+    def _dedupe_preserve_order(self, values: list[str]) -> list[str]:
         seen: set[str] = set()
         ordered: list[str] = []
         for value in values:
@@ -137,3 +170,90 @@ class AwarenessClassifier:
             seen.add(normalized)
             ordered.append(normalized)
         return ordered
+
+
+class JsonAwarenessStateStore:
+    """JSON-backed session awareness store."""
+
+    def __init__(self, base_dir: str | Path):
+        self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def load(self, *, session_id: str) -> AwarenessState:
+        path = self.get_awareness_path(session_id=session_id)
+        if not path.exists():
+            awareness = default_awareness_state(session_id=session_id)
+            self.save(awareness)
+            return awareness
+
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except json.JSONDecodeError:
+            awareness = default_awareness_state(session_id=session_id)
+            self.save(awareness)
+            return awareness
+        if not isinstance(payload, dict):
+            awareness = default_awareness_state(session_id=session_id)
+            self.save(awareness)
+            return awareness
+        return awareness_state_from_payload(payload=payload, session_id=session_id)
+
+    def save(self, awareness: AwarenessState) -> None:
+        awareness.monitoring_mode = normalize_monitoring_mode(awareness.monitoring_mode)
+        awareness.updated_at = utc_now_iso()
+        path = self.get_awareness_path(session_id=awareness.session_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(awareness.to_dict(), handle, indent=2, ensure_ascii=False)
+
+    def get_awareness_path(self, *, session_id: str) -> Path:
+        return self.base_dir / f"{session_id}.awareness.json"
+
+
+def default_awareness_state(*, session_id: str) -> AwarenessState:
+    return AwarenessState(
+        session_id=session_id,
+        monitoring_mode="bounded",
+        self_signals=["maintain coherent continuity and bounded initiative awareness"],
+        world_signals=[],
+        active_pressures=[],
+        candidate_goal_signals=[],
+        dominant_attention="current interaction and persisted initiative state",
+        evidence_refs=[],
+        updated_at=utc_now_iso(),
+    )
+
+
+def awareness_state_from_payload(*, payload: dict[str, Any], session_id: str) -> AwarenessState:
+    defaults = default_awareness_state(session_id=session_id).to_dict()
+    allowed_fields = {field_info.name for field_info in fields(AwarenessState)}
+    merged = {
+        key: payload.get(key, default_value)
+        for key, default_value in defaults.items()
+        if key in allowed_fields
+    }
+    merged["session_id"] = session_id
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["monitoring_mode"] = normalize_monitoring_mode(str(merged.get("monitoring_mode", "bounded")))
+    merged["self_signals"] = _string_list(merged.get("self_signals"))
+    merged["world_signals"] = _string_list(merged.get("world_signals"))
+    merged["active_pressures"] = _string_list(merged.get("active_pressures"))
+    merged["candidate_goal_signals"] = _string_list(merged.get("candidate_goal_signals"))
+    merged["dominant_attention"] = str(merged.get("dominant_attention", "") or "")
+    merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
+    merged["updated_at"] = str(merged.get("updated_at", ""))
+    return AwarenessState(**merged)
+
+
+def normalize_monitoring_mode(mode: str) -> str:
+    normalized = (mode or "bounded").strip().lower()
+    if normalized not in AWARENESS_MONITORING_MODES:
+        return "bounded"
+    return normalized
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]

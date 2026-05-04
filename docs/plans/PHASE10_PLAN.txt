@@ -100,11 +100,11 @@ Define the explicit state model for bounded self/world awareness and active
 monitoring.
 
 Stage 10.1 deliverables:
-- [ ] explicit awareness-state schema
-- [ ] persistence layer for awareness-state records across sessions
-- [ ] separation between awareness-state, motive-state, initiative-state, and
+- [x] explicit awareness-state schema
+- [x] persistence layer for awareness-state records across sessions
+- [x] separation between awareness-state, motive-state, initiative-state, and
   durable identity
-- [ ] tests for safe awareness-state updates
+- [x] tests for safe awareness-state updates
 
 Stage 10.1 restrictions:
 - no hidden awareness state

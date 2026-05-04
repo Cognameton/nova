@@ -1,0 +1,113 @@
+PHASE 10, STAGE 1: AWARENESS-STATE MODEL
+========================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 10.1 introduces a distinct awareness-state layer so Nova can persist
+bounded self/world monitoring state without flattening it into self-state,
+motive-state, initiative-state, or durable identity.
+
+
+What changed
+------------
+
+- `src/nova/types.py`
+  Adds:
+  - `AwarenessState`
+  - `TraceRecord.awareness_state_snapshot`
+
+- `src/nova/agent/awareness.py`
+  Adds:
+  - `JsonAwarenessStateStore`
+  - awareness-state defaults and payload recovery
+  - monitoring-mode normalization
+  - orientation compatibility via `AwarenessClassifier`
+
+- `src/nova/runtime.py`
+  Runtime now loads awareness-state at session start and exposes:
+  - `awareness_status()`
+  - `update_awareness(...)`
+
+- `src/nova/cli.py`
+  Build path now wires a persistent awareness store under `data/awareness`.
+
+- `tests/test_awareness.py`
+  Adds store, compatibility, malformed-json recovery, runtime separation, and
+  trace-snapshot coverage.
+
+
+Awareness model added in Stage 10.1
+-----------------------------------
+
+New durable state:
+- monitoring mode
+- self signals
+- world signals
+- active pressures
+- candidate goal signals
+- dominant attention
+- evidence references
+- update timestamp
+
+Monitoring-mode normalization added:
+- `bounded`
+- `reflective`
+- `attentive`
+
+Runtime trace visibility added:
+- `awareness_state_snapshot` is now emitted into turn traces
+
+
+Boundary preserved
+------------------
+
+Stage 10.1 does not create hidden autonomous behavior.
+
+The awareness layer is still:
+- explicit
+- persisted
+- session-scoped
+- operator-inspectable
+- separate from self-model, motive, and initiative state
+
+It does not:
+- mutate durable identity through awareness writes
+- convert monitoring signals directly into action
+- replace Phase 3/6 orientation semantics with a new looser classification
+
+
+What the new tests prove
+------------------------
+
+- awareness-state is created and round-trips through persistence
+- unknown monitoring modes normalize safely to `bounded`
+- minor schema drift is tolerated safely
+- malformed JSON recovers to a valid default awareness-state
+- runtime awareness updates do not mutate self-state, motive-state, or
+  initiative-state
+- awareness snapshots are included in runtime traces
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_claims`
+- `tests.test_orientation`
+- `tests.test_orientation_context_pressure`
+- `tests.test_awareness`
+- `tests.test_runtime_smoke`
+
+Full verification:
+- full suite passed after Stage 10.1 implementation: `192 tests OK`
+
+
+Closure judgment
+----------------
+
+Stage 10.1 is complete. Nova now has a distinct durable awareness-state model
+with safe persistence, runtime separation, and trace visibility, ready for
+Phase 10 self/world monitoring integration work.

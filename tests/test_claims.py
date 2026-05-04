@@ -6,6 +6,7 @@ from pathlib import Path
 
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.motive import JsonMotiveStateStore, default_motive_state
+from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.presence import JsonPresenceStore
 from nova.config import (
@@ -163,6 +164,7 @@ class ClaimGateRuntimeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -215,6 +217,7 @@ class MotivePromptRuntimeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
@@ -262,6 +265,7 @@ class MotivePromptRuntimeTests(unittest.TestCase):
                 self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
                 motive_store=JsonMotiveStateStore(data_dir / "motive"),
                 initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+                awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
                 presence_store=JsonPresenceStore(data_dir / "presence"),
                 session_store=JsonlSessionStore(data_dir / "sessions"),
                 trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
