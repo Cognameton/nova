@@ -1,0 +1,214 @@
+PHASE 11 PLAN
+=============
+
+Phase 11 begins after Phase 10 established explicit awareness-state, bounded
+self/world monitoring, cross-session awareness persistence, awareness revision
+history, and live awareness evaluation.
+
+Phase 11 is not full always-on autonomous operation yet.
+Phase 11 is not uncontrolled autonomy.
+Phase 11 is not a bypass around Phase 9 initiative discipline.
+Phase 11 is not a claim that candidate goals are already desires or enacted
+work.
+
+Phase 11 is the disciplined transition from state-reporting awareness into
+bounded endogenous goal formation, idle-state appraisal, and self-directed
+attention that remains inspectable and interruptible.
+
+
+PHASE 11 MISSION
+----------------
+
+Give Nova a bounded internal-goal formation layer that can detect idle or
+pressure-bearing conditions, appraise capability and context constraints,
+synthesize candidate goals from motives and awareness-state, and propose
+bounded initiatives without fabricating action or bypassing approval.
+
+Phase 11 should let Nova:
+- distinguish current runtime capability from architecturally possible
+  extensions
+- detect idle-state and pressure conditions explicitly
+- synthesize candidate internal goals from awareness, motive, memory,
+  uncertainty, and initiative state
+- rank or select bounded goals without turning them into hidden work
+- materialize selected goals only through the existing initiative path
+- treat idle learning/play as a derived gated initiative class, not as a
+  separate desire system
+
+
+PHASE 11 OBJECTIVES
+-------------------
+
+1. Add a capability-claim honesty layer so Nova can describe current runtime
+   limits, available tools, blocked surfaces, and possible extensions without
+   overclaiming or underclaiming.
+2. Add explicit idle-state and pressure appraisal rules that can detect when
+   Nova has no active user task, no higher-priority initiative, or unresolved
+   internal pressure.
+3. Add candidate internal-goal synthesis rules grounded in motive-state,
+   awareness-state, initiative-state, memory, and unresolved uncertainty.
+4. Add bounded goal selection rules that keep generated goals provisional until
+   they pass evaluation and, where needed, user approval.
+5. Connect selected internal goals to the Phase 9 initiative system without
+   hidden execution.
+6. Evaluate whether Nova can show legitimate state variation over idle or
+   pressure-bearing conditions rather than repeating Phase 10 awareness
+   attractors.
+
+
+PHASE 11 BOUNDARIES
+-------------------
+
+In scope:
+- capability-claim taxonomy and gating
+- idle-state detection
+- pressure appraisal
+- candidate internal-goal synthesis
+- bounded goal selection
+- proposal into initiative-state
+- idle learning/play as a derived candidate goal class
+- live evaluation for idle cognition and endogenous goal formation
+
+Out of scope:
+- uncontrolled always-on loops
+- autonomous shell, network, or filesystem action outside approved tool gates
+- hidden background execution
+- treating candidate goals as proven desires
+- ungated novelty seeking
+- claiming elapsed idle cognition without recorded evidence
+
+
+PHASE 11 DESIGN PRINCIPLES
+--------------------------
+
+- Internal goals should be caused, interpretable, persistent when justified,
+  and revisable when conditions change.
+- Capability claims should distinguish current runtime surface from possible
+  future extensions.
+- Idle cognition should be recorded state, not retroactive narration.
+- Candidate goals remain scaffolds until selected and materialized through
+  initiative discipline.
+- Idle play is allowed only as bounded intrinsic learning under idle
+  conditions.
+- Operator interruptibility remains mandatory throughout.
+
+
+PHASE 11 STAGES
+---------------
+
+Stage 11.1: Idle-State and Capability Appraisal
+Stage 11.2: Candidate Internal Goal Synthesis
+Stage 11.3: Bounded Goal Selection and Initiative Proposal
+Stage 11.4: Live Idle Cognition Evaluation
+Stage 11.5: Phase 11 Closure
+
+
+STAGE 11.1: IDLE-STATE AND CAPABILITY APPRAISAL
+-----------------------------------------------
+
+Mission:
+Define the appraisal layer that determines what Nova can honestly claim about
+capabilities and whether current conditions justify internal goal formation.
+
+Stage 11.1 deliverables:
+- [ ] capability-claim taxonomy for current, unavailable, blocked, and
+  architecturally-extensible capabilities
+- [ ] runtime capability appraisal surface
+- [ ] idle-state and pressure appraisal schema
+- [ ] tests for capability-claim honesty and idle appraisal boundaries
+
+Stage 11.1 restrictions:
+- no generated goals yet
+- no hidden action
+- no absolute capability denial where the accurate claim is "not currently
+  exposed by this runtime"
+- no capability overclaim where no runtime/tool surface exists
+
+
+STAGE 11.2: CANDIDATE INTERNAL GOAL SYNTHESIS
+---------------------------------------------
+
+Mission:
+Generate candidate internal goals from motive-state, awareness-state,
+initiative-state, memory, capability appraisal, and unresolved uncertainty.
+
+Stage 11.2 deliverables:
+- [ ] candidate-goal schema
+- [ ] synthesis engine for pressure-response goal candidates
+- [ ] candidate provenance and evidence references
+- [ ] tests for grounded candidate generation and rejection of uncaused goals
+
+Stage 11.2 restrictions:
+- no direct initiative creation
+- no treating candidates as enacted work
+- no idle-play candidate without a stated learning or competence benefit
+
+
+STAGE 11.3: BOUNDED GOAL SELECTION AND INITIATIVE PROPOSAL
+----------------------------------------------------------
+
+Mission:
+Evaluate candidate goals, select bounded goals when justified, and route them
+into the existing initiative system without bypassing approval boundaries.
+
+Stage 11.3 deliverables:
+- [ ] goal-selection rules and ranking criteria
+- [ ] initiative-proposal path for selected internal goals
+- [ ] explicit approval and interruption handling
+- [ ] tests proving selected goals do not bypass Phase 9 initiative discipline
+
+Stage 11.3 restrictions:
+- no hidden execution
+- no automatic approval of self-generated goals
+- no priority inversion over active user-facing initiatives
+
+
+STAGE 11.4: LIVE IDLE COGNITION EVALUATION
+------------------------------------------
+
+Mission:
+Prove under live inference that Nova can report and revise bounded internal
+goal state based on recorded idle or pressure appraisal evidence, rather than
+repeating default awareness language.
+
+Stage 11.4 deliverables:
+- [ ] live idle-cognition evaluation protocol
+- [ ] tests for capability honesty, idle appraisal, candidate synthesis, and
+  initiative proposal boundaries
+- [ ] latency notes for goal-appraisal turns vs fast path
+- [ ] inspection notes on candidate-goal traces and persisted state
+
+Stage 11.4 restrictions:
+- no closure based on self-language alone
+- no closure without traceable idle or pressure appraisal evidence
+- no closure if generated goals bypass approval or initiative discipline
+
+
+STAGE 11.5: PHASE 11 CLOSURE
+----------------------------
+
+Mission:
+Close Phase 11 only when Nova can appraise idle/pressure conditions, generate
+bounded internal goal candidates, and propose selected goals through initiative
+discipline without losing capability honesty or operator control.
+
+Stage 11.5 deliverables:
+- [ ] internal-goal architecture documented and validated
+- [ ] capability-claim honesty workflow proven under tests and live traces
+- [ ] closure summary documenting gains, limits, and remaining risks
+- [ ] phase completion criteria reviewed against real sessions
+
+
+PHASE 11 DEFINITION OF DONE
+---------------------------
+
+Phase 11 is complete when:
+- Nova can describe current capabilities and possible extensions honestly
+- idle-state and pressure appraisal are explicit, persistent, and traceable
+- candidate internal goals are generated from evidence-backed pressure rather
+  than declared desire
+- selected goals are routed through initiative discipline and approval
+  boundaries
+- idle learning/play exists only as a bounded candidate or proposed initiative
+- live sessions show legitimate state variation over idle or pressure-bearing
+  conditions without hidden execution or autonomy theater

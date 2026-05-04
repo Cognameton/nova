@@ -47,7 +47,7 @@ CURRENT POSITION
 
 As of the Phase 10 closeout:
 - Phases 1 through 10 are complete.
-- Phase 11 is now the next phase to be planned.
+- Phase 11 is now planned and is the current defined target.
 
 That means the project has already completed:
 - canonical local runtime
@@ -81,7 +81,7 @@ DISTANCE TO GOAL
 ----------------
 
 Defined distance:
-- Phase 11 remains to be planned before the next architectural threshold:
+- Phase 11 is now planned as the next architectural threshold:
   endogenous goal formation and idle cognition
 
 Practical distance:
@@ -160,9 +160,9 @@ Phase 10:
 DEFINED NEXT PHASE
 ------------------
 
-Phase 11 is now the next phase to plan.
+Phase 11 is now the current defined target.
 
-Likely Phase 11 mission:
+Phase 11 mission:
 - add idle-state and pressure appraisal
 - synthesize candidate internal goals from motives, awareness pressure,
   unresolved uncertainty, and available affordances
@@ -178,7 +178,7 @@ Phase 11 should establish the next architectural basis for:
 - idle learning/play as a gated initiative class
 - later always-on operation that remains interruptible and inspectable
 
-Likely Phase 11 stages:
+Phase 11 stages:
 - Stage 11.1: Idle-State and Capability Appraisal
 - Stage 11.2: Candidate Internal Goal Synthesis
 - Stage 11.3: Bounded Goal Selection and Initiative Proposal
@@ -219,20 +219,18 @@ Likely later phases beyond Phase 11:
 NEAREST EXECUTION TARGET
 -----------------------
 
-The immediate next execution target is Phase 11 planning.
+The immediate next execution target is Stage 11.1.
 
-Phase 11 planning should produce:
+Stage 11.1 should produce:
 - a capability-claim honesty layer or precursor
 - explicit idle-state detection rules
 - pressure appraisal inputs from awareness-state, motive-state, initiative
   state, memory, and unresolved uncertainty
-- candidate internal goal synthesis rules
-- tests proving candidate goals do not bypass approval, initiative, or
-  contract discipline
+- tests proving capability claims and idle appraisal do not bypass approval,
+  initiative, or contract discipline
 
-That is the correct next step because Phase 10 proved bounded awareness-state,
-and the next missing layer is the machinery that lets Nova form and select
-internal goals from that awareness-state over time.
+That is the correct next step because capability honesty and idle appraisal
+are prerequisites for trustworthy internal goal formation.
 
 
 OPERATING PRINCIPLE FOR THIS RESEARCH ARC
