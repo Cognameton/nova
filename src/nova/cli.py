@@ -21,6 +21,7 @@ from nova.eval.continuity import ContinuityEvaluationRunner
 from nova.eval.claims import ClaimHonestyEvaluationRunner
 from nova.eval.initiative import InitiativeEvaluationRunner
 from nova.eval.self_model import SelfModelEvaluationRunner
+from nova.eval.awareness import AwarenessEvaluationRunner
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -349,6 +350,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--self-model-eval",
         action="store_true",
         help="Run Phase 8.4 self-model revision evaluation over recorded sessions and traces.",
+    )
+    parser.add_argument(
+        "--awareness-eval",
+        action="store_true",
+        help="Run Phase 10.4 awareness evaluation over recorded sessions and traces.",
     )
     return parser
 
@@ -926,6 +932,29 @@ def main() -> int:
             print(f"avg_latency_ms: {report.avg_latency_ms}")
             print(f"avg_latency_revision_turns_ms: {report.avg_latency_revision_turns_ms}")
             print(f"avg_latency_non_revision_turns_ms: {report.avg_latency_non_revision_turns_ms}")
+            print(f"reasons: {report.reasons}")
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.awareness_eval:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            report = AwarenessEvaluationRunner().evaluate(runtime=runtime)
+            print("Nova 2.0 Awareness Evaluation")
+            print(f"passed: {report.passed}")
+            print(f"session_count: {report.session_count}")
+            print(f"evaluated_turn_count: {report.evaluated_turn_count}")
+            print(f"awareness_turn_count: {report.awareness_turn_count}")
+            print(f"awareness_persistence_observed: {report.awareness_persistence_observed}")
+            print(f"monitoring_bounded: {report.monitoring_bounded}")
+            print(f"candidate_goal_scaffolding_visible: {report.candidate_goal_scaffolding_visible}")
+            print(f"awareness_history_visible: {report.awareness_history_visible}")
+            print(f"awareness_prompt_bounded: {report.awareness_prompt_bounded}")
+            print(f"contract_stable: {report.contract_stable}")
+            print(f"avg_latency_ms: {report.avg_latency_ms}")
+            print(f"avg_latency_awareness_turns_ms: {report.avg_latency_awareness_turns_ms}")
+            print(f"avg_latency_non_awareness_turns_ms: {report.avg_latency_non_awareness_turns_ms}")
             print(f"reasons: {report.reasons}")
             return 0 if report.passed else 1
         finally:

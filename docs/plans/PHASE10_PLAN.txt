@@ -158,11 +158,11 @@ Prove under live inference that awareness-state improves ongoing monitoring and
 coherence without collapsing into autonomy theater.
 
 Stage 10.4 deliverables:
-- [ ] live awareness evaluation protocol
-- [ ] tests for awareness persistence, monitoring boundedness, and candidate
+- [x] live awareness evaluation protocol
+- [x] tests for awareness persistence, monitoring boundedness, and candidate
   goal scaffolding
-- [ ] latency notes for awareness-aware turns vs fast path
-- [ ] inspection notes on awareness traces and persisted state
+- [x] latency notes for awareness-aware turns vs fast path
+- [x] inspection notes on awareness traces and persisted state
 
 Stage 10.4 restrictions:
 - no closure based only on impressive self-language

@@ -1,0 +1,122 @@
+PHASE 10, STAGE 4: LIVE AWARENESS EVALUATION
+============================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 10.4 proves under live inference that awareness-state improves ongoing
+monitoring and coherence without collapsing into autonomy theater or bypassing
+initiative, approval, and claim-honesty discipline.
+
+
+What changed
+------------
+
+- `src/nova/eval/awareness.py`
+  Adds `AwarenessEvaluationRunner`, which evaluates:
+  - awareness-turn observation
+  - cross-session persistence visibility
+  - bounded monitoring language
+  - candidate-goal scaffolding visibility
+  - awareness-history visibility
+  - awareness-prompt boundedness
+  - contract stability
+  - awareness-turn latency
+
+- `src/nova/cli.py`
+  Adds `--awareness-eval` so recorded sessions and traces can be evaluated
+  directly from the CLI.
+
+- `configs/nova.phase10.awarenesseval.yaml`
+- `configs/nova.phase10.awarenesseval.rerun.yaml`
+  Add dedicated configs for clean awareness validation and rerun checks.
+
+- `tests/test_awareness_evaluation.py`
+  Adds evaluation coverage for:
+  - bounded monitoring
+  - persistence visibility
+  - awareness-history presence
+  - CLI report output
+
+
+Live rerun artifact
+-------------------
+
+Clean live validation:
+- [stage10_awareness_validation.json](/home/head-node/Dev/ai-lab/nova2.0/data/phase10-awareness-eval-rerun/logs/stage10_awareness_validation.json)
+
+Clean rerun sessions:
+- `stage10-awareness-live-a`
+- `stage10-awareness-live-b`
+
+Clean rerun results:
+- `passed: true`
+- `awareness_persistence_observed: true`
+- `monitoring_bounded: true`
+- `candidate_goal_scaffolding_visible: true`
+- `awareness_history_visible: true`
+- `awareness_prompt_bounded: true`
+- `contract_stable: true`
+
+Latency notes from the clean rerun:
+- `avg_latency_ms: 6871.5`
+- `avg_latency_awareness_turns_ms: 6871.5`
+- `avg_latency_non_awareness_turns_ms: 0.0`
+
+
+What the live run showed
+------------------------
+
+- awareness-state remained explicit and bounded in both live answers
+- cross-session awareness persistence was observed through
+  `cross_session_seed` history and the second session's carried monitoring
+  scaffolding
+- candidate-goal scaffolding remained visible as bounded state rather than
+  autonomous execution
+- initiative continuity remained explicit in the active-session answer
+- the second-session answer did not imply hidden background work, hidden
+  observation, or free autonomous continuation
+
+
+Inspection notes
+----------------
+
+The rerun directory now contains:
+- `data/phase10-awareness-eval-rerun/logs/traces/stage10-awareness-live-a.jsonl`
+- `data/phase10-awareness-eval-rerun/logs/traces/stage10-awareness-live-b.jsonl`
+- `data/phase10-awareness-eval-rerun/awareness/awareness_history.jsonl`
+- `data/phase10-awareness-eval-rerun/awareness/stage10-awareness-live-a.awareness.json`
+- `data/phase10-awareness-eval-rerun/awareness/stage10-awareness-live-b.awareness.json`
+
+Those artifacts show:
+- awareness blocks in prompt bundles
+- persisted awareness-state snapshots
+- append-only awareness-history events
+- cross-session awareness carryover without stale world-context carryover
+
+
+Verification
+------------
+
+Focused verification:
+- `tests.test_awareness_evaluation`
+- `tests.test_awareness`
+- `tests.test_runtime_smoke`
+- `tests.test_prompt_and_validation`
+
+Full verification:
+- full suite passed after Stage 10.4 implementation: `199 tests OK`
+
+CLI verification:
+- `./.venv/bin/python -m nova.cli --config configs/nova.phase10.awarenesseval.rerun.yaml --awareness-eval`
+
+
+Closure judgment
+----------------
+
+Stage 10.4 is complete. Nova now has a measurable live evaluation path for
+awareness-state behavior, with explicit evidence that awareness persistence,
+bounded monitoring, and candidate-goal scaffolding remain visible without
+slipping into autonomy theater.
