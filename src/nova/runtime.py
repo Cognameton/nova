@@ -337,6 +337,30 @@ class NovaRuntime:
         )
         return tick
 
+    def create_autonomous_draft_from_idle_tick(
+        self,
+        *,
+        tick_id: str | None = None,
+    ) -> InitiativeRecord:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        ticks = self.idle_store.list_ticks(session_id=self.session_id)
+        if tick_id:
+            tick = next((item for item in ticks if item.tick_id == tick_id), None)
+        else:
+            tick = next((item for item in reversed(ticks) if item.idle_pressure_appraisal), None)
+        if tick is None:
+            raise ValueError("No matching recorded idle tick is available for autonomous draft creation.")
+        initiative_state = self.initiative_status()
+        record = self.initiative_store.create_autonomous_draft_from_idle_tick(
+            initiative_state=initiative_state,
+            tick=tick,
+        )
+        self.initiative_state = initiative_state
+        self._sync_presence_with_initiative(record)
+        return record
+
     def finalize_validation(
         self,
         *,

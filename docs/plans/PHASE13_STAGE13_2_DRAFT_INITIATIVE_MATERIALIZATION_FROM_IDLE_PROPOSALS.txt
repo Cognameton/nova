@@ -1,0 +1,90 @@
+PHASE 13, STAGE 2: DRAFT INITIATIVE MATERIALIZATION FROM IDLE PROPOSALS
+========================================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 13.2 adds the gated materialization path from eligible recorded idle
+tick proposals into durable Nova-originated draft initiatives.
+
+This stage still does not approve, activate, or execute autonomous work.
+
+
+What changed
+------------
+
+Added `AutonomousInitiativeDraftEngine`.
+
+Added `JsonInitiativeStateStore.create_autonomous_draft_from_idle_tick`.
+
+Added `NovaRuntime.create_autonomous_draft_from_idle_tick`.
+
+Added `AutonomousInitiativeDraftError` for rejected materialization attempts.
+
+
+Eligibility rules
+-----------------
+
+An idle tick can materialize a durable draft only when:
+- it has a tick id
+- it contains recorded idle appraisal evidence
+- it has a selected internal goal
+- the selected goal is not blocked
+- the selected goal requires approval
+- the selected goal requires proposal routing
+- it has an initiative proposal boundary
+- the proposal status is `proposal_only`
+- the proposal does not claim `creates_initiative`
+- the proposal does not already carry an initiative id
+- no existing initiative already references the same proposal or tick/candidate
+
+
+Created draft shape
+-------------------
+
+The created record is:
+- `origin_type: nova`
+- `approval_state: draft`
+- `status: pending`
+- `approval_required: true`
+- `autonomous: true`
+- linked to source idle tick, candidate, and proposal ids
+- evidence-backed
+- rationale-bearing
+- proposed-next-step-bearing
+- stop-condition-bearing
+
+It is not active and does not become the session's active initiative.
+
+
+Boundary preserved
+------------------
+
+Stage 13.2 preserves these limits:
+- no self-approval
+- no active initiative creation
+- no action execution
+- no hidden work
+- no desire claim
+- no duplicate draft creation from the same proposal
+
+
+Validation
+----------
+
+Focused tests:
+- `./.venv/bin/python -m unittest tests.test_initiative`
+- result: 16 tests OK
+
+Full test suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 241 tests OK
+
+
+Next stage
+----------
+
+Stage 13.3 should add revision, priority, and interruption discipline for
+Nova-originated draft initiatives.

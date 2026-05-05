@@ -111,11 +111,11 @@ Create durable draft initiatives from eligible selected internal-goal
 proposals without approving, activating, or executing them.
 
 Stage 13.2 deliverables:
-- [ ] proposal eligibility checks
-- [ ] draft initiative materialization engine
-- [ ] runtime method for creating Nova-originated draft initiatives
-- [ ] tests proving proposal-only Phase 12 ticks become draft records only
-- [ ] tests proving ineligible, blocked, or already-created proposals are
+- [x] proposal eligibility checks
+- [x] draft initiative materialization engine
+- [x] runtime method for creating Nova-originated draft initiatives
+- [x] tests proving proposal-only Phase 12 ticks become draft records only
+- [x] tests proving ineligible, blocked, or already-created proposals are
   rejected
 
 Stage 13.2 restrictions:

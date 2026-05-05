@@ -18,6 +18,7 @@ from nova.agent.initiative import (
     normalize_initiative_origin_type,
 )
 from nova.cli import build_runtime, main
+from nova.types import IdleTickRecord
 
 
 class InitiativeTests(unittest.TestCase):
@@ -219,6 +220,77 @@ class InitiativeTests(unittest.TestCase):
             self.assertIn("approve", loaded_record.proposed_next_step)
             self.assertIn("rejects", loaded_record.stop_condition)
             self.assertEqual(loaded.active_initiative_id, None)
+
+    def test_store_materializes_eligible_idle_proposal_as_unapproved_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            initiative_state = store.load(session_id="session-a")
+
+            record = store.create_autonomous_draft_from_idle_tick(
+                initiative_state=initiative_state,
+                tick=self._eligible_idle_tick(),
+            )
+
+            self.assertEqual(record.origin_type, "nova")
+            self.assertEqual(record.approval_state, "draft")
+            self.assertEqual(record.status, "pending")
+            self.assertTrue(record.approval_required)
+            self.assertTrue(record.autonomous)
+            self.assertEqual(record.source_idle_tick_id, "tick-1")
+            self.assertEqual(record.source_candidate_id, "candidate-1")
+            self.assertEqual(record.source_proposal_id, "proposal-1")
+            self.assertEqual(record.initiative_id, initiative_state.initiatives[0].initiative_id)
+            self.assertIsNone(initiative_state.active_initiative_id)
+
+    def test_store_rejects_duplicate_autonomous_draft_materialization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            initiative_state = store.load(session_id="session-a")
+            tick = self._eligible_idle_tick()
+
+            store.create_autonomous_draft_from_idle_tick(
+                initiative_state=initiative_state,
+                tick=tick,
+            )
+
+            with self.assertRaisesRegex(ValueError, "already has a durable draft"):
+                store.create_autonomous_draft_from_idle_tick(
+                    initiative_state=initiative_state,
+                    tick=tick,
+                )
+
+    def test_store_rejects_ineligible_idle_proposal_materialization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            initiative_state = store.load(session_id="session-a")
+            tick = self._eligible_idle_tick()
+            tick.internal_goal_initiative_proposal["creates_initiative"] = True
+
+            with self.assertRaisesRegex(ValueError, "already claims initiative creation"):
+                store.create_autonomous_draft_from_idle_tick(
+                    initiative_state=initiative_state,
+                    tick=tick,
+                )
+
+            self.assertEqual(initiative_state.initiatives, [])
+
+    def test_runtime_materializes_latest_recorded_idle_tick_as_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            try:
+                runtime.session_id = runtime.session_store.start_session(session_id="session-a")
+                runtime.idle_store.append_tick(self._eligible_idle_tick(session_id="session-a"))
+
+                record = runtime.create_autonomous_draft_from_idle_tick()
+
+                self.assertEqual(record.origin_type, "nova")
+                self.assertEqual(record.approval_state, "draft")
+                self.assertEqual(record.status, "pending")
+                self.assertEqual(runtime.initiative_status().initiatives[0].initiative_id, record.initiative_id)
+                self.assertIsNone(runtime.initiative_status().active_initiative_id)
+            finally:
+                runtime.close()
 
     def test_initiative_store_can_continue_approved_work_across_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -529,6 +601,35 @@ class InitiativeTests(unittest.TestCase):
             encoding="utf-8",
         )
         return config_path, data_dir
+
+    def _eligible_idle_tick(self, *, session_id: str = "session-a") -> IdleTickRecord:
+        return IdleTickRecord(
+            tick_id="tick-1",
+            session_id=session_id,
+            sequence=1,
+            idle_pressure_appraisal={"idle_state_detected": True},
+            selected_internal_goal={
+                "selected": True,
+                "candidate_id": "candidate-1",
+                "title": "Clarify idle runtime boundary",
+                "approval_required": True,
+                "proposal_required": True,
+                "blocked": False,
+                "evidence_refs": ["idle_tick:tick-1"],
+            },
+            internal_goal_initiative_proposal={
+                "proposal_id": "proposal-1",
+                "candidate_id": "candidate-1",
+                "title": "Clarify idle runtime boundary",
+                "goal": "Track the idle runtime boundary as a draft initiative.",
+                "status": "proposal_only",
+                "approval_required": True,
+                "creates_initiative": False,
+                "initiative_id": "",
+                "evidence_refs": ["idle_tick:tick-1"],
+            },
+            evidence_refs=["idle_tick:tick-1"],
+        )
 
 
 if __name__ == "__main__":

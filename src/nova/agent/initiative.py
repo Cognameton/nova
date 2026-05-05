@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from nova.types import (
+    IdleTickRecord,
     InitiativeRecord,
     InitiativeState,
     InitiativeTransition,
@@ -63,6 +64,10 @@ def utc_now_iso() -> str:
 
 class InitiativeTransitionError(ValueError):
     """Raised when an initiative lifecycle transition is invalid."""
+
+
+class AutonomousInitiativeDraftError(ValueError):
+    """Raised when a self-generated proposal cannot become a durable draft."""
 
 
 class JsonInitiativeStateStore:
@@ -362,6 +367,20 @@ class JsonInitiativeStateStore:
         initiative_state.active_initiative_id = self._active_initiative_id(initiative_state)
         return record
 
+    def create_autonomous_draft_from_idle_tick(
+        self,
+        *,
+        initiative_state: InitiativeState,
+        tick: IdleTickRecord,
+    ) -> InitiativeRecord:
+        record = AutonomousInitiativeDraftEngine().materialize(
+            initiative_state=initiative_state,
+            tick=tick,
+            store=self,
+        )
+        self.save(initiative_state)
+        return record
+
     def _find_record(self, *, initiative_state: InitiativeState, initiative_id: str) -> InitiativeRecord:
         for record in initiative_state.initiatives:
             if record.initiative_id == initiative_id:
@@ -373,6 +392,101 @@ class JsonInitiativeStateStore:
             if normalize_initiative_status(record.status) == "active":
                 return record.initiative_id
         return None
+
+
+class AutonomousInitiativeDraftEngine:
+    """Materialize eligible idle/internal-goal proposals as unapproved drafts."""
+
+    def materialize(
+        self,
+        *,
+        initiative_state: InitiativeState,
+        tick: IdleTickRecord,
+        store: JsonInitiativeStateStore,
+    ) -> InitiativeRecord:
+        self._validate_tick(tick)
+        selected_goal = dict(tick.selected_internal_goal or {})
+        proposal = dict(tick.internal_goal_initiative_proposal or {})
+        candidate_id = str(selected_goal.get("candidate_id", "") or proposal.get("candidate_id", "") or "")
+        proposal_id = str(proposal.get("proposal_id", "") or "")
+        if self._already_materialized(
+            initiative_state=initiative_state,
+            tick_id=tick.tick_id,
+            candidate_id=candidate_id,
+            proposal_id=proposal_id,
+        ):
+            raise AutonomousInitiativeDraftError("Autonomous proposal already has a durable draft.")
+
+        title = str(selected_goal.get("title", "") or proposal.get("title", "") or "Nova-originated draft initiative")
+        goal = str(proposal.get("goal", "") or title)
+        evidence_refs = _merge_string_lists(
+            _string_list(tick.evidence_refs),
+            _string_list(proposal.get("evidence_refs")),
+        )
+        rationale = (
+            f"Recorded idle tick {tick.tick_id} selected bounded internal goal"
+            f" {candidate_id or '<unknown>'} for proposal-only tracking."
+        )
+        return store.create_record(
+            initiative_state=initiative_state,
+            title=title,
+            goal=goal,
+            approval_required=True,
+            source="runtime",
+            origin_type="nova",
+            approval_state="draft",
+            source_idle_tick_id=tick.tick_id,
+            source_candidate_id=candidate_id,
+            source_proposal_id=proposal_id,
+            rationale=rationale,
+            proposed_next_step="Ask the operator whether this Nova-originated draft should move to awaiting approval.",
+            stop_condition="Stop or abandon this draft if the operator rejects it, interrupts it, or a higher-priority user task appears.",
+            autonomous=True,
+            evidence_refs=evidence_refs,
+            notes=[
+                "Nova-originated draft only",
+                "not approved, not active, and no action execution is allowed",
+            ],
+        )
+
+    def _validate_tick(self, tick: IdleTickRecord) -> None:
+        if not tick.tick_id:
+            raise AutonomousInitiativeDraftError("Idle tick id is required.")
+        if not tick.idle_pressure_appraisal:
+            raise AutonomousInitiativeDraftError("Idle tick has no recorded appraisal evidence.")
+        selected_goal = dict(tick.selected_internal_goal or {})
+        if not bool(selected_goal.get("selected", False)):
+            raise AutonomousInitiativeDraftError("Idle tick has no selected internal goal.")
+        if bool(selected_goal.get("blocked", False)):
+            raise AutonomousInitiativeDraftError("Selected internal goal is blocked.")
+        if not bool(selected_goal.get("approval_required", True)):
+            raise AutonomousInitiativeDraftError("Selected internal goal must require approval.")
+        if not bool(selected_goal.get("proposal_required", True)):
+            raise AutonomousInitiativeDraftError("Selected internal goal must require proposal routing.")
+        proposal = dict(tick.internal_goal_initiative_proposal or {})
+        if not proposal:
+            raise AutonomousInitiativeDraftError("Idle tick has no initiative proposal boundary.")
+        if str(proposal.get("status", "") or "") != "proposal_only":
+            raise AutonomousInitiativeDraftError("Proposal must be proposal_only.")
+        if bool(proposal.get("creates_initiative", True)):
+            raise AutonomousInitiativeDraftError("Proposal already claims initiative creation.")
+        if str(proposal.get("initiative_id", "") or ""):
+            raise AutonomousInitiativeDraftError("Proposal already carries an initiative id.")
+
+    def _already_materialized(
+        self,
+        *,
+        initiative_state: InitiativeState,
+        tick_id: str,
+        candidate_id: str,
+        proposal_id: str,
+    ) -> bool:
+        for record in initiative_state.initiatives:
+            if proposal_id and record.source_proposal_id == proposal_id:
+                return True
+            if record.source_idle_tick_id == tick_id and record.source_candidate_id == candidate_id:
+                return True
+        return False
 
 
 def default_initiative_state(*, session_id: str) -> InitiativeState:

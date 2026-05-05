@@ -10,6 +10,7 @@ from nova.agent.action import (
     ActionProposalEvaluation,
 )
 from nova.agent.initiative import (
+    AutonomousInitiativeDraftError,
     InitiativeTransitionError,
     JsonInitiativeStateStore,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "ActionProposal",
     "ActionProposalEngine",
     "ActionProposalEvaluation",
+    "AutonomousInitiativeDraftError",
     "AwarenessClassifier",
     "AwarenessResult",
     "BoundaryPolicy",
