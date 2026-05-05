@@ -218,17 +218,22 @@ approval requirements are determined by execution lane, risk, and external
 effect.
 
 Stage 14.2 deliverables:
-- [ ] Nova-owned workspace and dedicated `nova` OS user boundary plan
-- [ ] eligibility checks by execution lane
-- [ ] approval rules for internal, Nova-owned, and external/system-effect
+- [x] Nova-owned workspace and dedicated `nova` OS user boundary plan
+- [x] eligibility checks by execution lane
+- [x] approval rules for internal, Nova-owned, and external/system-effect
   activity
-- [ ] action plan creation engine
-- [ ] runtime method for creating bounded action plans
-- [ ] tests proving internal no-external-effect activity can be planned without
+- [x] action plan creation engine
+- [x] runtime method for creating bounded action plans
+- [x] tests proving internal no-external-effect activity can be planned without
   prior approval but remains logged and interruptible
-- [ ] tests proving external/system-effect activity requires approval
-- [ ] tests proving plans declare allowed surfaces, budgets, stop conditions,
+- [x] tests proving external/system-effect activity requires approval
+- [x] tests proving plans declare allowed surfaces, budgets, stop conditions,
   expected outputs, and rollback notes
+
+Stage 14.2 result:
+Completed in `src/nova/agent/action_plan.py`, `src/nova/runtime.py`,
+`src/nova/types.py`, and tests. This stage adds planning and approval binding
+only. It does not execute action plans.
 
 Stage 14.2 restrictions:
 - no action execution

@@ -437,6 +437,22 @@ class AutonomousActionAuditRecord:
 
 
 @dataclass(slots=True)
+class NovaOwnedExecutionBoundary:
+    schema_version: str = SCHEMA_VERSION
+    expected_os_user: str = "nova"
+    active_os_user: str = ""
+    dedicated_user_required: bool = True
+    dedicated_user_detected: bool = False
+    nova_owned_paths: list[str] = field(default_factory=list)
+    allowed_surfaces: list[str] = field(default_factory=list)
+    blocked_surfaces: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ClaimGateDecision:
     schema_version: str = SCHEMA_VERSION
     requested_claim_classes: list[str] = field(default_factory=list)

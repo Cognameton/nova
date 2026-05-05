@@ -1,0 +1,79 @@
+PHASE 14 STAGE 14.2: EXECUTION BOUNDARY AND APPROVAL BINDING
+=============================================================
+
+Status: complete
+
+Stage 14.2 defines the boundary and approval rules used to create bounded
+action plans. It does not execute plans.
+
+
+IMPLEMENTED
+-----------
+
+Boundary model:
+- `NovaOwnedExecutionBoundary`
+- expected dedicated OS user: `nova`
+- active OS user detection for boundary checks
+- declared Nova-owned paths
+- allowed Nova-owned surfaces
+- external/system-effect surfaces blocked from Nova-owned activity
+
+Planner:
+- `BoundedActionPlanEngine`
+- execution-lane eligibility checks
+- action-surface checks
+- approval binding by risk and external effect
+- rejection of self or unattributed approval
+- runtime method: `NovaRuntime.create_bounded_action_plan(...)`
+
+
+APPROVAL BEHAVIOR
+-----------------
+
+Internal Activity:
+- may be planned without prior approval
+- must stay on internal no-external-effect surfaces
+- includes expected outputs, budgets, stop conditions, and rollback notes
+
+Nova-Owned Environment Activity:
+- may be planned without prior approval only when it stays on Nova-owned
+  surfaces and the dedicated `nova` OS user boundary is detected where
+  required
+- is blocked when the dedicated user boundary is required but not active
+
+External/System-Effect Action:
+- requires approval by a human/operator identity
+- self-approval by Nova is rejected
+- unapproved plans remain `pending_approval`
+- approved plans become `approved`, but still are not executed in this stage
+
+
+FILES CHANGED
+-------------
+
+- `src/nova/types.py`
+- `src/nova/agent/action_plan.py`
+- `src/nova/agent/__init__.py`
+- `src/nova/runtime.py`
+- `tests/test_action_plan_schema.py`
+- `tests/test_runtime_smoke.py`
+- `docs/plans/PHASE14_PLAN.txt`
+
+
+VERIFICATION
+------------
+
+- `./.venv/bin/python -m unittest tests.test_action_plan_schema tests.test_runtime_smoke`
+- `./.venv/bin/python -m unittest discover -s tests`
+
+Result: 263 tests passed.
+
+
+RESTRICTIONS PRESERVED
+----------------------
+
+- no action execution added
+- no execution controller added
+- no shell, network, GUI, or host filesystem action added
+- no self-approval added
+- no automatic initiative activation added

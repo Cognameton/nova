@@ -78,6 +78,43 @@ class TruncatingBackend(FakeBackend):
         )
 
 
+def build_test_runtime(*, data_dir: Path, log_dir: Path, backend: FakeBackend | None = None) -> NovaRuntime:
+    config = NovaConfig(
+        app=AppConfig(name="Nova", data_dir=str(data_dir), log_dir=str(log_dir)),
+        model=ModelConfig(backend="llama_cpp", model_path="/tmp/fake.gguf"),
+        generation=GenerationConfig(),
+        contract=ContractConfig(),
+        persona=PersonaConfig(name="Nova"),
+        memory=MemoryConfig(),
+        session=SessionConfig(),
+        eval=EvalConfig(enable_probes=False),
+    )
+    return NovaRuntime(
+        config=config,
+        backend=backend or FakeBackend(),
+        composer=NovaPromptComposer(token_counter=lambda text: len(text.split())),
+        validator=NovaOutputValidator(config.contract),
+        retry_policy=BasicRetryPolicy(),
+        persona_store=JsonPersonaStore(data_dir / "persona_state.json"),
+        self_state_store=JsonSelfStateStore(data_dir / "self_state.json"),
+        motive_store=JsonMotiveStateStore(data_dir / "motive"),
+        initiative_store=JsonInitiativeStateStore(data_dir / "initiative"),
+        awareness_store=JsonAwarenessStateStore(data_dir / "awareness"),
+        presence_store=JsonPresenceStore(data_dir / "presence"),
+        session_store=JsonlSessionStore(data_dir / "sessions"),
+        trace_logger=JsonlTraceLogger(log_dir / "traces", probe_path=log_dir / "probes.jsonl"),
+        memory_router=BasicMemoryRouter(
+            episodic=JsonlEpisodicMemoryStore(data_dir / "memory" / "episodic.jsonl"),
+            engram=JsonEngramMemoryStore(data_dir / "memory" / "engram.json"),
+            graph=SqliteGraphMemoryStore(data_dir / "memory" / "graph.db"),
+            autobiographical=JsonlAutobiographicalMemoryStore(data_dir / "memory" / "autobiographical.jsonl"),
+            semantic=JsonlSemanticMemoryStore(data_dir / "memory" / "semantic.jsonl"),
+        ),
+        memory_event_factory=BasicMemoryEventFactory(),
+        probe_runner=None,
+    )
+
+
 class RuntimeSmokeTests(unittest.TestCase):
     def test_runtime_can_complete_one_turn(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -500,6 +537,38 @@ class RuntimeSmokeTests(unittest.TestCase):
 
             self.assertIn('"awareness_history_events"', trace_payload)
             self.assertIn('"revision_class": "session_update"', trace_payload)
+
+    def test_runtime_can_create_bounded_action_plan_without_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_test_runtime(data_dir=base / "data", log_dir=base / "logs")
+
+            plan = runtime.create_bounded_action_plan(
+                purpose="reflect during dormancy",
+                scope="internal self-prompt only",
+                execution_lane="internal_activity",
+                risk_class="internal",
+                steps=[
+                    {
+                        "description": "prepare an internal self-prompt",
+                        "surface": "self_prompt",
+                        "expected_output": "logged self-prompt draft",
+                    }
+                ],
+                allowed_surfaces=["self_prompt"],
+                blocked_surfaces=["filesystem", "network"],
+                budget={"max_steps": 1, "max_tokens": 64},
+                expected_outputs=["logged self-prompt draft"],
+                stop_conditions=["operator_interrupt"],
+                rollback_notes=["no external side effects"],
+            )
+            runtime.close()
+
+            self.assertTrue(plan.session_id)
+            self.assertEqual(plan.status, "draft")
+            self.assertFalse(plan.permission.approval_required)
+            self.assertEqual(plan.allowed_surfaces, ["self_prompt"])
+            self.assertEqual(plan.stop_conditions, ["operator_interrupt"])
 
 
 if __name__ == "__main__":

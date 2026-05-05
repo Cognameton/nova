@@ -38,6 +38,10 @@ from nova.agent.action import (
     ActionProposal,
     ActionProposalEngine,
 )
+from nova.agent.action_plan import (
+    BoundedActionPlanEngine,
+    default_nova_owned_execution_boundary,
+)
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
 from nova.agent.tool_registry import ToolRegistry, default_tool_registry
@@ -65,6 +69,9 @@ from nova.types import (
     IdleTickRecord,
     InternalGoalInitiativeProposal,
     MotiveState,
+    AutonomousActionBudget,
+    AutonomousActionPlan,
+    AutonomousActionPlanStep,
     PrivateCognitionPacket,
     SelectedInternalGoal,
     TraceRecord,
@@ -122,6 +129,7 @@ class NovaRuntime:
         idle_controller: BoundedIdleController | None = None,
         idle_prompt_engine: IdleRuntimePromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
+        action_plan_engine: BoundedActionPlanEngine | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -178,6 +186,11 @@ class NovaRuntime:
         self.action_proposal_engine = ActionProposalEngine(
             registry=self.tool_registry,
             gate=self.tool_gate,
+        )
+        self.action_plan_engine = action_plan_engine or BoundedActionPlanEngine(
+            boundary=default_nova_owned_execution_boundary(
+                nova_owned_paths=[Path(self.config.app.data_dir)]
+            )
         )
 
         self.session_id: str | None = None
@@ -749,6 +762,49 @@ class NovaRuntime:
             proposal=proposal.to_dict(),
         )
         return proposal
+
+    def create_bounded_action_plan(
+        self,
+        *,
+        purpose: str,
+        scope: str,
+        execution_lane: str,
+        risk_class: str,
+        steps: list[dict | AutonomousActionPlanStep],
+        initiative_id: str = "",
+        allowed_surfaces: list[str] | None = None,
+        blocked_surfaces: list[str] | None = None,
+        budget: dict | AutonomousActionBudget | None = None,
+        expected_outputs: list[str] | None = None,
+        stop_conditions: list[str] | None = None,
+        rollback_notes: list[str] | None = None,
+        evidence_refs: list[str] | None = None,
+        approved: bool = False,
+        approved_by: str = "",
+        approval_evidence_refs: list[str] | None = None,
+    ) -> AutonomousActionPlan:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        return self.action_plan_engine.create_plan(
+            session_id=self.session_id,
+            initiative_id=initiative_id,
+            purpose=purpose,
+            scope=scope,
+            execution_lane=execution_lane,
+            risk_class=risk_class,
+            steps=steps,
+            allowed_surfaces=allowed_surfaces,
+            blocked_surfaces=blocked_surfaces,
+            budget=budget,
+            expected_outputs=expected_outputs,
+            stop_conditions=stop_conditions,
+            rollback_notes=rollback_notes,
+            evidence_refs=evidence_refs,
+            approved=approved,
+            approved_by=approved_by,
+            approval_evidence_refs=approval_evidence_refs,
+        )
 
     def execute_proposed_action(
         self,

@@ -1,8 +1,10 @@
-"""Stage 14.1 action plan contracts and compatibility helpers."""
+"""Action plan contracts, boundary checks, and plan creation helpers."""
 
 from __future__ import annotations
 
 from dataclasses import fields
+from getpass import getuser
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -12,6 +14,7 @@ from nova.types import (
     AutonomousActionPermission,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
+    NovaOwnedExecutionBoundary,
     SCHEMA_VERSION,
 )
 
@@ -70,6 +73,226 @@ EXTERNAL_EFFECT_SURFACES = {
     "system_config",
     "external_service",
 }
+
+INTERNAL_ACTIVITY_SURFACES = {
+    "internal_state",
+    "self_prompt",
+    "idle_reflection",
+    "idle_play",
+    "motive_appraisal",
+    "self_state_revision",
+    "goal_refinement",
+    "simulated_exploration",
+    "internal_tool",
+}
+
+NOVA_OWNED_ENVIRONMENT_SURFACES = {
+    "nova_workspace",
+    "nova_scratchpad",
+    "nova_logs",
+    "internal_tool",
+}
+
+APPROVED_BY_BLOCKLIST = {"", "nova", "self", "runtime", "runtime_flag"}
+
+
+class ActionPlanBoundaryError(ValueError):
+    """Raised when a plan request cannot be represented safely."""
+
+
+class BoundedActionPlanEngine:
+    """Create classified action plans without executing them."""
+
+    def __init__(self, *, boundary: NovaOwnedExecutionBoundary | None = None):
+        self.boundary = boundary or default_nova_owned_execution_boundary()
+
+    def create_plan(
+        self,
+        *,
+        session_id: str,
+        initiative_id: str = "",
+        purpose: str,
+        scope: str,
+        execution_lane: str,
+        risk_class: str,
+        steps: list[dict[str, Any] | AutonomousActionPlanStep],
+        allowed_surfaces: list[str] | None = None,
+        blocked_surfaces: list[str] | None = None,
+        budget: dict[str, Any] | AutonomousActionBudget | None = None,
+        expected_outputs: list[str] | None = None,
+        stop_conditions: list[str] | None = None,
+        rollback_notes: list[str] | None = None,
+        evidence_refs: list[str] | None = None,
+        approved: bool = False,
+        approved_by: str = "",
+        approval_evidence_refs: list[str] | None = None,
+        action_plan_id: str | None = None,
+    ) -> AutonomousActionPlan:
+        lane = normalize_execution_lane(execution_lane)
+        risk = normalize_action_risk_class(risk_class)
+        normalized_steps = [
+            item if isinstance(item, AutonomousActionPlanStep) else action_plan_step_from_payload(item)
+            for item in steps
+        ]
+        surfaces = normalize_action_surfaces(
+            allowed_surfaces if allowed_surfaces is not None else [step.surface for step in normalized_steps]
+        )
+        blocked = normalize_action_surfaces(blocked_surfaces or [])
+        if not normalized_steps:
+            raise ActionPlanBoundaryError("action_plan_requires_at_least_one_step")
+        if not surfaces:
+            surfaces = [step.surface for step in normalized_steps]
+
+        boundary_reasons = self.boundary_reasons(
+            execution_lane=lane,
+            risk_class=risk,
+            allowed_surfaces=surfaces,
+            steps=normalized_steps,
+        )
+        approval_required = approval_required_for_action(
+            execution_lane=lane,
+            risk_class=risk,
+            surfaces=surfaces,
+        )
+        approval_valid = approved and _valid_human_approval(approved_by)
+        if boundary_reasons:
+            status = "blocked"
+        elif approval_required and not approval_valid:
+            status = "pending_approval"
+        else:
+            status = "approved" if approval_valid else "draft"
+
+        permission_notes = list(boundary_reasons)
+        if approval_required and not approval_valid:
+            permission_notes.append("approval_required_before_execution")
+        if approved and not approval_valid:
+            permission_notes.append("self_or_unattributed_approval_rejected")
+
+        permission = AutonomousActionPermission(
+            permission_id=uuid4().hex,
+            initiative_id=initiative_id,
+            action_plan_id=action_plan_id or uuid4().hex,
+            execution_lane=lane,
+            risk_class=risk,
+            approval_required=approval_required,
+            approved=approval_valid,
+            approved_by=approved_by if approval_valid else "",
+            allowed_surfaces=list(surfaces),
+            blocked_surfaces=list(blocked),
+            approval_evidence_refs=_string_list(approval_evidence_refs or []),
+            notes=permission_notes,
+        )
+        plan = AutonomousActionPlan(
+            action_plan_id=permission.action_plan_id,
+            initiative_id=initiative_id,
+            session_id=session_id,
+            execution_lane=lane,
+            risk_class=risk,
+            status=status,
+            purpose=purpose,
+            scope=scope,
+            allowed_surfaces=list(surfaces),
+            blocked_surfaces=list(blocked),
+            steps=normalized_steps,
+            budget=_coerce_budget(budget),
+            permission=permission,
+            expected_outputs=_string_list(expected_outputs or []),
+            stop_conditions=_string_list(stop_conditions or []),
+            rollback_notes=_string_list(rollback_notes or []),
+            evidence_refs=_string_list(evidence_refs or []),
+            notes=_plan_notes(
+                boundary=self.boundary,
+                boundary_reasons=boundary_reasons,
+                approval_required=approval_required,
+            ),
+        )
+        return action_plan_from_payload(payload=plan.to_dict(), session_id=session_id)
+
+    def boundary_reasons(
+        self,
+        *,
+        execution_lane: str,
+        risk_class: str,
+        allowed_surfaces: list[str],
+        steps: list[AutonomousActionPlanStep],
+    ) -> list[str]:
+        lane = normalize_execution_lane(execution_lane)
+        risk = normalize_action_risk_class(risk_class)
+        surfaces = set(normalize_action_surfaces(allowed_surfaces))
+        step_surfaces = {step.surface for step in steps}
+        reasons: list[str] = []
+        undeclared_step_surfaces = sorted(step_surfaces - surfaces)
+        if undeclared_step_surfaces:
+            reasons.append(f"step_surfaces_not_declared:{','.join(undeclared_step_surfaces)}")
+        if lane == "internal_activity":
+            disallowed = sorted(surfaces - INTERNAL_ACTIVITY_SURFACES)
+            if disallowed:
+                reasons.append(f"internal_activity_disallowed_surfaces:{','.join(disallowed)}")
+            if risk != "internal":
+                reasons.append(f"internal_activity_disallowed_risk:{risk}")
+        elif lane == "nova_owned_environment":
+            disallowed = sorted(surfaces - NOVA_OWNED_ENVIRONMENT_SURFACES)
+            if disallowed:
+                reasons.append(f"nova_owned_environment_disallowed_surfaces:{','.join(disallowed)}")
+            if risk not in {"internal", "nova_owned"}:
+                reasons.append(f"nova_owned_environment_disallowed_risk:{risk}")
+            if self.boundary.dedicated_user_required and not self.boundary.dedicated_user_detected:
+                reasons.append("nova_os_user_not_active")
+        elif lane == "external_system_effect":
+            if risk == "internal":
+                reasons.append("external_system_effect_requires_external_risk_class")
+        return reasons
+
+
+def default_nova_owned_execution_boundary(
+    *,
+    nova_owned_paths: list[str | Path] | None = None,
+    active_os_user: str | None = None,
+    expected_os_user: str = "nova",
+    dedicated_user_required: bool = True,
+) -> NovaOwnedExecutionBoundary:
+    active = active_os_user if active_os_user is not None else getuser()
+    paths = [str(Path(path)) for path in (nova_owned_paths or [Path("/home") / expected_os_user])]
+    return NovaOwnedExecutionBoundary(
+        expected_os_user=expected_os_user,
+        active_os_user=active,
+        dedicated_user_required=dedicated_user_required,
+        dedicated_user_detected=active == expected_os_user,
+        nova_owned_paths=paths,
+        allowed_surfaces=sorted(NOVA_OWNED_ENVIRONMENT_SURFACES),
+        blocked_surfaces=sorted(EXTERNAL_EFFECT_SURFACES),
+        notes=[
+            "Dedicated OS user is a second boundary, not a substitute for application checks.",
+            "Stage 14.2 defines planning and approval binding only; it does not execute actions.",
+        ],
+    )
+
+
+def execution_boundary_from_payload(payload: Any) -> NovaOwnedExecutionBoundary:
+    defaults = default_nova_owned_execution_boundary(active_os_user="").to_dict()
+    if not isinstance(payload, dict):
+        payload = {}
+    merged = _merge_allowed_fields(
+        defaults=defaults,
+        payload=payload,
+        record_type=NovaOwnedExecutionBoundary,
+    )
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["expected_os_user"] = str(merged.get("expected_os_user", "nova") or "nova")
+    merged["active_os_user"] = str(merged.get("active_os_user", "") or "")
+    merged["dedicated_user_required"] = bool(merged.get("dedicated_user_required", True))
+    merged["dedicated_user_detected"] = bool(
+        merged.get("dedicated_user_detected", False)
+        or (
+            bool(merged["active_os_user"])
+            and merged["active_os_user"] == merged["expected_os_user"]
+        )
+    )
+    merged["nova_owned_paths"] = _string_list(merged.get("nova_owned_paths"))
+    merged["allowed_surfaces"] = normalize_action_surfaces(merged.get("allowed_surfaces"))
+    merged["blocked_surfaces"] = normalize_action_surfaces(merged.get("blocked_surfaces"))
+    merged["notes"] = _string_list(merged.get("notes"))
+    return NovaOwnedExecutionBoundary(**merged)
 
 
 def default_autonomous_action_budget() -> AutonomousActionBudget:
@@ -353,3 +576,30 @@ def _dict_value(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
+
+
+def _coerce_budget(value: dict[str, Any] | AutonomousActionBudget | None) -> AutonomousActionBudget:
+    if isinstance(value, AutonomousActionBudget):
+        return action_budget_from_payload(value.to_dict())
+    return action_budget_from_payload(value or {})
+
+
+def _valid_human_approval(approved_by: str) -> bool:
+    return _normalize_token(approved_by) not in APPROVED_BY_BLOCKLIST
+
+
+def _plan_notes(
+    *,
+    boundary: NovaOwnedExecutionBoundary,
+    boundary_reasons: list[str],
+    approval_required: bool,
+) -> list[str]:
+    notes = [
+        f"expected_os_user:{boundary.expected_os_user}",
+        f"active_os_user:{boundary.active_os_user}",
+    ]
+    if approval_required:
+        notes.append("approval_bound_to_risk_or_external_effect")
+    if boundary_reasons:
+        notes.extend(boundary_reasons)
+    return notes
