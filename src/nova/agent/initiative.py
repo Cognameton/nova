@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from nova.types import (
+    AutonomousInitiativeRevisionDecision,
     IdleTickRecord,
     InitiativeRecord,
     InitiativeState,
@@ -381,6 +382,41 @@ class JsonInitiativeStateStore:
         self.save(initiative_state)
         return record
 
+    def revise_autonomous_drafts(
+        self,
+        *,
+        initiative_state: InitiativeState,
+        active_user_task: bool = False,
+        interruption_requested: bool = False,
+        evidence_refs: list[str] | None = None,
+    ) -> list[AutonomousInitiativeRevisionDecision]:
+        decisions = AutonomousInitiativeRevisionEngine().revise(
+            initiative_state=initiative_state,
+            active_user_task=active_user_task,
+            interruption_requested=interruption_requested,
+            evidence_refs=_string_list(evidence_refs),
+        )
+        if decisions:
+            self.save(initiative_state)
+        return decisions
+
+    def abandon_autonomous_draft(
+        self,
+        *,
+        initiative_state: InitiativeState,
+        initiative_id: str,
+        reason: str,
+        evidence_refs: list[str] | None = None,
+    ) -> AutonomousInitiativeRevisionDecision:
+        decision = AutonomousInitiativeRevisionEngine().abandon(
+            initiative_state=initiative_state,
+            initiative_id=initiative_id,
+            reason=reason,
+            evidence_refs=_string_list(evidence_refs),
+        )
+        self.save(initiative_state)
+        return decision
+
     def _find_record(self, *, initiative_state: InitiativeState, initiative_id: str) -> InitiativeRecord:
         for record in initiative_state.initiatives:
             if record.initiative_id == initiative_id:
@@ -485,6 +521,133 @@ class AutonomousInitiativeDraftEngine:
             if proposal_id and record.source_proposal_id == proposal_id:
                 return True
             if record.source_idle_tick_id == tick_id and record.source_candidate_id == candidate_id:
+                return True
+        return False
+
+
+class AutonomousInitiativeRevisionEngine:
+    """Revise Nova-originated drafts under interruption and priority rules."""
+
+    MANAGED_APPROVAL_STATES = {"draft", "awaiting_user_approval", "paused"}
+
+    def revise(
+        self,
+        *,
+        initiative_state: InitiativeState,
+        active_user_task: bool = False,
+        interruption_requested: bool = False,
+        evidence_refs: list[str] | None = None,
+    ) -> list[AutonomousInitiativeRevisionDecision]:
+        decisions: list[AutonomousInitiativeRevisionDecision] = []
+        higher_priority = active_user_task or self._has_higher_priority_initiative(initiative_state)
+        for record in initiative_state.initiatives:
+            if not self._is_managed_autonomous_draft(record):
+                continue
+            if interruption_requested:
+                decisions.append(
+                    self._set_approval_state(
+                        record=record,
+                        new_approval_state="paused",
+                        decision="pause",
+                        reason="operator_interruption",
+                        evidence_refs=evidence_refs,
+                        interrupted=True,
+                    )
+                )
+                continue
+            if higher_priority:
+                decisions.append(
+                    AutonomousInitiativeRevisionDecision(
+                        initiative_id=record.initiative_id,
+                        decision="defer",
+                        reason="higher_priority_user_work",
+                        prior_approval_state=record.approval_state,
+                        new_approval_state=record.approval_state,
+                        priority_blocked=True,
+                        evidence_refs=_string_list(evidence_refs),
+                        notes=["Nova-originated draft remains inactive while higher-priority work exists."],
+                    )
+                )
+                continue
+            decisions.append(
+                AutonomousInitiativeRevisionDecision(
+                    initiative_id=record.initiative_id,
+                    decision="keep",
+                    reason="no_revision_needed",
+                    prior_approval_state=record.approval_state,
+                    new_approval_state=record.approval_state,
+                    evidence_refs=_string_list(evidence_refs),
+                )
+            )
+        return decisions
+
+    def abandon(
+        self,
+        *,
+        initiative_state: InitiativeState,
+        initiative_id: str,
+        reason: str,
+        evidence_refs: list[str] | None = None,
+    ) -> AutonomousInitiativeRevisionDecision:
+        record = next(
+            (item for item in initiative_state.initiatives if item.initiative_id == initiative_id),
+            None,
+        )
+        if record is None:
+            raise AutonomousInitiativeDraftError(f"Unknown autonomous initiative id: {initiative_id}")
+        if not self._is_managed_autonomous_draft(record):
+            raise AutonomousInitiativeDraftError("Only Nova-originated draft initiatives can be abandoned here.")
+        record.status = "abandoned"
+        return self._set_approval_state(
+            record=record,
+            new_approval_state="abandoned",
+            decision="abandon",
+            reason=reason or "autonomous_draft_abandoned",
+            evidence_refs=evidence_refs,
+        )
+
+    def _set_approval_state(
+        self,
+        *,
+        record: InitiativeRecord,
+        new_approval_state: str,
+        decision: str,
+        reason: str,
+        evidence_refs: list[str] | None,
+        interrupted: bool = False,
+    ) -> AutonomousInitiativeRevisionDecision:
+        timestamp = utc_now_iso()
+        prior = record.approval_state
+        record.approval_state = normalize_initiative_approval_state(new_approval_state)
+        record.updated_at = timestamp
+        record.last_transition_at = timestamp
+        if evidence_refs is not None:
+            record.evidence_refs = _merge_string_lists(record.evidence_refs, evidence_refs)
+        record.notes = _merge_string_lists(record.notes, [reason])
+        return AutonomousInitiativeRevisionDecision(
+            initiative_id=record.initiative_id,
+            decision=decision,
+            reason=reason,
+            prior_approval_state=prior,
+            new_approval_state=record.approval_state,
+            interrupted=interrupted,
+            evidence_refs=_string_list(evidence_refs),
+            notes=[f"approval_state:{prior}->{record.approval_state}"],
+        )
+
+    def _is_managed_autonomous_draft(self, record: InitiativeRecord) -> bool:
+        return (
+            record.origin_type == "nova"
+            and record.autonomous
+            and record.status == "pending"
+            and record.approval_state in self.MANAGED_APPROVAL_STATES
+        )
+
+    def _has_higher_priority_initiative(self, initiative_state: InitiativeState) -> bool:
+        for record in initiative_state.initiatives:
+            if record.origin_type == "nova":
+                continue
+            if normalize_initiative_status(record.status) in {"approved", "active", "paused"}:
                 return True
         return False
 

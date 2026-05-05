@@ -1,0 +1,80 @@
+PHASE 13, STAGE 3: REVISION, PRIORITY, AND INTERRUPTION DISCIPLINE
+===================================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 13.3 gives Nova-originated draft initiatives revision discipline before
+any autonomous execution exists.
+
+The goal is to prove that durable autonomous drafts can stand down, pause, or
+be abandoned when user work, interruption, or superseding evidence requires it.
+
+
+What changed
+------------
+
+Added `AutonomousInitiativeRevisionDecision`.
+
+Added `AutonomousInitiativeRevisionEngine`.
+
+Added store/runtime methods:
+- `revise_autonomous_drafts`
+- `abandon_autonomous_draft`
+
+
+Revision behavior
+-----------------
+
+Nova-originated drafts can now:
+- remain unchanged when no revision is needed
+- defer when an active user task or higher-priority user initiative exists
+- pause when operator interruption is requested
+- abandon when explicitly superseded or rejected by revision evidence
+
+
+Priority behavior
+-----------------
+
+Higher-priority work includes:
+- active user task pressure
+- non-Nova approved initiative
+- non-Nova active initiative
+- non-Nova paused/resumable initiative
+
+When higher-priority work exists, Nova-originated drafts are deferred and
+remain inactive.
+
+
+Boundary preserved
+------------------
+
+Stage 13.3 preserves these limits:
+- no autonomous execution
+- no automatic approval
+- no automatic activation
+- no priority inversion over user-originated work
+- no hidden continuation after interruption
+- no desire claim
+
+
+Validation
+----------
+
+Focused tests:
+- `./.venv/bin/python -m unittest tests.test_initiative`
+- result: 20 tests OK
+
+Full test suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 245 tests OK
+
+
+Next stage
+----------
+
+Stage 13.4 should add operator inspection and evaluation for autonomous draft
+initiatives, including rationale, evidence, proposed next step, stop
+condition, approval state, and priority/revision diagnostics.

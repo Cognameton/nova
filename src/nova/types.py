@@ -126,6 +126,23 @@ class InitiativeState:
 
 
 @dataclass(slots=True)
+class AutonomousInitiativeRevisionDecision:
+    schema_version: str = SCHEMA_VERSION
+    initiative_id: str = ""
+    decision: str = "keep"
+    reason: str = ""
+    prior_approval_state: str = ""
+    new_approval_state: str = ""
+    priority_blocked: bool = False
+    interrupted: bool = False
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class AwarenessState:
     schema_version: str = SCHEMA_VERSION
     session_id: str = ""

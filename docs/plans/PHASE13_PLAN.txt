@@ -133,11 +133,11 @@ Let durable autonomous draft initiatives revise or stand down when evidence
 changes, the user interrupts, or higher-priority work exists.
 
 Stage 13.3 deliverables:
-- [ ] revision decision schema
-- [ ] priority arbitration rules
-- [ ] interruption handling for Nova-originated draft initiatives
-- [ ] abandonment/rejection path for stale or superseded draft initiatives
-- [ ] tests proving user work and approved initiatives take priority
+- [x] revision decision schema
+- [x] priority arbitration rules
+- [x] interruption handling for Nova-originated draft initiatives
+- [x] abandonment/rejection path for stale or superseded draft initiatives
+- [x] tests proving user work and approved initiatives take priority
 
 Stage 13.3 restrictions:
 - no autonomous execution

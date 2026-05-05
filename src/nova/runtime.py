@@ -361,6 +361,53 @@ class NovaRuntime:
         self._sync_presence_with_initiative(record)
         return record
 
+    def revise_autonomous_drafts(
+        self,
+        *,
+        active_user_task: bool = False,
+        interruption_requested: bool = False,
+        evidence_refs: list[str] | None = None,
+    ):
+        initiative_state = self.initiative_status()
+        decisions = self.initiative_store.revise_autonomous_drafts(
+            initiative_state=initiative_state,
+            active_user_task=active_user_task,
+            interruption_requested=interruption_requested,
+            evidence_refs=evidence_refs,
+        )
+        self.initiative_state = initiative_state
+        if decisions:
+            self.update_presence(
+                mode="initiative_review",
+                current_focus="autonomous initiative revision",
+                interaction_summary=f"Reviewed {len(decisions)} Nova-originated draft initiative(s).",
+                last_action_status="autonomous_drafts_revised",
+            )
+        return decisions
+
+    def abandon_autonomous_draft(
+        self,
+        *,
+        initiative_id: str,
+        reason: str,
+        evidence_refs: list[str] | None = None,
+    ):
+        initiative_state = self.initiative_status()
+        decision = self.initiative_store.abandon_autonomous_draft(
+            initiative_state=initiative_state,
+            initiative_id=initiative_id,
+            reason=reason,
+            evidence_refs=evidence_refs,
+        )
+        self.initiative_state = initiative_state
+        self.update_presence(
+            mode="initiative_review",
+            current_focus="autonomous initiative abandoned",
+            interaction_summary=f"Abandoned Nova-originated draft initiative: {reason}",
+            last_action_status="autonomous_draft_abandoned",
+        )
+        return decision
+
     def finalize_validation(
         self,
         *,

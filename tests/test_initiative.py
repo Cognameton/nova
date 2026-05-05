@@ -292,6 +292,103 @@ class InitiativeTests(unittest.TestCase):
             finally:
                 runtime.close()
 
+    def test_autonomous_draft_revision_defers_to_higher_priority_user_work(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            initiative_state = store.load(session_id="session-a")
+            draft = store.create_autonomous_draft_from_idle_tick(
+                initiative_state=initiative_state,
+                tick=self._eligible_idle_tick(),
+            )
+            user_record = store.create_record(
+                initiative_state=initiative_state,
+                title="Approved user work",
+                goal="User-originated work keeps priority.",
+                source="user-approved",
+            )
+            store.transition(
+                initiative_state=initiative_state,
+                initiative_id=user_record.initiative_id,
+                to_status="approved",
+                reason="approved",
+                approved_by="user",
+            )
+
+            decisions = store.revise_autonomous_drafts(
+                initiative_state=initiative_state,
+                active_user_task=False,
+                evidence_refs=["turn:user-work"],
+            )
+
+            draft_decision = [item for item in decisions if item.initiative_id == draft.initiative_id][0]
+            self.assertEqual(draft_decision.decision, "defer")
+            self.assertTrue(draft_decision.priority_blocked)
+            self.assertEqual(draft.approval_state, "draft")
+            self.assertIsNone(initiative_state.active_initiative_id)
+
+    def test_autonomous_draft_revision_pauses_on_interruption(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            initiative_state = store.load(session_id="session-a")
+            draft = store.create_autonomous_draft_from_idle_tick(
+                initiative_state=initiative_state,
+                tick=self._eligible_idle_tick(),
+            )
+
+            decisions = store.revise_autonomous_drafts(
+                initiative_state=initiative_state,
+                interruption_requested=True,
+                evidence_refs=["interrupt:operator"],
+            )
+
+            self.assertEqual(decisions[0].decision, "pause")
+            self.assertTrue(decisions[0].interrupted)
+            self.assertEqual(draft.approval_state, "paused")
+            self.assertEqual(draft.status, "pending")
+            self.assertIsNone(initiative_state.active_initiative_id)
+
+    def test_autonomous_draft_can_be_abandoned_without_affecting_user_initiatives(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            initiative_state = store.load(session_id="session-a")
+            draft = store.create_autonomous_draft_from_idle_tick(
+                initiative_state=initiative_state,
+                tick=self._eligible_idle_tick(),
+            )
+
+            decision = store.abandon_autonomous_draft(
+                initiative_state=initiative_state,
+                initiative_id=draft.initiative_id,
+                reason="superseded_by_user_priority",
+                evidence_refs=["turn:superseded"],
+            )
+
+            self.assertEqual(decision.decision, "abandon")
+            self.assertEqual(draft.status, "abandoned")
+            self.assertEqual(draft.approval_state, "abandoned")
+            self.assertIn("superseded_by_user_priority", draft.notes)
+            self.assertIsNone(initiative_state.active_initiative_id)
+
+    def test_runtime_revises_autonomous_drafts_without_approval_or_activation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            try:
+                runtime.session_id = runtime.session_store.start_session(session_id="session-a")
+                runtime.idle_store.append_tick(self._eligible_idle_tick(session_id="session-a"))
+                draft = runtime.create_autonomous_draft_from_idle_tick()
+
+                decisions = runtime.revise_autonomous_drafts(active_user_task=True)
+
+                self.assertEqual(decisions[0].decision, "defer")
+                current = runtime.initiative_status().initiatives[0]
+                self.assertEqual(current.initiative_id, draft.initiative_id)
+                self.assertEqual(current.status, "pending")
+                self.assertEqual(current.approval_state, "draft")
+                self.assertIsNone(runtime.initiative_status().active_initiative_id)
+            finally:
+                runtime.close()
+
     def test_initiative_store_can_continue_approved_work_across_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")

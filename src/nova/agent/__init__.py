@@ -11,6 +11,7 @@ from nova.agent.action import (
 )
 from nova.agent.initiative import (
     AutonomousInitiativeDraftError,
+    AutonomousInitiativeRevisionEngine,
     InitiativeTransitionError,
     JsonInitiativeStateStore,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "ActionProposalEngine",
     "ActionProposalEvaluation",
     "AutonomousInitiativeDraftError",
+    "AutonomousInitiativeRevisionEngine",
     "AwarenessClassifier",
     "AwarenessResult",
     "BoundaryPolicy",
