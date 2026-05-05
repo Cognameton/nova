@@ -234,6 +234,67 @@ class InternalGoalInitiativeProposal:
 
 
 @dataclass(slots=True)
+class IdleBudget:
+    schema_version: str = SCHEMA_VERSION
+    max_ticks: int = 0
+    ticks_used: int = 0
+    max_runtime_seconds: int = 0
+    runtime_seconds_used: int = 0
+    max_tokens: int = 0
+    tokens_used: int = 0
+    evaluation_mode: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class IdleRuntimeStatus:
+    schema_version: str = SCHEMA_VERSION
+    session_id: str = ""
+    lifecycle_state: str = "stopped"
+    active: bool = False
+    started_at: str = ""
+    updated_at: str = ""
+    paused_at: str = ""
+    interrupted_at: str = ""
+    stopped_at: str = ""
+    last_tick_id: str = ""
+    last_tick_at: str = ""
+    last_stop_reason: str = ""
+    budget: IdleBudget = field(default_factory=IdleBudget)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class IdleTickRecord:
+    schema_version: str = SCHEMA_VERSION
+    tick_id: str = ""
+    session_id: str = ""
+    sequence: int = 0
+    timestamp: str = ""
+    trigger: str = "idle_tick"
+    lifecycle_state: str = "idle"
+    budget_snapshot: dict[str, Any] = field(default_factory=dict)
+    state_inputs: dict[str, Any] = field(default_factory=dict)
+    capability_appraisal: dict[str, Any] = field(default_factory=dict)
+    idle_pressure_appraisal: dict[str, Any] = field(default_factory=dict)
+    candidate_internal_goals: list[dict[str, Any]] = field(default_factory=list)
+    selected_internal_goal: dict[str, Any] = field(default_factory=dict)
+    internal_goal_initiative_proposal: dict[str, Any] = field(default_factory=dict)
+    stop_reason: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ClaimGateDecision:
     schema_version: str = SCHEMA_VERSION
     requested_claim_classes: list[str] = field(default_factory=list)
@@ -348,6 +409,7 @@ class PromptBundle:
     motive_block: str
     initiative_block: str
     awareness_block: str
+    idle_block: str
     appraisal_block: str
     candidate_goal_block: str
     selected_goal_block: str

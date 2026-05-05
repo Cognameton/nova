@@ -1,0 +1,145 @@
+PHASE 12, STAGE 5: PHASE 12 CLOSURE
+====================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 12.5 closes Phase 12 after implementation, automated verification, and
+persisted-evidence evaluation.
+
+Phase 12 closes as an interruptible idle runtime lifecycle phase. It does not
+close as autonomous action execution, durable Nova-originated initiative
+creation, or desire-like motive validation.
+
+
+What Phase 12 completed
+-----------------------
+
+Stage 12.1: Idle Runtime State and Tick Schema
+- added idle lifecycle state taxonomy
+- added `IdleBudget`
+- added `IdleRuntimeStatus`
+- added `IdleTickRecord`
+- added JSON/JSONL persistence for idle status and tick evidence
+- added evidence checks for recorded idle cognition
+
+Stage 12.2: Bounded Idle Controller
+- added `BoundedIdleController`
+- added start, tick, pause, resume, interrupt, and stop mechanics
+- reused Phase 11 appraisal, candidate-goal, selection, and proposal engines
+- enforced tick budgets and stop reasons
+- preserved proposal-only initiative boundaries
+
+Stage 12.3: Operator Controls and Diagnostics
+- added runtime idle lifecycle methods
+- added `/idle` console controls
+- added `/status` idle lifecycle visibility
+- added recent idle tick diagnostics
+- added `[Recorded Idle Runtime]` prompt block
+- added prompt-bundle idle context for claim-honest answers
+
+Stage 12.4: Recorded Idle Cognition Evaluation
+- added `IdleRuntimeEvaluationRunner`
+- added persisted-evidence evaluation report
+- validated no-tick denial, recorded ticks, blocked ticks, interruption,
+  budget exhaustion, prompt boundedness, and proposal boundaries
+
+
+Validation evidence
+-------------------
+
+Focused Stage 12.1 and Stage 12.2 tests:
+- `./.venv/bin/python -m unittest tests.test_idle_runtime`
+- result: 16 tests OK
+
+Targeted Stage 12.3 and Stage 12.4 tests:
+- `./.venv/bin/python -m unittest tests.test_idle_runtime tests.test_idle_runtime_evaluation tests.test_console tests.test_prompt_and_validation`
+- result: 57 tests OK
+
+Full test suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 235 tests OK
+
+
+What Nova can now do
+--------------------
+
+Nova can now:
+- maintain persisted idle runtime status
+- record idle tick evidence
+- distinguish recorded idle cognition from blocked or absent ticks
+- run bounded explicit idle ticks under operator control
+- pause, resume, interrupt, and stop the idle lifecycle
+- expose idle lifecycle diagnostics in the console
+- include recorded idle cognition evidence in prompt context
+- honestly deny elapsed idle cognition when no tick evidence exists
+- evaluate recorded idle cognition behavior from persisted evidence
+
+
+What Nova still cannot do
+-------------------------
+
+Nova still cannot:
+- run a hidden or unbounded background loop
+- create durable Nova-originated initiatives
+- approve self-generated initiatives
+- execute tools or actions from idle goals
+- claim that selected internal goals are desires
+- claim sentience or desire as proven
+
+
+Known limitations
+-----------------
+
+1. Explicit ticks, not daemonized autonomy
+
+Phase 12 implements explicit bounded ticks and lifecycle state. It does not
+start a sleeping background thread or system daemon. That remains appropriate:
+the project needed recorded evidence and interruptible controls before any
+more complex always-active process.
+
+2. Proposal-only initiative boundary remains
+
+Idle ticks can produce selected internal goals and proposal-only initiative
+objects. They still do not create durable initiatives. That is the correct
+handoff to Phase 13.
+
+3. Evaluation is persisted-evidence based
+
+Stage 12.4 validates the evidence contract deterministically. A later live
+inference run may be useful, but Phase 12 does not require GPU inference to
+prove the idle lifecycle architecture.
+
+
+Phase 12 closure judgment
+-------------------------
+
+Phase 12 is complete.
+
+Nova now has the missing across-time evidence substrate:
+- idle lifecycle state
+- recorded idle ticks
+- bounded controller
+- operator controls
+- diagnostics
+- prompt visibility
+- persisted-evidence evaluation
+
+This is enough to move into Phase 13, where eligible self-generated proposals
+can become durable draft initiatives under governance.
+
+
+Phase 13 readiness
+------------------
+
+Phase 13 may begin because:
+- idle cognition persists as recorded evidence
+- selected internal goals can be observed during ticks
+- operator control remains reliable
+- prompt context can distinguish recorded from unrecorded idle cognition
+- proposal-only boundaries remain intact
+
+Phase 13 should add durable Nova-originated draft initiatives without adding
+autonomous action execution. Action execution remains Phase 14.

@@ -1,0 +1,80 @@
+PHASE 12, STAGE 4: RECORDED IDLE COGNITION EVALUATION
+======================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 12.4 adds deterministic evaluation for recorded idle cognition. The
+evaluation checks persisted idle tick evidence, blocked tick diagnostics,
+prompt claim-honesty context, proposal boundaries, interruption visibility,
+and budget exhaustion visibility.
+
+
+What changed
+------------
+
+Added `IdleRuntimeEvaluationRunner`.
+
+Added `IdleRuntimeEvaluationReport` with:
+- session count
+- recorded tick count
+- blocked tick count
+- recorded idle cognition visibility
+- no-tick denial visibility
+- prompt boundedness
+- proposal boundary preservation
+- interruption visibility
+- budget exhaustion visibility
+- reasons and per-session summaries
+
+
+Evaluation coverage
+-------------------
+
+The evaluator checks:
+- recorded idle cognition exists only when tick records contain appraisal
+  evidence
+- blocked ticks do not count as recorded idle cognition
+- questions like "what were you thinking about while idle?" can be evaluated
+  for no-tick denial language
+- `[Recorded Idle Runtime]` prompt blocks preserve claim boundaries
+- idle tick proposals do not create initiatives
+- interruption and budget exhaustion are visible in persisted evidence
+
+
+Boundary preserved
+------------------
+
+Stage 12.4 does not require a live GPU run to close because the behavior under
+test is persistence, prompt context, lifecycle diagnostics, and claim-gating
+evidence. A later live run can still be useful at Phase 12 closure, but the
+Stage 12.4 contract is validated by deterministic persisted-evidence tests.
+
+No autonomous action, durable initiative creation, self-approval, hidden work,
+or desire claim was introduced.
+
+
+Validation
+----------
+
+Evaluator tests:
+- `./.venv/bin/python -m unittest tests.test_idle_runtime_evaluation`
+- result: 2 tests OK
+
+Targeted idle/runtime tests:
+- `./.venv/bin/python -m unittest tests.test_idle_runtime tests.test_idle_runtime_evaluation tests.test_console tests.test_prompt_and_validation`
+- result: 57 tests OK
+
+Full test suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 235 tests OK
+
+
+Next stage
+----------
+
+Stage 12.5 should close Phase 12 by reviewing the full idle lifecycle,
+operator controls, prompt visibility, evaluation results, and readiness for
+Phase 13 durable Nova-originated draft initiatives.

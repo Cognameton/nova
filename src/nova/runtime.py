@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from nova.agent.appraisal import (
@@ -18,6 +19,7 @@ from nova.agent.appraisal import (
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.awareness_prompt import AwarenessPromptEngine
+from nova.agent.idle import BoundedIdleController, IdleRuntimePromptEngine, JsonIdleRuntimeStore
 from nova.agent.initiative import JsonInitiativeStateStore
 from nova.agent.initiative_prompt import InitiativePromptEngine
 from nova.agent.motive_prompt import MotivePromptEngine
@@ -57,7 +59,10 @@ from nova.types import (
     CapabilityAppraisal,
     CandidateInternalGoal,
     ClaimGateDecision,
+    IdleBudget,
     IdlePressureAppraisal,
+    IdleRuntimeStatus,
+    IdleTickRecord,
     InternalGoalInitiativeProposal,
     MotiveState,
     PrivateCognitionPacket,
@@ -96,6 +101,7 @@ class NovaRuntime:
         trace_logger: JsonlTraceLogger,
         memory_router: BasicMemoryRouter,
         memory_event_factory: BasicMemoryEventFactory,
+        idle_store: JsonIdleRuntimeStore | None = None,
         retrieval_policy: IdentityFirstRetrievalPolicy | None = None,
         probe_runner: object | None = None,
         orientation_engine: SelfOrientationEngine | None = None,
@@ -113,6 +119,8 @@ class NovaRuntime:
         internal_goal_selection_engine: InternalGoalSelectionEngine | None = None,
         internal_goal_proposal_engine: InternalGoalInitiativeProposalEngine | None = None,
         selected_goal_prompt_engine: SelectedGoalPromptEngine | None = None,
+        idle_controller: BoundedIdleController | None = None,
+        idle_prompt_engine: IdleRuntimePromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -125,6 +133,7 @@ class NovaRuntime:
         self.motive_store = motive_store
         self.initiative_store = initiative_store
         self.awareness_store = awareness_store
+        self.idle_store = idle_store or JsonIdleRuntimeStore(Path(self.config.app.data_dir) / "idle")
         self.presence_store = presence_store
         self.session_store = session_store
         self.trace_logger = trace_logger
@@ -150,6 +159,16 @@ class NovaRuntime:
         self.internal_goal_proposal_engine = internal_goal_proposal_engine or InternalGoalInitiativeProposalEngine()
         self.selected_goal_prompt_engine = selected_goal_prompt_engine or SelectedGoalPromptEngine()
         self.tool_registry = tool_registry or default_tool_registry()
+        self.idle_controller = idle_controller or BoundedIdleController(
+            store=self.idle_store,
+            tool_registry=self.tool_registry,
+            capability_appraisal_engine=self.capability_appraisal_engine,
+            idle_pressure_appraisal_engine=self.idle_pressure_appraisal_engine,
+            candidate_goal_engine=self.candidate_goal_engine,
+            selection_engine=self.internal_goal_selection_engine,
+            proposal_engine=self.internal_goal_proposal_engine,
+        )
+        self.idle_prompt_engine = idle_prompt_engine or IdleRuntimePromptEngine()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
             registry=self.tool_registry,
@@ -213,6 +232,110 @@ class NovaRuntime:
         if self.awareness_state is None or self.awareness_state.session_id != self.session_id:
             self.awareness_state = self.awareness_store.load(session_id=self.session_id)
         return self.awareness_state
+
+    def idle_status(self) -> IdleRuntimeStatus:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        return self.idle_store.load_status(session_id=self.session_id)
+
+    def recent_idle_ticks(self, *, limit: int = 5) -> list[IdleTickRecord]:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        return self.idle_store.list_ticks(session_id=self.session_id, limit=limit)
+
+    def start_idle(self, *, max_ticks: int = 1, evaluation_mode: bool = False) -> IdleRuntimeStatus:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        status = self.idle_controller.start(
+            session_id=self.session_id,
+            budget=IdleBudget(max_ticks=max(1, max_ticks), evaluation_mode=evaluation_mode),
+        )
+        self.update_presence(
+            mode="idle_runtime",
+            current_focus="idle runtime active",
+            interaction_summary="Idle runtime lifecycle started under operator control.",
+            last_action_status="idle_started",
+        )
+        return status
+
+    def pause_idle(self, *, reason: str = "operator_pause") -> IdleRuntimeStatus:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        status = self.idle_controller.pause(session_id=self.session_id, reason=reason)
+        self.update_presence(
+            mode="idle_runtime",
+            current_focus="idle runtime paused",
+            interaction_summary=f"Idle runtime lifecycle paused: {reason}",
+            last_action_status="idle_paused",
+        )
+        return status
+
+    def resume_idle(self) -> IdleRuntimeStatus:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        status = self.idle_controller.resume(session_id=self.session_id)
+        self.update_presence(
+            mode="idle_runtime",
+            current_focus="idle runtime active",
+            interaction_summary="Idle runtime lifecycle resumed under operator control.",
+            last_action_status="idle_resumed",
+        )
+        return status
+
+    def interrupt_idle(self, *, reason: str = "operator_interrupt") -> IdleRuntimeStatus:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        status = self.idle_controller.interrupt(session_id=self.session_id, reason=reason)
+        self.update_presence(
+            mode="idle_runtime",
+            current_focus="idle runtime interrupted",
+            interaction_summary=f"Idle runtime lifecycle interrupted: {reason}",
+            last_action_status="idle_interrupted",
+        )
+        return status
+
+    def stop_idle(self, *, reason: str = "operator_stop") -> IdleRuntimeStatus:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        status = self.idle_controller.stop(session_id=self.session_id, reason=reason)
+        self.update_presence(
+            mode="idle_runtime",
+            current_focus="idle runtime stopped",
+            interaction_summary=f"Idle runtime lifecycle stopped: {reason}",
+            last_action_status="idle_stopped",
+        )
+        return status
+
+    def idle_tick(self, *, trigger: str = "operator_tick") -> IdleTickRecord:
+        self._ensure_state_loaded()
+        self._ensure_initiative_loaded()
+        assert self.session_id is not None
+        assert self.self_state is not None
+        assert self.motive_state is not None
+        tick = self.idle_controller.tick(
+            session_id=self.session_id,
+            self_state=self.self_state,
+            motive_state=self.motive_state,
+            initiative_state=self.initiative_status(),
+            awareness_state=self.awareness_status(),
+            private_cognition=PrivateCognitionPacket(),
+            claim_gate=ClaimGateDecision(),
+            trigger=trigger,
+        )
+        self.update_presence(
+            mode="idle_runtime",
+            current_focus="idle tick recorded",
+            interaction_summary=f"Idle tick recorded with stop reason: {tick.stop_reason}",
+            last_action_status=f"idle_tick_{tick.stop_reason}",
+        )
+        return tick
 
     def finalize_validation(
         self,
@@ -783,6 +906,11 @@ class NovaRuntime:
             private_cognition=private_cognition,
             user_text=user_text,
         )
+        idle_block = self.idle_prompt_engine.build_block(
+            status=self.idle_status(),
+            recent_ticks=self.recent_idle_ticks(limit=3),
+            user_text=user_text,
+        )
         appraisal_block = self.appraisal_prompt_engine.build_block(
             capability_appraisal=capability_appraisal,
             idle_appraisal=idle_pressure_appraisal,
@@ -802,6 +930,7 @@ class NovaRuntime:
             motive_block=motive_block,
             initiative_block=initiative_block,
             awareness_block=awareness_block,
+            idle_block=idle_block,
             appraisal_block=appraisal_block,
             candidate_goal_block=candidate_goal_block,
             selected_goal_block=selected_goal_block,

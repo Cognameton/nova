@@ -1,0 +1,98 @@
+PHASE 12, STAGE 3: OPERATOR CONTROLS AND DIAGNOSTICS
+=====================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 12.3 exposes the Phase 12 idle runtime lifecycle through runtime methods,
+interactive console commands, diagnostics, and prompt context.
+
+This stage keeps idle cognition inspectable and interruptible. It does not
+create autonomous initiatives, approve work, execute tools, or claim desire.
+
+
+What changed
+------------
+
+Added runtime surfaces:
+- `idle_status`
+- `recent_idle_ticks`
+- `start_idle`
+- `pause_idle`
+- `resume_idle`
+- `interrupt_idle`
+- `stop_idle`
+- `idle_tick`
+
+Added interactive console command:
+- `/idle status`
+- `/idle start N`
+- `/idle tick`
+- `/idle pause`
+- `/idle resume`
+- `/idle interrupt`
+- `/idle stop`
+- `/idle recent N`
+
+Added status visibility:
+- `/status` now includes idle lifecycle state and budget use.
+
+Added prompt visibility:
+- `IdleRuntimePromptEngine`
+- `[Recorded Idle Runtime]` prompt block
+- prompt bundle `idle_block`
+
+
+Claim-honesty behavior
+----------------------
+
+The prompt block exposes whether recorded idle cognition exists.
+
+If no recorded idle cognition exists, the prompt explicitly instructs Nova to
+say no elapsed idle cognition was recorded.
+
+If recorded ticks exist, the prompt exposes only bounded evidence:
+- lifecycle state
+- tick count
+- recent tick ids
+- stop reasons
+- candidate count
+- selected bounded goal title
+- evidence refs
+
+It also instructs Nova not to claim desire, hidden work, autonomous action, or
+initiative creation from idle ticks.
+
+
+Boundary preserved
+------------------
+
+Stage 12.3 preserves these limits:
+- no hidden background loop
+- no external action execution
+- no durable Nova-originated initiatives
+- no automatic approval
+- no desire claims
+- no idle cognition claim without stored tick evidence
+
+
+Validation
+----------
+
+Targeted tests:
+- `./.venv/bin/python -m unittest tests.test_idle_runtime tests.test_console tests.test_prompt_and_validation`
+- result: 55 tests OK
+
+Full test suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 233 tests OK
+
+
+Next stage
+----------
+
+Stage 12.4 should evaluate recorded idle cognition behavior directly,
+including no-tick denial, one-tick reporting, multiple bounded ticks,
+interruption, budget exhaustion, and prompt-level claim honesty.

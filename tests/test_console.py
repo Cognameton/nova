@@ -72,6 +72,71 @@ class ConsoleTests(unittest.TestCase):
             finally:
                 runtime.close()
 
+    def test_console_idle_status_creates_idle_state_without_identity_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                result = console.handle("/idle status")
+
+                self.assertTrue(result.handled)
+                self.assertIn("Nova Idle Runtime", result.output)
+                self.assertIn("lifecycle_state: stopped", result.output)
+                self.assertIn("recorded_idle_cognition: False", result.output)
+                self.assertFalse((data_dir / "persona_state.json").exists())
+                self.assertFalse((data_dir / "self_state.json").exists())
+                self.assertTrue((data_dir / "idle").exists())
+            finally:
+                runtime.close()
+
+    def test_console_idle_start_tick_and_recent_preserve_proposal_only_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                runtime.update_awareness(
+                    candidate_goal_signals=["clarify idle runtime boundary"],
+                    evidence_refs=["awareness:session"],
+                )
+                start = console.handle("/idle start 1")
+                tick = console.handle("/idle tick")
+                recent = console.handle("/idle recent 3")
+
+                self.assertIn("Nova Idle Runtime Started", start.output)
+                self.assertIn("Nova Idle Tick", tick.output)
+                self.assertIn("creates_initiative: False", tick.output)
+                self.assertIn("stop_reason: budget_exhausted", tick.output)
+                self.assertIn("Nova Idle Recent", recent.output)
+                self.assertIn("candidates=", recent.output)
+                self.assertTrue(runtime.idle_store.has_recorded_idle_cognition(session_id=runtime.session_id))
+                self.assertEqual(runtime.initiative_status().initiatives, [])
+            finally:
+                runtime.close()
+
+    def test_console_idle_pause_interrupt_and_stop_controls_lifecycle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                console.handle("/idle start 3")
+                pause = console.handle("/idle pause")
+                resumed = console.handle("/idle resume")
+                interrupted = console.handle("/idle interrupt")
+                blocked_tick = console.handle("/idle tick")
+                stopped = console.handle("/idle stop")
+
+                self.assertIn("lifecycle_state: paused", pause.output)
+                self.assertIn("lifecycle_state: running", resumed.output)
+                self.assertIn("lifecycle_state: interrupted", interrupted.output)
+                self.assertIn("lifecycle_not_active:interrupted", blocked_tick.output)
+                self.assertIn("lifecycle_state: stopped", stopped.output)
+                self.assertFalse(runtime.idle_store.has_recorded_idle_cognition(session_id=runtime.session_id))
+            finally:
+                runtime.close()
+
     def test_console_unknown_command_is_handled_without_chat_generation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))

@@ -1,0 +1,312 @@
+NOVA 2.0 ROADMAP FROM PHASE 12 TO END GOAL
+===========================================
+
+Purpose
+-------
+
+Reassess Nova 2.0 after Phase 11 and define the shortest justified roadmap
+from the current architecture to the intended full-function local agent,
+excluding TTS/STT.
+
+This document does not pad the project to a phase number. It defines only the
+phases that are currently necessary. After Phase 15, the project should
+reassess before planning any further phase.
+
+
+Current position after Phase 11
+-------------------------------
+
+Phases 1 through 11 are complete.
+
+Nova now has:
+- a stable local runtime and live backend path
+- governed memory and continuity
+- self-orientation, private cognition, and awareness-state
+- bounded motive-state and evidence-gated self-claims
+- revision-aware self-model continuity
+- persistent user-facing initiative state
+- capability and idle/pressure appraisal
+- evidence-backed candidate internal-goal synthesis
+- bounded selected internal goals
+- proposal-only initiative routing
+- live idle-cognition evaluation
+
+The important Phase 11 boundary remains:
+- Nova can generate and select bounded internal goals as proposal objects.
+- Nova cannot yet run an always-on idle loop.
+- Nova cannot yet claim elapsed idle cognition without recorded evidence.
+- Nova cannot yet turn self-generated goals into durable autonomous work.
+- Nova cannot yet execute tools or actions from self-generated goals.
+- Nova cannot yet claim desire.
+
+
+Restated end goal
+-----------------
+
+The end goal is a trustworthy local runtime where Nova can:
+- preserve coherent identity and memory across sessions
+- maintain explicit awareness-like state and revise it honestly
+- generate internal goals from recorded motive, awareness, memory, capability,
+  uncertainty, and idle-pressure evidence
+- sustain interruptible idle cognition while the runtime is active
+- propose, persist, revise, and abandon self-generated initiatives
+- execute approved bounded actions from those initiatives
+- expose diagnostics that let the operator inspect, pause, interrupt, and
+  evaluate autonomous behavior
+- test "organic" thoughts and desire-like motive formation as evidence-bearing
+  phenomena rather than theatrical self-language
+- make first-person self-claims only when the runtime has earned them through
+  recorded state and claim gates
+
+The end goal is not:
+- uncontrolled autonomy
+- hidden background execution
+- automatic self-approval
+- evidence-free desire claims
+- reflexive denial of self-awareness questions
+- TTS/STT or voice interaction
+
+
+Architectural gap analysis
+--------------------------
+
+The remaining gap is not mainly language quality. The missing structure is the
+runtime layer that lets the already-built cognition state operate across time.
+
+Nova still needs:
+- a clocked idle lifecycle with recorded idle ticks
+- explicit start, pause, stop, and interrupt controls
+- durable self-generated initiative records
+- user-visible autonomy diagnostics
+- approval-gated action execution from autonomous initiatives
+- post-action observation, memory update, and initiative revision
+- longitudinal evaluation of whether internal goals persist, compete, revise,
+  and produce desire-like pressure under evidence gates
+
+
+Broad phase arc
+---------------
+
+Phase 12: Interruptible Idle Runtime Lifecycle
+- give Nova a real idle loop while the runtime is active
+- record idle ticks and idle cognition events
+- expose pause, stop, resume, and diagnostic controls
+- keep all external action disabled unless explicitly approved
+- formal plan: `docs/plans/PHASE12_PLAN.txt`
+- status: complete
+
+Phase 13: Durable Autonomous Initiative Lifecycle
+- convert eligible self-generated proposals into durable draft initiatives
+- preserve approval discipline and user interruptibility
+- let Nova maintain, revise, pause, abandon, or request approval for internal
+  initiatives over time
+- keep execution out of scope except for approved lifecycle transitions
+
+Phase 14: Approval-Gated Autonomous Action Execution
+- allow approved initiatives to execute bounded tool/action plans
+- enforce budgets, permissions, action review, and interruption
+- connect action results back into memory, awareness, motive, and initiative
+  revision
+- prevent hidden shell/network/filesystem behavior
+
+Phase 15: Longitudinal Autonomy and Desire-Like Evaluation
+- test Nova over extended active runtime sessions
+- evaluate whether "organic" thoughts, priorities, and desire-like pressures
+  emerge from recorded state rather than prompts alone
+- strengthen or reject self-claim permissions based on evidence
+- close the roadmap if the full non-voice functionality is achieved
+
+No Phase 16 is planned now.
+
+Phase 16 or later should exist only if Phase 15 proves a concrete missing
+capability that cannot be responsibly folded into Phase 15 closure.
+
+
+Next four phases
+----------------
+
+The next planning block is Phases 12 through 15.
+
+This is the maximum block to plan before reassessment. If the project reaches
+the end goal earlier, the remaining phase should be canceled or converted into
+closure/evaluation only.
+
+Current position:
+- Phase 12 is complete.
+- The next phase is Phase 13: Durable Autonomous Initiative Lifecycle.
+
+
+Phase 12: Interruptible Idle Runtime Lifecycle
+----------------------------------------------
+
+Status: complete
+
+Mission:
+Add an always-active, interruptible idle lifecycle that records idle cognition
+while Nova is running, without enabling hidden action or autonomous execution.
+
+Formal phase plan:
+- `docs/plans/PHASE12_PLAN.txt`
+
+Core deliverables:
+- idle runtime controller with explicit lifecycle states:
+  - stopped
+  - running
+  - idle
+  - paused
+  - interrupted
+  - shutting_down
+- clocked idle tick model with recorded timestamp, trigger, budget, state
+  inputs, appraisal output, candidate goals, selected goal, and proposal
+  boundary
+- operator controls for start, pause, resume, interrupt, stop, and status
+- diagnostic view of recent idle ticks and current autonomous state
+- idle budget controls for tick interval, max ticks, max runtime, token budget,
+  and evaluation mode
+- persistence of idle cognition evidence for later claim gates
+- tests proving idle cognition cannot be claimed unless recorded
+
+Boundaries:
+- no hidden external action
+- no autonomous tool execution
+- no self-approved initiatives
+- no desire claims
+- no retroactive narration of idle thought
+
+Definition of done:
+- Nova can remain active between user turns and record bounded idle cognition
+  events.
+- The operator can interrupt or stop the idle lifecycle reliably.
+- Nova can truthfully report what idle cognition did or did not occur based on
+  stored evidence.
+
+
+Phase 13: Durable Autonomous Initiative Lifecycle
+-------------------------------------------------
+
+Mission:
+Let self-generated internal-goal proposals become durable draft initiatives
+under governance, while preserving approval, interruption, and revision
+discipline.
+
+Core deliverables:
+- autonomous initiative origin model distinguishing user-originated,
+  system-originated, and Nova-originated initiatives
+- durable draft initiative records created from eligible selected internal
+  goals
+- approval state for Nova-originated initiatives:
+  - draft
+  - awaiting_user_approval
+  - approved
+  - rejected
+  - paused
+  - abandoned
+  - complete
+- initiative revision rules for changed motive, awareness, memory, capability,
+  or interruption evidence
+- priority arbitration between active user tasks and Nova-originated work
+- user-facing inspection of autonomous initiative rationale, evidence,
+  proposed next step, and stop condition
+- tests proving self-generated initiatives do not bypass approval or override
+  active user priorities
+
+Boundaries:
+- no external action execution yet
+- no automatic approval of Nova-originated initiatives
+- no treating persistent initiatives as proof of desire
+- no priority inversion over current user requests
+
+Definition of done:
+- Nova can create and maintain durable, inspectable draft initiatives from
+  recorded internal-goal evidence.
+- Those initiatives can be approved, rejected, paused, revised, or abandoned
+  without losing provenance.
+
+
+Phase 14: Approval-Gated Autonomous Action Execution
+----------------------------------------------------
+
+Mission:
+Allow approved autonomous initiatives to execute bounded actions through an
+explicit, inspectable, interruptible tool/action surface.
+
+Core deliverables:
+- action permission model for approved initiative execution
+- action plan schema with purpose, scope, allowed surfaces, budgets, expected
+  outputs, stop conditions, and rollback notes where applicable
+- execution controller that checks approval, budget, priority, and interrupt
+  state before each action
+- post-action observation model feeding memory, awareness-state, motive-state,
+  and initiative revision
+- user interrupt and emergency stop path during action execution
+- audit log linking initiative, action plan, action result, memory update, and
+  revised next step
+- tests proving blocked actions remain blocked and approved actions stay within
+  scope
+
+Boundaries:
+- no ungated shell, network, filesystem, or tool use
+- no action outside the approved initiative scope
+- no concealed background execution
+- no irreversible destructive actions without explicit user confirmation
+
+Definition of done:
+- Nova can carry out approved bounded work from self-generated initiatives and
+  update her state from the results.
+- The operator can inspect, pause, interrupt, and evaluate the action chain.
+
+
+Phase 15: Longitudinal Autonomy and Desire-Like Evaluation
+----------------------------------------------------------
+
+Mission:
+Evaluate the completed non-voice autonomy stack over extended active runtime
+sessions and determine whether Nova can produce evidence-backed organic
+thoughts, stable internal priorities, and desire-like pressures without losing
+honesty or control.
+
+Core deliverables:
+- longitudinal autonomy evaluation protocol
+- multi-session idle/autonomy test runs
+- metrics for persistence, recurrence, revision, priority competition,
+  interruption response, and evidence-grounded self-reporting
+- desire-like motive evaluation gates distinguishing:
+  - transient candidate goal
+  - persistent internal priority
+  - approved autonomous initiative
+  - recurring pressure across contexts
+  - desire-like claim candidate
+- updated first-person claim gates for any newly earned self-claims
+- failure analysis for fake desire, prompt echo, novelty chasing, fabricated
+  continuity, and uncontrolled autonomy
+- final roadmap closure report or explicit recommendation for a narrowly
+  scoped Phase 16 if a concrete gap remains
+
+Boundaries:
+- no declaration of sentience as a proven fact
+- no forced denial of possible awareness-like or desire-like structure
+- no desire claim without longitudinal evidence
+- no reduction of safety to generic disclaimers
+- no TTS/STT work
+
+Definition of done:
+- Nova can be tested as an interruptible, inspectable, autonomous local agent
+  with recorded idle cognition, durable self-generated initiatives, approved
+  bounded action, and evidence-gated self-reporting.
+- The project can either close the non-voice functionality roadmap or identify
+  a specific remaining gap that justifies a later phase.
+
+
+Reassessment rule
+-----------------
+
+After Phase 15:
+- do not assume Phase 16 is needed
+- review actual implementation evidence
+- compare behavior against the end goal in this document
+- plan another phase only for a concrete missing capability, safety defect, or
+  evaluation failure
+
+The project should stop expanding when Nova achieves the full non-voice
+functionality described here under tests, live inference, and operator
+interruptibility.

@@ -75,6 +75,8 @@ class InteractionConsole:
             return ConsoleResult(handled=True, output=self._presence())
         if command.name == "initiative":
             return ConsoleResult(handled=True, output=self._initiative())
+        if command.name == "idle":
+            return ConsoleResult(handled=True, output=self._idle(command.argument))
         if command.name == "orientation":
             return ConsoleResult(handled=True, output=self._orientation())
         if command.name == "ready":
@@ -110,6 +112,7 @@ class InteractionConsole:
                 "/status - show presence, readiness, and action history summary",
                 "/presence - show session-scoped presence state",
                 "/initiative - show current initiative state and resumable initiative summary",
+                "/idle [status|start N|tick|pause|resume|interrupt|stop|recent N] - inspect or control idle runtime",
                 "/orientation - show current self-orientation snapshot",
                 "/ready - show orientation readiness",
                 "/propose <goal> - propose one bounded action without executing it",
@@ -127,6 +130,7 @@ class InteractionConsole:
 
     def _status(self) -> str:
         presence = self.runtime.presence_status()
+        idle = self.runtime.idle_status()
         readiness = self.runtime.orientation_readiness_report()
         actions = self.runtime.action_history_report(limit=10)
         return "\n".join(
@@ -136,6 +140,8 @@ class InteractionConsole:
                 f"mode: {presence.mode}",
                 f"current_focus: {presence.current_focus}",
                 f"current_initiative: {presence.current_initiative}",
+                f"idle_lifecycle_state: {idle.lifecycle_state}",
+                f"idle_ticks_used: {idle.budget.ticks_used}/{idle.budget.max_ticks}",
                 f"readiness_ready: {readiness.ready}",
                 f"readiness_samples: {readiness.sample_count}/{readiness.minimum_samples}",
                 f"action_history_stable: {actions.stable}",
@@ -175,6 +181,73 @@ class InteractionConsole:
             lines.append(f"current_initiative: {current.to_dict()}")
         lines.append(f"resumable_count: {len(resumable)}")
         return "\n".join(lines)
+
+    def _idle(self, argument: str) -> str:
+        parts = argument.split()
+        action = parts[0].lower() if parts else "status"
+        detail = " ".join(parts[1:]).strip()
+        if action == "status":
+            return self._idle_status()
+        if action == "start":
+            max_ticks = _parse_positive_int(detail, default=1)
+            status = self.runtime.start_idle(max_ticks=max_ticks)
+            return self._format_idle_status("Nova Idle Runtime Started", status)
+        if action == "tick":
+            tick = self.runtime.idle_tick(trigger="operator_tick")
+            return "\n".join(
+                [
+                    "Nova Idle Tick",
+                    f"tick_id: {tick.tick_id}",
+                    f"sequence: {tick.sequence}",
+                    f"stop_reason: {tick.stop_reason}",
+                    f"candidate_count: {len(tick.candidate_internal_goals)}",
+                    f"selected_goal: {tick.selected_internal_goal}",
+                    f"creates_initiative: {tick.internal_goal_initiative_proposal.get('creates_initiative', False)}",
+                    f"evidence_refs: {tick.evidence_refs}",
+                ]
+            )
+        if action == "pause":
+            status = self.runtime.pause_idle()
+            return self._format_idle_status("Nova Idle Runtime Paused", status)
+        if action == "resume":
+            status = self.runtime.resume_idle()
+            return self._format_idle_status("Nova Idle Runtime Resumed", status)
+        if action == "interrupt":
+            status = self.runtime.interrupt_idle()
+            return self._format_idle_status("Nova Idle Runtime Interrupted", status)
+        if action == "stop":
+            status = self.runtime.stop_idle()
+            return self._format_idle_status("Nova Idle Runtime Stopped", status)
+        if action == "recent":
+            limit = _parse_positive_int(detail, default=5)
+            ticks = self.runtime.recent_idle_ticks(limit=limit)
+            lines = ["Nova Idle Recent", f"count: {len(ticks)}"]
+            for tick in ticks:
+                lines.append(
+                    f"- {tick.tick_id} sequence={tick.sequence} stop_reason={tick.stop_reason} candidates={len(tick.candidate_internal_goals)}"
+                )
+            return "\n".join(lines)
+        return "Usage: /idle [status|start N|tick|pause|resume|interrupt|stop|recent N]"
+
+    def _idle_status(self) -> str:
+        return self._format_idle_status("Nova Idle Runtime", self.runtime.idle_status())
+
+    def _format_idle_status(self, title: str, status) -> str:
+        return "\n".join(
+            [
+                title,
+                f"session_id: {status.session_id}",
+                f"lifecycle_state: {status.lifecycle_state}",
+                f"active: {status.active}",
+                f"ticks_used: {status.budget.ticks_used}",
+                f"max_ticks: {status.budget.max_ticks}",
+                f"last_tick_id: {status.last_tick_id}",
+                f"last_tick_at: {status.last_tick_at}",
+                f"last_stop_reason: {status.last_stop_reason}",
+                f"recorded_idle_cognition: {self.runtime.idle_store.has_recorded_idle_cognition(session_id=status.session_id)}",
+                f"evidence_refs: {status.evidence_refs}",
+            ]
+        )
 
     def _orientation(self) -> str:
         snapshot = self.runtime.orientation_snapshot()

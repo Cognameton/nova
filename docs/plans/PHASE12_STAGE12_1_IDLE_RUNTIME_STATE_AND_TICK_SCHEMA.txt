@@ -1,0 +1,71 @@
+PHASE 12, STAGE 1: IDLE RUNTIME STATE AND TICK SCHEMA
+======================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 12.1 defines the data contracts and persistence surface for recorded
+idle cognition. It does not implement a running idle loop, autonomous action,
+durable Nova-originated initiatives, or desire claims.
+
+
+What changed
+------------
+
+Added idle runtime data types:
+- `IdleBudget`
+- `IdleRuntimeStatus`
+- `IdleTickRecord`
+
+Added idle lifecycle state taxonomy:
+- `stopped`
+- `running`
+- `idle`
+- `paused`
+- `interrupted`
+- `shutting_down`
+
+Added `JsonIdleRuntimeStore` with:
+- JSON-backed idle runtime status persistence
+- JSONL-backed idle tick evidence persistence
+- malformed status recovery
+- malformed tick-line skipping
+- recent tick listing
+- recorded idle cognition evidence check
+- status pointer updates when tick evidence is appended
+
+
+Boundary preserved
+------------------
+
+Stage 12.1 only creates the evidence substrate.
+
+It does not:
+- run an idle loop
+- execute tools or actions
+- create durable initiatives
+- approve Nova-originated work
+- claim desire
+- allow Nova to claim elapsed idle cognition unless tick records exist
+
+
+Validation
+----------
+
+Focused tests:
+- `./.venv/bin/python -m unittest tests.test_idle_runtime`
+- result: 10 tests OK
+
+Full test suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 224 tests OK
+
+
+Next stage
+----------
+
+Stage 12.2 should implement a bounded idle controller that can produce these
+tick records by reusing the Phase 11 appraisal, candidate-goal, selected-goal,
+and proposal-only boundaries.

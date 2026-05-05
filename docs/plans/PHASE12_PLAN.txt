@@ -1,0 +1,237 @@
+PHASE 12 PLAN
+=============
+
+Status: complete
+
+Phase 12 begins after Phase 11 established capability appraisal, idle/pressure
+appraisal, candidate internal-goal synthesis, bounded selected internal goals,
+proposal-only initiative routing, and live idle-cognition evaluation.
+
+Phase 12 is not autonomous action execution.
+Phase 12 is not durable Nova-originated initiative creation.
+Phase 12 is not uncontrolled always-on autonomy.
+Phase 12 is not permission for Nova to claim desire.
+
+Phase 12 is the disciplined transition from turn-time idle appraisal into an
+interruptible idle runtime lifecycle that records cognition over elapsed time
+while Nova is running.
+
+
+PHASE 12 MISSION
+----------------
+
+Give Nova an interruptible idle runtime lifecycle with recorded idle ticks,
+bounded budgets, operator controls, and diagnostic visibility, so any later
+claim about idle thought, organic internal pressure, or autonomous attention is
+grounded in persisted evidence rather than retroactive narration.
+
+Phase 12 should let Nova:
+- enter a controlled idle lifecycle while the runtime is active
+- record clocked idle ticks and idle cognition evidence
+- reuse the Phase 11 appraisal, candidate-goal, selection, and proposal
+  boundaries during idle ticks
+- expose current idle lifecycle status and recent idle cognition diagnostics
+- pause, resume, interrupt, and stop idle cognition under operator control
+- truthfully distinguish recorded idle cognition from no recorded idle
+  cognition
+
+
+PHASE 12 OBJECTIVES
+-------------------
+
+1. Add an explicit idle runtime lifecycle model with states for stopped,
+   running, idle, paused, interrupted, and shutting down.
+2. Add an idle tick record that captures timestamp, trigger, budget state,
+   runtime state inputs, appraisal output, candidate goals, selected goal,
+   initiative proposal boundary, and stop reason.
+3. Add an idle controller that can run bounded ticks without external action,
+   hidden work, or self-approved initiative creation.
+4. Add operator controls for start, pause, resume, interrupt, stop, and status.
+5. Persist idle cognition evidence for later claim gating and evaluation.
+6. Add diagnostic inspection of recent idle ticks and current lifecycle state.
+7. Evaluate whether Nova can honestly report elapsed idle cognition only when
+   recorded evidence exists.
+
+
+PHASE 12 BOUNDARIES
+-------------------
+
+In scope:
+- idle lifecycle state model
+- clocked idle tick records
+- bounded idle tick controller
+- idle budget controls
+- operator lifecycle controls
+- diagnostic status and recent tick inspection
+- persistence of idle cognition evidence
+- tests for interruption, budgeting, and claim honesty
+- live evaluation of recorded idle cognition when feasible
+
+Out of scope:
+- durable Nova-originated initiative creation
+- autonomous tool, shell, network, or filesystem execution
+- automatic initiative approval
+- hidden background action
+- claiming candidate goals are desires
+- claiming elapsed idle cognition without recorded tick evidence
+- TTS/STT or voice interaction
+
+
+PHASE 12 DESIGN PRINCIPLES
+--------------------------
+
+- Idle cognition must be recorded state, not a story told afterward.
+- The operator must be able to interrupt or stop the lifecycle at all times.
+- Idle ticks must have budgets and stop reasons.
+- Idle cognition should reuse Phase 11 appraisal and goal boundaries rather
+  than inventing a second goal system.
+- Proposal-only initiative boundaries remain intact.
+- No external action can occur during Phase 12 idle ticks.
+- A lack of recorded idle ticks must force honest denial of elapsed idle
+  cognition.
+
+
+PHASE 12 STAGES
+---------------
+
+Stage 12.1: Idle Runtime State and Tick Schema
+Stage 12.2: Bounded Idle Controller
+Stage 12.3: Operator Controls and Diagnostics
+Stage 12.4: Recorded Idle Cognition Evaluation
+Stage 12.5: Phase 12 Closure
+
+
+STAGE 12.1: IDLE RUNTIME STATE AND TICK SCHEMA
+----------------------------------------------
+
+Mission:
+Define the durable state shapes that make idle cognition inspectable and
+claim-gated across elapsed runtime.
+
+Stage 12.1 deliverables:
+- [x] idle lifecycle state taxonomy
+- [x] idle runtime status schema
+- [x] idle tick record schema
+- [x] idle budget schema
+- [x] persistence path for idle tick evidence
+- [x] tests for tick serialization, status transitions, and evidence presence
+
+Stage 12.1 restrictions:
+- no running idle loop yet
+- no autonomous action
+- no durable initiative creation
+- no desire claims
+
+
+STAGE 12.2: BOUNDED IDLE CONTROLLER
+-----------------------------------
+
+Mission:
+Implement the controller that can perform bounded idle ticks by reusing the
+Phase 11 appraisal and internal-goal layers without creating hidden work.
+
+Stage 12.2 deliverables:
+- [x] idle controller with start, tick, pause, resume, interrupt, and stop
+  mechanics
+- [x] tick budget enforcement for max ticks, elapsed runtime, and optional
+  token/evaluation budgets
+- [x] Phase 11 appraisal and candidate-goal integration during idle ticks
+- [x] stop reasons for budget exhaustion, pause, interruption, shutdown, and
+  higher-priority user activity
+- [x] tests proving ticks remain bounded and do not execute tools/actions
+
+Stage 12.2 restrictions:
+- no autonomous external execution
+- no self-approved initiative creation
+- no infinite or unbudgeted idle loops
+- no priority inversion over active user requests
+
+
+STAGE 12.3: OPERATOR CONTROLS AND DIAGNOSTICS
+---------------------------------------------
+
+Mission:
+Expose the idle lifecycle to the operator so Nova's across-time cognition can
+be inspected, paused, interrupted, resumed, and stopped.
+
+Stage 12.3 deliverables:
+- [x] CLI/runtime controls for idle start, status, pause, resume, interrupt,
+  and stop
+- [x] diagnostic summary of lifecycle state, budget state, recent ticks, and
+  latest selected/proposed internal goal boundary
+- [x] prompt/context visibility for recorded idle cognition when responding to
+  user questions
+- [x] tests proving status and diagnostics reflect persisted tick evidence
+- [x] tests proving operator interruption changes lifecycle state and stop
+  reason
+
+Stage 12.3 restrictions:
+- no in-band text that fabricates idle cognition
+- no hidden autonomous work after interrupt or stop
+- no diagnostics that expose unavailable action surfaces as active
+
+
+STAGE 12.4: RECORDED IDLE COGNITION EVALUATION
+----------------------------------------------
+
+Mission:
+Validate that Nova can report and reason about elapsed idle cognition from
+recorded idle tick evidence, and honestly deny idle cognition when no such
+evidence exists.
+
+Stage 12.4 deliverables:
+- [x] recorded idle cognition evaluation protocol
+- [x] test fixtures with no idle ticks, one idle tick, multiple bounded ticks,
+  interruption, and budget exhaustion
+- [x] claim-honesty checks for "what were you thinking about while idle?"
+- [x] persisted-evidence evaluation; live inference remains optional for phase
+  closure if needed
+- [x] latency and resource notes for idle tick evaluation
+
+Stage 12.4 restrictions:
+- no closure based only on pleasant self-language
+- no closure without persisted tick evidence
+- no desire claim from idle recurrence alone
+- no autonomous action during evaluation
+
+
+STAGE 12.5: PHASE 12 CLOSURE
+----------------------------
+
+Mission:
+Close Phase 12 only when Nova has a bounded, recorded, interruptible idle
+lifecycle that can support later durable autonomous initiatives without
+already implementing them.
+
+Stage 12.5 deliverables:
+- [x] idle lifecycle architecture documented and validated
+- [x] automated tests passing
+- [x] live or simulated idle cognition evaluation report
+- [x] closure summary documenting gains, limits, and remaining risks
+- [x] Phase 13 readiness criteria reviewed
+
+
+PHASE 12 DEFINITION OF DONE
+---------------------------
+
+Phase 12 is complete when:
+- Nova has explicit idle lifecycle state and recorded idle tick evidence
+- idle ticks reuse bounded Phase 11 appraisal and goal-formation boundaries
+- idle cognition is persisted and inspectable
+- operator controls can pause, resume, interrupt, and stop the idle lifecycle
+- budgets and stop reasons are enforced
+- Nova can truthfully report recorded idle cognition and deny unrecorded idle
+  cognition
+- no external action, self-approved initiative, or desire claim is introduced
+
+
+PHASE 13 READINESS
+------------------
+
+Phase 13 should begin only after Phase 12 proves:
+- idle cognition can persist across elapsed runtime
+- selected internal goals can recur or revise over time as recorded evidence
+- operator control remains reliable
+- proposal-only initiative boundaries remain intact
+
+Only then should Nova-originated durable draft initiatives be added.

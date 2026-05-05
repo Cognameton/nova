@@ -47,7 +47,8 @@ CURRENT POSITION
 
 As of the Phase 11 closeout:
 - Phases 1 through 11 are complete.
-- The next phase is not yet formally planned.
+- The forward roadmap from Phase 12 to the current non-voice end goal is now
+  captured in `docs/plans/ROADMAP_PHASE12_TO_END.txt`.
 
 That means the project has already completed:
 - canonical local runtime
@@ -171,16 +172,20 @@ Phase 11:
 DEFINED NEXT PHASE
 ------------------
 
-The next phase is not yet formally planned.
+Phase 12 is complete.
+
+The next phase is Phase 13: Durable Autonomous Initiative Lifecycle.
+
+See:
+- `docs/plans/PHASE12_PLAN.txt`
+- `docs/plans/ROADMAP_PHASE12_TO_END.txt`
 
 Likely mission:
-- add an interruptible idle runtime lifecycle
-- record idle ticks or idle appraisal events while Nova is running
-- preserve operator stop/pause controls
-- provide diagnostic inspection of idle state
-- keep external action gated and approval-bound
-- prepare later evaluation of desire-like motive formation from persistent,
-  revisable, internally generated pressure
+- convert eligible self-generated proposals into durable draft initiatives
+- preserve approval discipline and user interruptibility
+- let Nova maintain, revise, pause, abandon, or request approval for internal
+  initiatives over time
+- keep external action execution out of scope until Phase 14
 
 
 PHASES STILL NEEDED BEYOND THE CURRENT DEFINED ROADMAP
@@ -214,10 +219,10 @@ Likely later phases beyond Phase 11:
 NEAREST EXECUTION TARGET
 ------------------------
 
-The immediate next execution target is next-phase planning.
+The immediate next execution target is Phase 13 planning and implementation.
 
-The plan should define an interruptible idle runtime lifecycle before any
-always-on loop is implemented.
+Phase 13 should add durable Nova-originated draft initiatives without adding
+autonomous action execution.
 
 
 OPERATING PRINCIPLE FOR THIS RESEARCH ARC
