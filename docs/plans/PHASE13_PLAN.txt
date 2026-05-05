@@ -153,11 +153,11 @@ Expose autonomous draft initiative state to the operator and evaluate the
 approval, provenance, and priority boundaries.
 
 Stage 13.4 deliverables:
-- [ ] console/runtime inspection for Nova-originated draft initiatives
-- [ ] rationale, evidence, next-step, and stop-condition visibility
-- [ ] evaluation runner for durable autonomous initiatives
-- [ ] tests for prompt and diagnostic boundedness
-- [ ] live or persisted-evidence evaluation report
+- [x] console/runtime inspection for Nova-originated draft initiatives
+- [x] rationale, evidence, next-step, and stop-condition visibility
+- [x] evaluation runner for durable autonomous initiatives
+- [x] tests for prompt and diagnostic boundedness
+- [x] live or persisted-evidence evaluation report
 
 Stage 13.4 restrictions:
 - no closure based on self-language alone

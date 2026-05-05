@@ -408,6 +408,17 @@ class NovaRuntime:
         )
         return decision
 
+    def autonomous_draft_initiatives(self, *, limit: int | None = None) -> list[InitiativeRecord]:
+        initiative_state = self.initiative_status()
+        records = [
+            record
+            for record in initiative_state.initiatives
+            if record.origin_type == "nova" and record.autonomous
+        ]
+        if limit is not None and limit > 0:
+            return records[-limit:]
+        return records
+
     def finalize_validation(
         self,
         *,

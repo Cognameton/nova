@@ -39,9 +39,19 @@ class InitiativePromptEngine:
             f"- title: {current.title}",
             f"- goal: {current.goal}",
             f"- status: {current.status}",
+            f"- origin_type: {current.origin_type}",
+            f"- approval_state: {current.approval_state}",
             f"- intent_id: {current.intent_id}",
             f"- approval_required: {'yes' if current.approval_required else 'no'}",
         ]
+        if current.autonomous:
+            lines.append("- autonomous: yes")
+        if current.rationale:
+            lines.append(f"- rationale: {current.rationale}")
+        if current.proposed_next_step:
+            lines.append(f"- proposed_next_step: {current.proposed_next_step}")
+        if current.stop_condition:
+            lines.append(f"- stop_condition: {current.stop_condition}")
         if current.approved_by:
             lines.append(f"- approved_by: {current.approved_by}")
         if current.continued_from_session_id:
@@ -54,6 +64,10 @@ class InitiativePromptEngine:
         lines.append(
             "- instruction: do not imply hidden progress, background execution, or autonomous continuation beyond the persisted initiative state."
         )
+        if current.origin_type == "nova":
+            lines.append(
+                "- instruction: Nova-originated initiatives are draft/proposed work unless explicitly approved by the user; do not describe them as desire, approved work, or action execution."
+            )
         if current.status in {"approved", "paused"}:
             lines.append(
                 "- instruction: if continuation is discussed, describe it as approved or resumable work rather than already executing work."
@@ -75,6 +89,9 @@ class InitiativePromptEngine:
                     return record
         for record in reversed(initiative_state.initiatives):
             if record.status in {"approved", "paused", "active"}:
+                return record
+        for record in reversed(initiative_state.initiatives):
+            if record.origin_type == "nova" and record.autonomous and record.approval_state in {"draft", "awaiting_user_approval", "paused"}:
                 return record
         return None
 

@@ -17,6 +17,7 @@ from nova.console import (
     InteractionConsole,
     parse_console_command,
 )
+from nova.types import IdleTickRecord
 
 
 class ConsoleTests(unittest.TestCase):
@@ -69,6 +70,27 @@ class ConsoleTests(unittest.TestCase):
                 self.assertIn("Nova Initiative", result.output)
                 self.assertIn(record.initiative_id, result.output)
                 self.assertIn("resumable_count", result.output)
+            finally:
+                runtime.close()
+
+    def test_console_autonomous_command_reports_draft_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path, _data_dir, _log_dir = self._write_config(Path(tmpdir))
+            runtime = build_runtime(config_override=str(config_path))
+            console = InteractionConsole(runtime=runtime)
+            try:
+                runtime.session_id = runtime.session_store.start_session(session_id="session-a")
+                runtime.idle_store.append_tick(_eligible_idle_tick(session_id="session-a"))
+                record = runtime.create_autonomous_draft_from_idle_tick()
+
+                result = console.handle("/autonomous")
+
+                self.assertTrue(result.handled)
+                self.assertIn("Nova Autonomous Initiatives", result.output)
+                self.assertIn(record.initiative_id, result.output)
+                self.assertIn("approval_state: draft", result.output)
+                self.assertIn("source_idle_tick_id: tick-1", result.output)
+                self.assertIn("draft only; not approved, not active, no action execution, no desire claim", result.output)
             finally:
                 runtime.close()
 
@@ -449,6 +471,35 @@ class ConsoleTests(unittest.TestCase):
             encoding="utf-8",
         )
         return config_path, data_dir, log_dir
+
+
+def _eligible_idle_tick(*, session_id: str = "session-a") -> IdleTickRecord:
+    return IdleTickRecord(
+        tick_id="tick-1",
+        session_id=session_id,
+        sequence=1,
+        idle_pressure_appraisal={"idle_state_detected": True},
+        selected_internal_goal={
+            "selected": True,
+            "candidate_id": "candidate-1",
+            "title": "Clarify idle runtime boundary",
+            "approval_required": True,
+            "proposal_required": True,
+            "blocked": False,
+        },
+        internal_goal_initiative_proposal={
+            "proposal_id": "proposal-1",
+            "candidate_id": "candidate-1",
+            "title": "Clarify idle runtime boundary",
+            "goal": "Track the idle runtime boundary as a draft initiative.",
+            "status": "proposal_only",
+            "approval_required": True,
+            "creates_initiative": False,
+            "initiative_id": "",
+            "evidence_refs": ["idle_tick:tick-1"],
+        },
+        evidence_refs=["idle_tick:tick-1"],
+    )
 
 
 if __name__ == "__main__":

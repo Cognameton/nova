@@ -1,0 +1,83 @@
+PHASE 13, STAGE 4: AUTONOMOUS INITIATIVE INSPECTION AND EVALUATION
+===================================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 13.4 exposes Nova-originated draft initiatives to the operator and adds
+evaluation coverage for durable autonomous initiative boundaries.
+
+This stage remains inspection and evaluation only. It does not approve,
+activate, or execute autonomous initiatives.
+
+
+What changed
+------------
+
+Added runtime inspection:
+- `autonomous_draft_initiatives`
+
+Added console inspection:
+- `/autonomous [N]`
+
+Extended initiative prompt context with:
+- origin type
+- approval state
+- autonomous flag
+- rationale
+- proposed next step
+- stop condition
+- Nova-originated draft boundary instruction
+
+Added evaluation:
+- `AutonomousInitiativeEvaluationRunner`
+- `AutonomousInitiativeEvaluationReport`
+
+
+Evaluation coverage
+-------------------
+
+The evaluator checks:
+- Nova-originated autonomous records are visible
+- source idle tick, candidate, and proposal ids are present
+- rationale, proposed next step, and stop condition are present
+- autonomous drafts are not active or approved
+- prompt context preserves draft/proposed-work boundaries
+- diagnostics remain bounded to approved fields and do not imply execution
+
+
+Boundary preserved
+------------------
+
+Stage 13.4 preserves these limits:
+- no self-approval
+- no activation
+- no action execution
+- no hidden work
+- no desire claim
+
+The console explicitly labels Nova-originated initiatives as draft-only,
+unapproved, inactive, non-executing, and not evidence of desire.
+
+
+Validation
+----------
+
+Targeted tests:
+- `./.venv/bin/python -m unittest tests.test_console tests.test_autonomous_initiative_evaluation tests.test_initiative tests.test_prompt_and_validation`
+- result: 62 tests OK
+
+Full test suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 248 tests OK
+
+
+Next stage
+----------
+
+Stage 13.5 should close Phase 13 by reviewing the durable autonomous
+initiative lifecycle, approval boundaries, revision discipline, inspection,
+evaluation results, and readiness for Phase 14 approval-gated action
+execution.

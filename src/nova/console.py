@@ -75,6 +75,8 @@ class InteractionConsole:
             return ConsoleResult(handled=True, output=self._presence())
         if command.name == "initiative":
             return ConsoleResult(handled=True, output=self._initiative())
+        if command.name == "autonomous":
+            return ConsoleResult(handled=True, output=self._autonomous(command.argument))
         if command.name == "idle":
             return ConsoleResult(handled=True, output=self._idle(command.argument))
         if command.name == "orientation":
@@ -112,6 +114,7 @@ class InteractionConsole:
                 "/status - show presence, readiness, and action history summary",
                 "/presence - show session-scoped presence state",
                 "/initiative - show current initiative state and resumable initiative summary",
+                "/autonomous [N] - show Nova-originated draft initiative diagnostics",
                 "/idle [status|start N|tick|pause|resume|interrupt|stop|recent N] - inspect or control idle runtime",
                 "/orientation - show current self-orientation snapshot",
                 "/ready - show orientation readiness",
@@ -180,6 +183,34 @@ class InteractionConsole:
             current = initiative_state.initiatives[-1]
             lines.append(f"current_initiative: {current.to_dict()}")
         lines.append(f"resumable_count: {len(resumable)}")
+        return "\n".join(lines)
+
+    def _autonomous(self, argument: str) -> str:
+        limit = _parse_positive_int(argument, default=5)
+        records = self.runtime.autonomous_draft_initiatives(limit=limit)
+        lines = [
+            "Nova Autonomous Initiatives",
+            f"count: {len(records)}",
+        ]
+        for record in records:
+            lines.extend(
+                [
+                    f"- initiative_id: {record.initiative_id}",
+                    f"  title: {record.title}",
+                    f"  status: {record.status}",
+                    f"  origin_type: {record.origin_type}",
+                    f"  approval_state: {record.approval_state}",
+                    f"  autonomous: {record.autonomous}",
+                    f"  rationale: {record.rationale}",
+                    f"  proposed_next_step: {record.proposed_next_step}",
+                    f"  stop_condition: {record.stop_condition}",
+                    f"  source_idle_tick_id: {record.source_idle_tick_id}",
+                    f"  source_candidate_id: {record.source_candidate_id}",
+                    f"  source_proposal_id: {record.source_proposal_id}",
+                    f"  evidence_refs: {record.evidence_refs}",
+                    "  boundary: draft only; not approved, not active, no action execution, no desire claim",
+                ]
+            )
         return "\n".join(lines)
 
     def _idle(self, argument: str) -> str:
