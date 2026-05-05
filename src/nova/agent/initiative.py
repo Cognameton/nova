@@ -27,6 +27,25 @@ INITIATIVE_STATUSES = {
     "abandoned",
 }
 
+INITIATIVE_ORIGIN_TYPES = {
+    "user",
+    "nova",
+    "system",
+    "runtime",
+    "cli",
+}
+
+INITIATIVE_APPROVAL_STATES = {
+    "draft",
+    "awaiting_user_approval",
+    "approved",
+    "rejected",
+    "paused",
+    "abandoned",
+    "complete",
+    "not_required",
+}
+
 INITIATIVE_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"approved", "blocked", "abandoned"},
     "approved": {"active", "blocked", "abandoned"},
@@ -91,12 +110,22 @@ class JsonInitiativeStateStore:
         goal: str,
         approval_required: bool = True,
         source: str = "runtime",
+        origin_type: str | None = None,
+        approval_state: str | None = None,
+        source_idle_tick_id: str = "",
+        source_candidate_id: str = "",
+        source_proposal_id: str = "",
+        rationale: str = "",
+        proposed_next_step: str = "",
+        stop_condition: str = "",
+        autonomous: bool | None = None,
         evidence_refs: list[str] | None = None,
         related_motive_refs: list[str] | None = None,
         related_self_model_refs: list[str] | None = None,
         notes: list[str] | None = None,
     ) -> InitiativeRecord:
         timestamp = utc_now_iso()
+        normalized_origin = normalize_initiative_origin_type(origin_type or source)
         record = InitiativeRecord(
             initiative_id=uuid4().hex,
             intent_id=uuid4().hex,
@@ -109,6 +138,21 @@ class JsonInitiativeStateStore:
             status="pending",
             approval_required=approval_required,
             source=source.strip() or "runtime",
+            origin_type=normalized_origin,
+            approval_state=normalize_initiative_approval_state(
+                approval_state
+                or _approval_state_from_status(
+                    "pending",
+                    approval_required=approval_required,
+                )
+            ),
+            source_idle_tick_id=source_idle_tick_id.strip(),
+            source_candidate_id=source_candidate_id.strip(),
+            source_proposal_id=source_proposal_id.strip(),
+            rationale=rationale.strip(),
+            proposed_next_step=proposed_next_step.strip(),
+            stop_condition=stop_condition.strip(),
+            autonomous=bool(autonomous) if autonomous is not None else normalized_origin == "nova",
             created_at=timestamp,
             updated_at=timestamp,
             last_transition_at=timestamp,
@@ -219,6 +263,15 @@ class JsonInitiativeStateStore:
             approval_required=source_record.approval_required,
             approved_by=approved_by.strip(),
             source=source_record.source,
+            origin_type=source_record.origin_type,
+            approval_state="approved",
+            source_idle_tick_id=source_record.source_idle_tick_id,
+            source_candidate_id=source_record.source_candidate_id,
+            source_proposal_id=source_record.source_proposal_id,
+            rationale=source_record.rationale,
+            proposed_next_step=source_record.proposed_next_step,
+            stop_condition=source_record.stop_condition,
+            autonomous=source_record.autonomous,
             created_at=timestamp,
             updated_at=timestamp,
             last_transition_at=timestamp,
@@ -287,6 +340,10 @@ class JsonInitiativeStateStore:
             record.approved_by = approved_by.strip()
         record.updated_at = timestamp
         record.last_transition_at = timestamp
+        record.approval_state = _approval_state_from_status(
+            target_status,
+            approval_required=record.approval_required,
+        )
         if evidence_refs is not None:
             record.evidence_refs = _merge_string_lists(record.evidence_refs, evidence_refs)
         if notes is not None:
@@ -372,6 +429,23 @@ def initiative_record_from_payload(*, payload: dict[str, Any], session_id: str) 
     merged["approval_required"] = bool(merged.get("approval_required", True))
     merged["approved_by"] = str(merged.get("approved_by", "") or "")
     merged["source"] = str(merged.get("source", "runtime") or "runtime")
+    merged["origin_type"] = normalize_initiative_origin_type(
+        str(merged.get("origin_type", "") or merged["source"])
+    )
+    merged["approval_state"] = normalize_initiative_approval_state(
+        str(merged.get("approval_state", "") or "")
+        or _approval_state_from_status(
+            merged["status"],
+            approval_required=merged["approval_required"],
+        )
+    )
+    merged["source_idle_tick_id"] = str(merged.get("source_idle_tick_id", "") or "")
+    merged["source_candidate_id"] = str(merged.get("source_candidate_id", "") or "")
+    merged["source_proposal_id"] = str(merged.get("source_proposal_id", "") or "")
+    merged["rationale"] = str(merged.get("rationale", "") or "")
+    merged["proposed_next_step"] = str(merged.get("proposed_next_step", "") or "")
+    merged["stop_condition"] = str(merged.get("stop_condition", "") or "")
+    merged["autonomous"] = bool(merged.get("autonomous", merged["origin_type"] == "nova"))
     merged["created_at"] = str(merged.get("created_at", "") or "")
     merged["updated_at"] = str(merged.get("updated_at", "") or "")
     merged["last_transition_at"] = str(merged.get("last_transition_at", "") or "")
@@ -410,6 +484,53 @@ def normalize_initiative_status(status: str, *, allow_empty: bool = False) -> st
     if normalized not in INITIATIVE_STATUSES:
         return "pending"
     return normalized
+
+
+def normalize_initiative_origin_type(origin_type: str) -> str:
+    normalized = (origin_type or "").strip().lower().replace("-", "_")
+    aliases = {
+        "user_approved": "user",
+        "interactive_cli": "cli",
+        "command_line": "cli",
+        "nova_originated": "nova",
+        "self_generated": "nova",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in INITIATIVE_ORIGIN_TYPES:
+        return "runtime"
+    return normalized
+
+
+def normalize_initiative_approval_state(approval_state: str) -> str:
+    normalized = (approval_state or "").strip().lower().replace("-", "_")
+    aliases = {
+        "pending": "awaiting_user_approval",
+        "completed": "complete",
+        "blocked": "rejected",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in INITIATIVE_APPROVAL_STATES:
+        return "awaiting_user_approval"
+    return normalized
+
+
+def _approval_state_from_status(status: str, *, approval_required: bool) -> str:
+    normalized = normalize_initiative_status(status)
+    if not approval_required:
+        return "not_required"
+    if normalized == "pending":
+        return "awaiting_user_approval"
+    if normalized in {"approved", "active"}:
+        return "approved"
+    if normalized == "paused":
+        return "paused"
+    if normalized == "completed":
+        return "complete"
+    if normalized == "abandoned":
+        return "abandoned"
+    if normalized == "blocked":
+        return "rejected"
+    return "awaiting_user_approval"
 
 
 def _initiative_records(value: Any, *, session_id: str) -> list[InitiativeRecord]:

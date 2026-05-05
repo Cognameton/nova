@@ -90,6 +90,15 @@ class InitiativeRecord:
     approval_required: bool = True
     approved_by: str = ""
     source: str = "runtime"
+    origin_type: str = "runtime"
+    approval_state: str = "awaiting_user_approval"
+    source_idle_tick_id: str = ""
+    source_candidate_id: str = ""
+    source_proposal_id: str = ""
+    rationale: str = ""
+    proposed_next_step: str = ""
+    stop_condition: str = ""
+    autonomous: bool = False
     created_at: str = ""
     updated_at: str = ""
     last_transition_at: str = ""

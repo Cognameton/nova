@@ -14,11 +14,21 @@ import yaml
 from nova.agent.initiative import (
     InitiativeTransitionError,
     JsonInitiativeStateStore,
+    normalize_initiative_approval_state,
+    normalize_initiative_origin_type,
 )
 from nova.cli import build_runtime, main
 
 
 class InitiativeTests(unittest.TestCase):
+    def test_autonomous_initiative_schema_normalizes_origin_and_approval_state(self) -> None:
+        self.assertEqual(normalize_initiative_origin_type("self-generated"), "nova")
+        self.assertEqual(normalize_initiative_origin_type("interactive-cli"), "cli")
+        self.assertEqual(normalize_initiative_origin_type("unknown"), "runtime")
+        self.assertEqual(normalize_initiative_approval_state("pending"), "awaiting_user_approval")
+        self.assertEqual(normalize_initiative_approval_state("completed"), "complete")
+        self.assertEqual(normalize_initiative_approval_state("unknown"), "awaiting_user_approval")
+
     def test_initiative_store_creates_and_round_trips_session_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
@@ -60,6 +70,9 @@ class InitiativeTests(unittest.TestCase):
             self.assertEqual(loaded.active_initiative_id, record.initiative_id)
             loaded_record = loaded.initiatives[0]
             self.assertEqual(loaded_record.status, "active")
+            self.assertEqual(loaded_record.origin_type, "user")
+            self.assertEqual(loaded_record.approval_state, "approved")
+            self.assertFalse(loaded_record.autonomous)
             self.assertEqual(loaded_record.related_motive_refs, ["motive:priority:planning"])
             self.assertEqual(len(loaded_record.transitions), 3)
             self.assertTrue(store.get_initiative_path(session_id="session-a").exists())
@@ -84,6 +97,15 @@ class InitiativeTests(unittest.TestCase):
                                 "status": "unsupported",
                                 "approval_required": "truthy",
                                 "approved_by": 7,
+                                "origin_type": "self-generated",
+                                "approval_state": "completed",
+                                "source_idle_tick_id": 11,
+                                "source_candidate_id": 12,
+                                "source_proposal_id": 13,
+                                "rationale": 14,
+                                "proposed_next_step": 15,
+                                "stop_condition": 16,
+                                "autonomous": True,
                                 "evidence_refs": "invalid",
                                 "related_motive_refs": [5],
                                 "related_self_model_refs": "invalid",
@@ -116,6 +138,15 @@ class InitiativeTests(unittest.TestCase):
             self.assertEqual(record.title, "1")
             self.assertEqual(record.goal, "True")
             self.assertEqual(record.status, "pending")
+            self.assertEqual(record.origin_type, "nova")
+            self.assertEqual(record.approval_state, "complete")
+            self.assertEqual(record.source_idle_tick_id, "11")
+            self.assertEqual(record.source_candidate_id, "12")
+            self.assertEqual(record.source_proposal_id, "13")
+            self.assertEqual(record.rationale, "14")
+            self.assertEqual(record.proposed_next_step, "15")
+            self.assertEqual(record.stop_condition, "16")
+            self.assertTrue(record.autonomous)
             self.assertEqual(record.related_motive_refs, ["5"])
             self.assertEqual(record.related_self_model_refs, [])
             self.assertEqual(record.transitions[0].from_status, "pending")
@@ -151,6 +182,43 @@ class InitiativeTests(unittest.TestCase):
                     to_status="approved",
                     reason="approval missing",
                 )
+
+    def test_store_creates_nova_originated_draft_schema_without_approval_or_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonInitiativeStateStore(Path(tmpdir) / "initiative")
+            initiative_state = store.load(session_id="session-a")
+
+            record = store.create_record(
+                initiative_state=initiative_state,
+                title="Clarify idle runtime boundary",
+                goal="Persist a draft initiative candidate without approving it.",
+                source="runtime",
+                origin_type="nova",
+                approval_state="draft",
+                source_idle_tick_id="tick-1",
+                source_candidate_id="candidate-1",
+                source_proposal_id="proposal-1",
+                rationale="Idle evidence selected a bounded clarification goal.",
+                proposed_next_step="Ask the user whether to approve durable initiative tracking.",
+                stop_condition="Stop if the user rejects or a higher-priority task appears.",
+                autonomous=True,
+                evidence_refs=["idle_tick:tick-1"],
+            )
+            store.save(initiative_state)
+
+            loaded = store.load(session_id="session-a")
+            loaded_record = loaded.initiatives[0]
+            self.assertEqual(record.status, "pending")
+            self.assertEqual(loaded_record.origin_type, "nova")
+            self.assertEqual(loaded_record.approval_state, "draft")
+            self.assertTrue(loaded_record.autonomous)
+            self.assertEqual(loaded_record.source_idle_tick_id, "tick-1")
+            self.assertEqual(loaded_record.source_candidate_id, "candidate-1")
+            self.assertEqual(loaded_record.source_proposal_id, "proposal-1")
+            self.assertIn("Idle evidence", loaded_record.rationale)
+            self.assertIn("approve", loaded_record.proposed_next_step)
+            self.assertIn("rejects", loaded_record.stop_condition)
+            self.assertEqual(loaded.active_initiative_id, None)
 
     def test_initiative_store_can_continue_approved_work_across_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

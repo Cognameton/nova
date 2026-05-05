@@ -1,0 +1,194 @@
+PHASE 13 PLAN
+=============
+
+Status: in progress
+
+Phase 13 begins after Phase 12 established recorded idle cognition, bounded
+idle ticks, operator controls, diagnostics, prompt visibility, and
+persisted-evidence evaluation.
+
+Phase 13 is not autonomous action execution.
+Phase 13 is not self-approval.
+Phase 13 is not desire validation.
+Phase 13 is not a bypass around the existing initiative lifecycle.
+
+Phase 13 is the disciplined transition from proposal-only internal goals into
+durable Nova-originated draft initiatives under governance.
+
+
+PHASE 13 MISSION
+----------------
+
+Let eligible self-generated internal-goal proposals become durable draft
+initiative records with clear origin, evidence, approval state, revision
+discipline, priority boundaries, and operator inspection.
+
+Phase 13 should let Nova:
+- distinguish user-originated, system-originated, runtime-originated, and
+  Nova-originated initiatives
+- persist eligible Nova-originated proposals as draft initiatives
+- request approval without granting it to herself
+- revise, pause, reject, abandon, or complete autonomous draft initiatives
+  under lifecycle rules
+- preserve priority of active user work over self-generated work
+- expose rationale, evidence, proposed next step, and stop condition
+
+
+PHASE 13 OBJECTIVES
+-------------------
+
+1. Add origin and approval-state contracts for durable autonomous initiatives.
+2. Add a gated materialization path from selected internal-goal proposals to
+   Nova-originated draft initiatives.
+3. Add revision rules for changed motive, awareness, memory, capability,
+   interruption, or user-priority evidence.
+4. Add user-facing inspection of autonomous initiative rationale, evidence,
+   next step, and stop condition.
+5. Add priority arbitration so Nova-originated work cannot override active
+   user tasks or approved user-originated initiatives.
+6. Evaluate that self-generated initiatives persist without action execution,
+   self-approval, or desire claims.
+
+
+PHASE 13 BOUNDARIES
+-------------------
+
+In scope:
+- initiative origin taxonomy
+- autonomous approval-state taxonomy
+- durable draft initiative records from eligible proposals
+- provenance from idle tick, selected internal goal, and proposal evidence
+- revision and abandonment rules
+- user-facing diagnostics
+- tests for approval boundaries and priority discipline
+
+Out of scope:
+- autonomous tool, shell, network, filesystem, or GUI execution
+- automatic approval of Nova-originated initiatives
+- action plans
+- hidden background work
+- claiming initiative persistence proves desire
+- TTS/STT or voice interaction
+
+
+PHASE 13 STAGES
+---------------
+
+Stage 13.1: Autonomous Initiative Origin and Approval Schema
+Stage 13.2: Draft Initiative Materialization from Idle Proposals
+Stage 13.3: Revision, Priority, and Interruption Discipline
+Stage 13.4: Autonomous Initiative Inspection and Evaluation
+Stage 13.5: Phase 13 Closure
+
+
+STAGE 13.1: AUTONOMOUS INITIATIVE ORIGIN AND APPROVAL SCHEMA
+------------------------------------------------------------
+
+Mission:
+Extend initiative records so durable autonomous initiatives can carry explicit
+origin, approval state, source goal/proposal evidence, rationale, proposed next
+step, and stop condition.
+
+Stage 13.1 deliverables:
+- [x] initiative origin taxonomy
+- [x] autonomous approval-state taxonomy
+- [x] initiative record fields for autonomous provenance and rationale
+- [x] compatibility loading for older initiative records
+- [x] tests for schema round-trip and normalization
+
+Stage 13.1 restrictions:
+- no Nova-originated record creation yet
+- no automatic approval
+- no autonomous action
+- no desire claims
+
+
+STAGE 13.2: DRAFT INITIATIVE MATERIALIZATION FROM IDLE PROPOSALS
+----------------------------------------------------------------
+
+Mission:
+Create durable draft initiatives from eligible selected internal-goal
+proposals without approving, activating, or executing them.
+
+Stage 13.2 deliverables:
+- [ ] proposal eligibility checks
+- [ ] draft initiative materialization engine
+- [ ] runtime method for creating Nova-originated draft initiatives
+- [ ] tests proving proposal-only Phase 12 ticks become draft records only
+- [ ] tests proving ineligible, blocked, or already-created proposals are
+  rejected
+
+Stage 13.2 restrictions:
+- no approved initiative creation
+- no active initiative creation
+- no external action execution
+- no self-approval
+
+
+STAGE 13.3: REVISION, PRIORITY, AND INTERRUPTION DISCIPLINE
+-----------------------------------------------------------
+
+Mission:
+Let durable autonomous draft initiatives revise or stand down when evidence
+changes, the user interrupts, or higher-priority work exists.
+
+Stage 13.3 deliverables:
+- [ ] revision decision schema
+- [ ] priority arbitration rules
+- [ ] interruption handling for Nova-originated draft initiatives
+- [ ] abandonment/rejection path for stale or superseded draft initiatives
+- [ ] tests proving user work and approved initiatives take priority
+
+Stage 13.3 restrictions:
+- no autonomous execution
+- no automatic reactivation after interruption
+- no priority inversion over user-originated work
+
+
+STAGE 13.4: AUTONOMOUS INITIATIVE INSPECTION AND EVALUATION
+-----------------------------------------------------------
+
+Mission:
+Expose autonomous draft initiative state to the operator and evaluate the
+approval, provenance, and priority boundaries.
+
+Stage 13.4 deliverables:
+- [ ] console/runtime inspection for Nova-originated draft initiatives
+- [ ] rationale, evidence, next-step, and stop-condition visibility
+- [ ] evaluation runner for durable autonomous initiatives
+- [ ] tests for prompt and diagnostic boundedness
+- [ ] live or persisted-evidence evaluation report
+
+Stage 13.4 restrictions:
+- no closure based on self-language alone
+- no hidden action
+- no desire claim from persistent initiative state
+
+
+STAGE 13.5: PHASE 13 CLOSURE
+----------------------------
+
+Mission:
+Close Phase 13 only when Nova can persist, inspect, revise, and govern
+self-generated draft initiatives without approval bypass or action execution.
+
+Stage 13.5 deliverables:
+- [ ] autonomous initiative architecture documented and validated
+- [ ] automated tests passing
+- [ ] evaluation report
+- [ ] closure summary documenting gains, limits, and risks
+- [ ] Phase 14 readiness criteria reviewed
+
+
+PHASE 13 DEFINITION OF DONE
+---------------------------
+
+Phase 13 is complete when:
+- Nova-originated durable draft initiatives can be created from eligible
+  recorded internal-goal evidence
+- all autonomous initiatives carry origin, approval state, rationale,
+  evidence, proposed next step, and stop condition
+- self-generated initiatives cannot approve or activate themselves
+- user work and approved initiatives retain priority
+- autonomous initiative state is inspectable and revisable
+- no action execution or desire claim is introduced
