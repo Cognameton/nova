@@ -133,10 +133,10 @@ Generate candidate internal goals from motive-state, awareness-state,
 initiative-state, memory, capability appraisal, and unresolved uncertainty.
 
 Stage 11.2 deliverables:
-- [ ] candidate-goal schema
-- [ ] synthesis engine for pressure-response goal candidates
-- [ ] candidate provenance and evidence references
-- [ ] tests for grounded candidate generation and rejection of uncaused goals
+- [x] candidate-goal schema
+- [x] synthesis engine for pressure-response goal candidates
+- [x] candidate provenance and evidence references
+- [x] tests for grounded candidate generation and rejection of uncaused goals
 
 Stage 11.2 restrictions:
 - no direct initiative creation
@@ -152,10 +152,10 @@ Evaluate candidate goals, select bounded goals when justified, and route them
 into the existing initiative system without bypassing approval boundaries.
 
 Stage 11.3 deliverables:
-- [ ] goal-selection rules and ranking criteria
-- [ ] initiative-proposal path for selected internal goals
-- [ ] explicit approval and interruption handling
-- [ ] tests proving selected goals do not bypass Phase 9 initiative discipline
+- [x] goal-selection rules and ranking criteria
+- [x] initiative-proposal path for selected internal goals
+- [x] explicit approval and interruption handling
+- [x] tests proving selected goals do not bypass Phase 9 initiative discipline
 
 Stage 11.3 restrictions:
 - no hidden execution

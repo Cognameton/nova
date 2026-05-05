@@ -1,0 +1,86 @@
+PHASE 11, STAGE 2: CANDIDATE INTERNAL GOAL SYNTHESIS CLOSURE
+=============================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 11.2 adds evidence-backed candidate internal-goal synthesis on top of
+Stage 11.1 appraisal.
+
+This stage generates provisional candidate records only.
+This stage does not select goals.
+This stage does not create initiatives.
+This stage does not claim desires.
+This stage does not enact work.
+
+
+What changed
+------------
+
+Added `CandidateInternalGoal`:
+- provisional candidate record
+- pressure trigger
+- capability requirements
+- blocked capability visibility
+- approval and selection eligibility flags
+- rejection reason
+- source state references
+- evidence references
+
+Added `CandidateInternalGoalEngine`:
+- synthesizes candidates from capability, idle-pressure, awareness, motive,
+  initiative, self-state, private cognition, claim-gating, and memory evidence
+- rejects empty-pressure candidate generation
+- marks blocked-capability candidates ineligible
+- requires a competence benefit for bounded skill-learning candidates
+
+Added `CandidateGoalPromptEngine`:
+- renders `[Candidate Internal Goals]`
+- states that candidates are provisional
+- states that candidates are not selected goals, desires, or enacted work
+- states that selection and initiative proposal happen in later stages
+
+Added runtime integration:
+- candidate goals are built after Stage 11.1 appraisal
+- candidate goals are included in turn notes
+- candidate goals are included in traces
+- candidate-goal prompt block is included when candidates exist
+- initiative state is not mutated
+
+
+Candidate classes
+-----------------
+
+Implemented initial candidate classes:
+- `capability_clarification`
+- `uncertainty_resolution`
+- `initiative_resumption_candidate`
+- `bounded_skill_learning`
+
+
+Validation
+----------
+
+Focused verification:
+- `./.venv/bin/python -m unittest tests.test_candidate_goals tests.test_stage11_appraisal tests.test_runtime_smoke`
+- result: 15 tests OK
+
+Compile check:
+- `./.venv/bin/python -m py_compile src/nova/agent/appraisal.py src/nova/runtime.py src/nova/types.py src/nova/prompt/composer.py tests/test_candidate_goals.py`
+- result: OK
+
+
+Closure judgment
+----------------
+
+Stage 11.2 is complete.
+
+Nova can now synthesize provisional candidate internal goals from explicit
+runtime pressure and appraisal evidence while preserving the hard boundary
+that candidates are not selected, not desires, not initiatives, and not
+enacted work.
+
+The correct next step is Stage 11.3: bounded goal selection and initiative
+proposal.

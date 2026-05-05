@@ -1,0 +1,98 @@
+PHASE 11, STAGE 3: BOUNDED GOAL SELECTION AND INITIATIVE PROPOSAL
+==================================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 11.3 adds bounded selection over provisional candidate internal goals
+and converts a selected goal into a proposal-only initiative proposal.
+
+This stage does not create `InitiativeRecord` entries.
+This stage does not approve initiatives.
+This stage does not execute tools or actions.
+This stage does not claim desire.
+
+
+What changed
+------------
+
+Added `SelectedInternalGoal`:
+- selected candidate id
+- selection reason
+- priority score
+- approval/proposal requirements
+- blocked/rejection state
+- evidence references
+
+Added `InternalGoalInitiativeProposal`:
+- proposal id
+- candidate id
+- title and goal text
+- proposal-only status
+- approval-required flag
+- `creates_initiative: false`
+- empty `initiative_id`
+
+Added engines:
+- `InternalGoalSelectionEngine`
+- `InternalGoalInitiativeProposalEngine`
+- `SelectedGoalPromptEngine`
+
+Added runtime integration:
+- selected internal goal is included in turn notes
+- proposal-only initiative proposal is included in turn notes
+- both are included in traces
+- selected-goal prompt block is rendered when selection succeeds
+- initiative state is not mutated
+
+
+Selection rules
+---------------
+
+Selection only considers candidates that are:
+- provisional
+- approval-required
+- selection-eligible
+- not rejected
+- not dependent on blocked capability surfaces
+
+Current ranking order:
+- `initiative_resumption_candidate`
+- `bounded_skill_learning`
+- `uncertainty_resolution`
+- `capability_clarification`
+
+
+Boundary
+--------
+
+The selected goal is a bounded evaluation output, not desire.
+
+The proposal is a proposal-only record, not an initiative. Initiative creation
+still belongs to the explicit Phase 9 initiative path and requires approval.
+
+
+Validation
+----------
+
+Focused verification:
+- `./.venv/bin/python -m unittest tests.test_internal_goal_selection tests.test_candidate_goals tests.test_runtime_smoke`
+- result: 16 tests OK
+
+Compile check:
+- `./.venv/bin/python -m py_compile src/nova/agent/appraisal.py src/nova/runtime.py src/nova/types.py src/nova/prompt/composer.py tests/test_internal_goal_selection.py`
+- result: OK
+
+
+Closure judgment
+----------------
+
+Stage 11.3 is complete.
+
+Nova can now select one bounded candidate internal goal and surface an
+initiative-style proposal without creating an initiative, approving work,
+executing actions, or claiming desire.
+
+The correct next step is Stage 11.4: live idle cognition evaluation.

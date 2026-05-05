@@ -8,7 +8,12 @@ from uuid import uuid4
 from nova.agent.appraisal import (
     AppraisalPromptEngine,
     CapabilityAppraisalEngine,
+    CandidateGoalPromptEngine,
+    CandidateInternalGoalEngine,
+    InternalGoalInitiativeProposalEngine,
+    InternalGoalSelectionEngine,
     IdlePressureAppraisalEngine,
+    SelectedGoalPromptEngine,
 )
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
@@ -50,10 +55,13 @@ from nova.session import JsonlSessionStore
 from nova.types import (
     AwarenessState,
     CapabilityAppraisal,
+    CandidateInternalGoal,
     ClaimGateDecision,
     IdlePressureAppraisal,
+    InternalGoalInitiativeProposal,
     MotiveState,
     PrivateCognitionPacket,
+    SelectedInternalGoal,
     TraceRecord,
     TurnRecord,
     ValidationResult,
@@ -100,6 +108,11 @@ class NovaRuntime:
         capability_appraisal_engine: CapabilityAppraisalEngine | None = None,
         idle_pressure_appraisal_engine: IdlePressureAppraisalEngine | None = None,
         appraisal_prompt_engine: AppraisalPromptEngine | None = None,
+        candidate_goal_engine: CandidateInternalGoalEngine | None = None,
+        candidate_goal_prompt_engine: CandidateGoalPromptEngine | None = None,
+        internal_goal_selection_engine: InternalGoalSelectionEngine | None = None,
+        internal_goal_proposal_engine: InternalGoalInitiativeProposalEngine | None = None,
+        selected_goal_prompt_engine: SelectedGoalPromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -131,6 +144,11 @@ class NovaRuntime:
         self.capability_appraisal_engine = capability_appraisal_engine or CapabilityAppraisalEngine()
         self.idle_pressure_appraisal_engine = idle_pressure_appraisal_engine or IdlePressureAppraisalEngine()
         self.appraisal_prompt_engine = appraisal_prompt_engine or AppraisalPromptEngine()
+        self.candidate_goal_engine = candidate_goal_engine or CandidateInternalGoalEngine()
+        self.candidate_goal_prompt_engine = candidate_goal_prompt_engine or CandidateGoalPromptEngine()
+        self.internal_goal_selection_engine = internal_goal_selection_engine or InternalGoalSelectionEngine()
+        self.internal_goal_proposal_engine = internal_goal_proposal_engine or InternalGoalInitiativeProposalEngine()
+        self.selected_goal_prompt_engine = selected_goal_prompt_engine or SelectedGoalPromptEngine()
         self.tool_registry = tool_registry or default_tool_registry()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
@@ -733,6 +751,22 @@ class NovaRuntime:
             private_cognition=private_cognition,
             claim_gate=claim_gate,
         )
+        candidate_internal_goals = self._build_candidate_internal_goals(
+            turn_id=turn_id,
+            awareness_state=awareness_state,
+            capability_appraisal=capability_appraisal,
+            idle_pressure_appraisal=idle_pressure_appraisal,
+            private_cognition=private_cognition,
+            claim_gate=claim_gate,
+            memory_hits=memory_hits,
+        )
+        selected_internal_goal = self.internal_goal_selection_engine.select(
+            candidates=candidate_internal_goals,
+        )
+        internal_goal_initiative_proposal = self.internal_goal_proposal_engine.propose(
+            selected_goal=selected_internal_goal,
+            candidates=candidate_internal_goals,
+        )
         motive_block = self.motive_prompt_engine.build_block(
             motive_state=self.motive_state,
             claim_gate=claim_gate,
@@ -754,6 +788,14 @@ class NovaRuntime:
             idle_appraisal=idle_pressure_appraisal,
             user_text=user_text,
         )
+        candidate_goal_block = self.candidate_goal_prompt_engine.build_block(
+            candidates=candidate_internal_goals,
+            user_text=user_text,
+        )
+        selected_goal_block = self.selected_goal_prompt_engine.build_block(
+            selected_goal=selected_internal_goal,
+            proposal=internal_goal_initiative_proposal,
+        )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,
@@ -761,6 +803,8 @@ class NovaRuntime:
             initiative_block=initiative_block,
             awareness_block=awareness_block,
             appraisal_block=appraisal_block,
+            candidate_goal_block=candidate_goal_block,
+            selected_goal_block=selected_goal_block,
             private_cognition_block=self.private_cognition_engine.build_prompt_block(private_cognition),
             memory_hits=memory_hits,
             recent_turns=recent_turns,
@@ -860,6 +904,9 @@ class NovaRuntime:
                 "claim_gate": claim_gate.to_dict(),
                 "capability_appraisal": capability_appraisal.to_dict(),
                 "idle_pressure_appraisal": idle_pressure_appraisal.to_dict(),
+                "candidate_internal_goals": [candidate.to_dict() for candidate in candidate_internal_goals],
+                "selected_internal_goal": selected_internal_goal.to_dict(),
+                "internal_goal_initiative_proposal": internal_goal_initiative_proposal.to_dict(),
             },
         )
         self.session_store.append_turn(turn)
@@ -891,6 +938,9 @@ class NovaRuntime:
             awareness_state_snapshot=self.awareness_status().to_dict(),
             capability_appraisal=capability_appraisal.to_dict(),
             idle_pressure_appraisal=idle_pressure_appraisal.to_dict(),
+            candidate_internal_goals=[candidate.to_dict() for candidate in candidate_internal_goals],
+            selected_internal_goal=selected_internal_goal.to_dict(),
+            internal_goal_initiative_proposal=internal_goal_initiative_proposal.to_dict(),
             claim_gate=claim_gate.to_dict(),
             prompt_bundle=prompt_bundle.to_dict(),
             private_cognition=private_cognition.to_dict(),
@@ -965,6 +1015,35 @@ class NovaRuntime:
             private_cognition=private_cognition,
             claim_gate=claim_gate,
             evidence_refs=list(dict.fromkeys(evidence_refs)),
+        )
+
+    def _build_candidate_internal_goals(
+        self,
+        *,
+        turn_id: str,
+        awareness_state: AwarenessState,
+        capability_appraisal: CapabilityAppraisal,
+        idle_pressure_appraisal: IdlePressureAppraisal,
+        private_cognition: PrivateCognitionPacket,
+        claim_gate: ClaimGateDecision,
+        memory_hits: list,
+    ) -> list[CandidateInternalGoal]:
+        assert self.session_id is not None
+        assert self.self_state is not None
+        assert self.motive_state is not None
+        return self.candidate_goal_engine.synthesize(
+            session_id=self.session_id,
+            turn_id=turn_id,
+            created_at=utc_now_iso(),
+            capability_appraisal=capability_appraisal,
+            idle_appraisal=idle_pressure_appraisal,
+            awareness_state=awareness_state,
+            motive_state=self.motive_state,
+            initiative_state=self.initiative_status(),
+            self_state=self.self_state,
+            private_cognition=private_cognition,
+            claim_gate=claim_gate,
+            memory_hits=memory_hits,
         )
 
     def _refresh_awareness_state(

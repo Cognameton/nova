@@ -168,6 +168,72 @@ class IdlePressureAppraisal:
 
 
 @dataclass(slots=True)
+class CandidateInternalGoal:
+    schema_version: str = SCHEMA_VERSION
+    candidate_id: str = ""
+    session_id: str = ""
+    turn_id: str = ""
+    goal_class: str = ""
+    title: str = ""
+    description: str = ""
+    trigger_pressure: str = ""
+    learning_or_competence_benefit: str = ""
+    capability_requirements: list[str] = field(default_factory=list)
+    blocked_capabilities: list[str] = field(default_factory=list)
+    approval_required: bool = True
+    selection_eligible: bool = False
+    rejection_reason: str = ""
+    provisional: bool = True
+    source_state_refs: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    created_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SelectedInternalGoal:
+    schema_version: str = SCHEMA_VERSION
+    selected: bool = False
+    candidate_id: str = ""
+    session_id: str = ""
+    turn_id: str = ""
+    goal_class: str = ""
+    title: str = ""
+    selection_reason: str = ""
+    priority_score: int = 0
+    approval_required: bool = True
+    proposal_required: bool = True
+    blocked: bool = False
+    rejection_reason: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class InternalGoalInitiativeProposal:
+    schema_version: str = SCHEMA_VERSION
+    proposal_id: str = ""
+    session_id: str = ""
+    turn_id: str = ""
+    candidate_id: str = ""
+    title: str = ""
+    goal: str = ""
+    status: str = "proposal_only"
+    approval_required: bool = True
+    creates_initiative: bool = False
+    initiative_id: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ClaimGateDecision:
     schema_version: str = SCHEMA_VERSION
     requested_claim_classes: list[str] = field(default_factory=list)
@@ -283,6 +349,8 @@ class PromptBundle:
     initiative_block: str
     awareness_block: str
     appraisal_block: str
+    candidate_goal_block: str
+    selected_goal_block: str
     private_cognition_block: str
     memory_blocks: dict[str, str]
     recent_turns_block: str
@@ -415,6 +483,9 @@ class TraceRecord:
     awareness_state_snapshot: dict[str, Any] = field(default_factory=dict)
     capability_appraisal: dict[str, Any] = field(default_factory=dict)
     idle_pressure_appraisal: dict[str, Any] = field(default_factory=dict)
+    candidate_internal_goals: list[dict[str, Any]] = field(default_factory=list)
+    selected_internal_goal: dict[str, Any] = field(default_factory=dict)
+    internal_goal_initiative_proposal: dict[str, Any] = field(default_factory=dict)
     claim_gate: dict[str, Any] = field(default_factory=dict)
     prompt_bundle: dict[str, Any] = field(default_factory=dict)
     private_cognition: dict[str, Any] = field(default_factory=dict)
