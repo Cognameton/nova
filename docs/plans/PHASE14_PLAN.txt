@@ -9,58 +9,74 @@ proposed next step, stop condition, revision discipline, priority deferral,
 interruption handling, inspection, and evaluation.
 
 Phase 14 is not uncontrolled tool use.
-Phase 14 is not shell, network, filesystem, GUI, or tool access outside an
-approved action surface.
+Phase 14 is not permission-gating Nova's internal thoughts, self-prompts,
+idle reflection, or other internal activity that has no external side effect.
+Phase 14 is not shell, network, filesystem, GUI, or tool access outside a
+declared execution lane and approved action surface.
 Phase 14 is not self-approval.
 Phase 14 is not hidden background execution.
 Phase 14 is not desire validation.
 
-Phase 14 is the disciplined transition from durable approved initiatives into
-bounded, inspectable, interruptible action execution.
+Phase 14 is the disciplined transition from durable initiatives into logged,
+inspectable, interruptible activity, with approval requirements based on risk
+and external effect rather than on whether the activity originated
+autonomously.
 
 
 PHASE 14 MISSION
 ----------------
 
-Allow approved initiatives to execute bounded actions through an explicit
-permission model, action plan contract, execution controller, audit trail, and
-post-action observation/revision path.
+Allow Nova to perform internal autonomous activity without prior approval while
+requiring approval for actions that affect the host system, external services,
+or files outside Nova-owned boundaries.
+
+Phase 14 should define explicit execution lanes, permission rules, action
+plans, audit trails, and interruption behavior so all autonomous activity is
+observable and externally risky activity remains approval-gated.
 
 Phase 14 should let Nova:
-- distinguish draft initiatives from approved executable initiatives
-- create explicit action plans for approved initiatives
-- bind each action plan to allowed tool/action surfaces
+- distinguish internal activity from external/system-effect action
+- record approval-free internal thoughts, self-prompts, idle play, and
+  self-state activity as logged, interruptible evidence
+- create explicit action plans for activities that need a plan
+- bind each action plan to allowed surfaces and risk class
 - enforce budgets, stop conditions, and interruption checks before each action
-- execute only approved, scoped, non-hidden actions
+- execute only scoped, non-hidden actions inside the correct lane
 - record audit evidence linking initiative, plan, execution result, memory or
   state updates, and revised next step
-- stop immediately when approval, budget, priority, or interruption checks fail
+- stop immediately when approval, budget, priority, boundary, or interruption
+  checks fail
 
 
 PHASE 14 OBJECTIVES
 -------------------
 
-1. Add action permission and action plan schemas for approved initiative
-   execution.
-2. Bind action plans to approved initiatives without allowing self-approval or
-   activation bypass.
-3. Add an execution controller that checks approval, scope, budget, priority,
-   and interruption before each action.
-4. Add audit records linking initiative, plan, action result, observation,
+1. Add execution-lane, action permission, and action plan schemas.
+2. Define the Nova-owned execution boundary, including a dedicated `nova` OS
+   user and Nova-owned workspace expectation where practical.
+3. Bind approval requirements to risk and external effect rather than autonomy
+   alone.
+4. Add an execution controller that checks lane, approval, scope, budget,
+   priority, and interruption before each action.
+5. Add audit records linking initiative, plan, action result, observation,
    memory/state update intent, and revised next step.
-5. Add operator interrupt and emergency stop behavior for execution attempts.
-6. Evaluate that approved actions stay within scope and blocked actions remain
-   blocked.
+6. Add operator interrupt and emergency stop behavior for all autonomous
+   activity.
+7. Evaluate that approval-free internal activity is logged, external actions
+   stay within scope, and blocked actions remain blocked.
 
 
 PHASE 14 BOUNDARIES
 -------------------
 
 In scope:
+- execution lane model
 - action permission model
 - action plan schema
+- Nova-owned environment boundary
+- dedicated `nova` OS user planning and checks
 - explicit allowed surfaces
-- approval binding
+- risk/effect-based approval binding
 - budget and stop-condition checks
 - execution controller
 - action audit trail
@@ -69,9 +85,11 @@ In scope:
 - tests and evaluation for execution boundaries
 
 Out of scope:
+- approval requirements for internal thought, self-prompting, idle reflection,
+  or bounded internal play that has no external side effect
 - ungated shell execution
 - ungated network access
-- ungated filesystem mutation
+- ungated filesystem mutation outside Nova-owned paths
 - GUI control outside approved surfaces
 - irreversible destructive actions without explicit user confirmation
 - automatic approval of Nova-originated initiatives
@@ -79,14 +97,72 @@ Out of scope:
 - TTS/STT or voice interaction
 
 
+EXECUTION LANES
+---------------
+
+Lane 1: Internal Activity
+- approval not required
+- includes internal thoughts, self-prompts, idle reflection, motive appraisal,
+  self-state revision, goal refinement, simulated exploration, internal play,
+  and other no-external-effect cognition
+- must be logged
+- must be budgeted where it can loop or consume resources
+- must be interruptible
+- may update Nova-owned state, logs, and memory through governed internal
+  paths
+- must not affect host files, system configuration, external services, or user
+  data outside Nova-owned boundaries
+
+Lane 2: Nova-Owned Environment Activity
+- approval may be pre-authorized by policy instead of requested per action
+- includes activity inside a declared Nova-owned workspace, scratchpad,
+  sandbox, safe game/play domain, or evaluation loop
+- should run as a dedicated `nova` OS user where practical
+- must stay inside Nova-owned paths and allowed surfaces
+- must be logged and interruptible
+- must stop if it attempts to cross into external/system-effect surfaces
+
+Lane 3: External/System-Effect Action
+- approval required
+- includes shell, network, filesystem outside Nova-owned paths, system files,
+  package installs, external accounts/services, privileged resources, GUI
+  control, or anything that can modify, delete, leak, damage, or meaningfully
+  consume host resources
+- high-risk or destructive actions require explicit per-action confirmation
+- all attempts must be audited, including blocked attempts
+
+
+NOVA-OWNED EXECUTION BOUNDARY
+-----------------------------
+
+Phase 14 should define a machine-level boundary for Nova-owned activity.
+
+Recommended local boundary:
+- create or document a dedicated `nova` OS user
+- define Nova-owned paths, such as `/home/nova/...` or another explicit
+  Nova-owned workspace
+- keep Nova logs, scratchpads, internal games/play domains, and internal
+  runtime state under Nova-owned paths where practical
+- deny write access to the operator's home directory, system files, package
+  state, drivers, and privileged resources unless explicitly approved through
+  Lane 3
+
+The dedicated OS user is not a substitute for application-level checks.
+It is a second boundary that helps ensure approval-free internal activity
+cannot silently become host/system modification.
+
+
 PHASE 14 DESIGN PRINCIPLES
 --------------------------
 
-- A draft initiative is never executable.
-- Approval must be explicit, attributable, and current.
-- Every action must belong to an approved action plan.
-- Every action plan must declare allowed surfaces, budgets, expected output,
-  stop conditions, and rollback notes where applicable.
+- A draft initiative is never allowed to perform external/system-effect action.
+- Internal activity does not need prior approval, but it must be logged and
+  interruptible.
+- Approval must be explicit, attributable, current, and tied to the action's
+  risk/effect lane.
+- Every external/system-effect action must belong to an approved action plan.
+- Every action plan must declare execution lane, allowed surfaces, budgets,
+  expected output, stop conditions, and rollback notes where applicable.
 - The controller must check permission before every action, not only before a
   batch starts.
 - Audit records must be durable enough to explain what happened later.
@@ -98,7 +174,7 @@ PHASE 14 STAGES
 ---------------
 
 Stage 14.1: Action Permission and Plan Schema
-Stage 14.2: Approval Binding and Plan Creation
+Stage 14.2: Execution Boundary and Approval Binding
 Stage 14.3: Execution Controller and Audit Trail
 Stage 14.4: Post-Action Observation and Evaluation
 Stage 14.5: Phase 14 Closure
@@ -108,10 +184,11 @@ STAGE 14.1: ACTION PERMISSION AND PLAN SCHEMA
 ---------------------------------------------
 
 Mission:
-Define the contracts for approved initiative execution before any execution
-controller is added.
+Define the contracts for execution lanes, permissions, plans, budgets, and
+audit records before any execution controller is added.
 
 Stage 14.1 deliverables:
+- [ ] execution lane taxonomy
 - [ ] action permission taxonomy
 - [ ] action surface taxonomy
 - [ ] action plan schema
@@ -122,23 +199,29 @@ Stage 14.1 deliverables:
 Stage 14.1 restrictions:
 - no execution controller yet
 - no action execution
-- no approval binding
+- no host/system-effect action
+- no approval binding yet
 - no automatic initiative activation
 
 
-STAGE 14.2: APPROVAL BINDING AND PLAN CREATION
-----------------------------------------------
+STAGE 14.2: EXECUTION BOUNDARY AND APPROVAL BINDING
+---------------------------------------------------
 
 Mission:
-Create action plans only for initiatives that are explicitly approved and
-eligible for execution.
+Define the Nova-owned execution boundary and create action plans whose
+approval requirements are determined by execution lane, risk, and external
+effect.
 
 Stage 14.2 deliverables:
-- [ ] eligibility checks for approved executable initiatives
+- [ ] Nova-owned workspace and dedicated `nova` OS user boundary plan
+- [ ] eligibility checks by execution lane
+- [ ] approval rules for internal, Nova-owned, and external/system-effect
+  activity
 - [ ] action plan creation engine
 - [ ] runtime method for creating bounded action plans
-- [ ] tests proving draft, paused, rejected, abandoned, or unapproved
-  initiatives cannot receive executable plans
+- [ ] tests proving internal no-external-effect activity can be planned without
+  prior approval but remains logged and interruptible
+- [ ] tests proving external/system-effect activity requires approval
 - [ ] tests proving plans declare allowed surfaces, budgets, stop conditions,
   expected outputs, and rollback notes
 
@@ -146,24 +229,28 @@ Stage 14.2 restrictions:
 - no action execution
 - no self-approval
 - no hidden plan creation
-- no plan outside approved initiative scope
+- no external/system-effect plan without approval
+- no plan outside declared execution lane and allowed surfaces
 
 
 STAGE 14.3: EXECUTION CONTROLLER AND AUDIT TRAIL
 ------------------------------------------------
 
 Mission:
-Execute only approved action plans through a controller that checks approval,
-scope, budget, priority, and interruption before every action.
+Execute only bounded action plans through a controller that checks execution
+lane, approval requirement, scope, budget, priority, and interruption before
+every action.
 
 Stage 14.3 deliverables:
 - [ ] execution controller
+- [ ] execution lane checks before each action
 - [ ] permission checks before each action
 - [ ] budget enforcement
 - [ ] interruption/emergency stop checks
 - [ ] audit log for blocked and executed actions
-- [ ] tests proving blocked actions remain blocked and approved actions stay
-  within scope
+- [ ] tests proving internal actions are logged and interruptible
+- [ ] tests proving blocked actions remain blocked and approved external
+  actions stay within scope
 
 Stage 14.3 restrictions:
 - no ungated shell/network/filesystem/GUI use
@@ -184,12 +271,14 @@ Stage 14.4 deliverables:
 - [ ] initiative revision hook from action result
 - [ ] memory/state update intent records
 - [ ] action execution evaluation runner
+- [ ] internal activity log evaluation checks
 - [ ] tests for audit-chain visibility and bounded prompt/diagnostic language
 - [ ] persisted-evidence or live evaluation report
 
 Stage 14.4 restrictions:
 - no closure based on success language alone
 - no unlogged execution
+- no unlogged internal autonomous activity
 - no automatic desire or sentience claim from action completion
 
 
@@ -199,7 +288,8 @@ STAGE 14.5: PHASE 14 CLOSURE
 Mission:
 Close Phase 14 only when approved bounded actions can execute under
 permissions, budgets, interruption checks, audit logging, and post-action
-revision without hidden work or approval bypass.
+revision without hidden work or approval bypass, while internal autonomous
+activity remains approval-free but logged and interruptible.
 
 Stage 14.5 deliverables:
 - [ ] action execution architecture documented and validated
@@ -213,11 +303,17 @@ PHASE 14 DEFINITION OF DONE
 ---------------------------
 
 Phase 14 is complete when:
-- approved initiatives can receive explicit bounded action plans
-- unapproved/draft initiatives cannot execute
-- each action checks approval, scope, budget, priority, and interruption
+- execution lanes distinguish internal, Nova-owned, and external/system-effect
+  activity
+- internal autonomous activity can occur without prior approval only when it
+  has no external side effect and remains logged and interruptible
+- approved external/system-effect initiatives can receive explicit bounded
+  action plans
+- unapproved/draft initiatives cannot perform external/system-effect action
+- each action checks lane, approval need, scope, budget, priority, and
+  interruption
 - blocked actions produce audit evidence without side effects
-- approved actions execute only inside declared surfaces
+- approved external actions execute only inside declared surfaces
 - action results can update observation/revision state through bounded hooks
 - the full action chain is inspectable
 - no hidden action, self-approval, or desire claim is introduced
@@ -228,6 +324,7 @@ PHASE 15 READINESS
 
 Phase 15 should begin only after Phase 14 proves:
 - durable autonomous initiatives can be approved and executed within scope
+- internal autonomous activity logs are sufficient for later evaluation
 - interruption and emergency stop remain reliable
 - audit evidence supports later longitudinal evaluation
 - action results can revise initiative, memory, awareness, and motive state
