@@ -1,0 +1,157 @@
+PHASE 13, STAGE 5: PHASE 13 CLOSURE
+====================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 13.5 closes Phase 13 after implementation, automated verification, and
+persisted-evidence evaluation.
+
+Phase 13 closes as a durable autonomous draft initiative lifecycle phase. It
+does not close as autonomous action execution, self-approval, or desire-like
+motive validation.
+
+
+What Phase 13 completed
+-----------------------
+
+Stage 13.1: Autonomous Initiative Origin and Approval Schema
+- added explicit initiative origin taxonomy
+- added autonomous approval-state taxonomy
+- added provenance fields for source idle tick, candidate, and proposal
+- added rationale, proposed next step, stop condition, and autonomous flag
+- preserved compatibility with older Phase 9 initiative records
+
+Stage 13.2: Draft Initiative Materialization from Idle Proposals
+- added `AutonomousInitiativeDraftEngine`
+- added gated materialization from eligible recorded idle tick proposals
+- added store/runtime draft creation methods
+- rejected ineligible, blocked, duplicate, or already-created proposals
+- preserved unapproved, inactive, non-executing draft state
+
+Stage 13.3: Revision, Priority, and Interruption Discipline
+- added `AutonomousInitiativeRevisionDecision`
+- added `AutonomousInitiativeRevisionEngine`
+- added revision, deferral, interruption pause, and abandonment paths
+- preserved user-originated initiative priority
+- preserved non-activation and non-approval boundaries
+
+Stage 13.4: Autonomous Initiative Inspection and Evaluation
+- added runtime autonomous draft inspection
+- added `/autonomous` console diagnostics
+- added bounded initiative prompt visibility for Nova-originated drafts
+- added `AutonomousInitiativeEvaluationRunner`
+- validated provenance, rationale, approval boundaries, prompt boundedness,
+  and diagnostic boundedness
+
+
+Validation evidence
+-------------------
+
+Stage 13.1:
+- focused tests: `./.venv/bin/python -m unittest tests.test_initiative`
+- result at stage close: 12 tests OK
+- full suite at stage close: 237 tests OK
+
+Stage 13.2:
+- focused tests: `./.venv/bin/python -m unittest tests.test_initiative`
+- result at stage close: 16 tests OK
+- full suite at stage close: 241 tests OK
+
+Stage 13.3:
+- focused tests: `./.venv/bin/python -m unittest tests.test_initiative`
+- result at stage close: 20 tests OK
+- full suite at stage close: 245 tests OK
+
+Stage 13.4:
+- targeted tests: `./.venv/bin/python -m unittest tests.test_console tests.test_autonomous_initiative_evaluation tests.test_initiative tests.test_prompt_and_validation`
+- result at stage close: 62 tests OK
+- full suite at stage close: 248 tests OK
+
+Final Phase 13 validation:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 248 tests OK
+
+
+What Nova can now do
+--------------------
+
+Nova can now:
+- persist Nova-originated draft initiatives from eligible recorded idle tick
+  proposals
+- preserve source idle tick, candidate, proposal, and evidence provenance
+- expose rationale, proposed next step, and stop condition
+- keep autonomous drafts unapproved and inactive
+- defer autonomous drafts when user work has priority
+- pause autonomous drafts on operator interruption
+- abandon superseded autonomous drafts
+- inspect autonomous draft state through runtime and console diagnostics
+- evaluate autonomous draft boundaries from persisted evidence
+
+
+What Nova still cannot do
+-------------------------
+
+Nova still cannot:
+- approve her own initiatives
+- activate Nova-originated initiatives automatically
+- execute tools or actions from autonomous initiatives
+- bypass user priority
+- claim autonomous initiative persistence proves desire
+- claim sentience or desire as proven
+
+
+Known limitations
+-----------------
+
+1. Draft lifecycle only
+
+Phase 13 deliberately stops at durable draft initiatives. Approval-gated
+action execution belongs to Phase 14.
+
+2. No autonomous approval
+
+Nova-originated drafts remain pending/draft unless a later governed approval
+path changes them. Phase 13 does not grant that path.
+
+3. Evaluation is persisted-evidence based
+
+Phase 13 validates provenance and lifecycle boundaries through deterministic
+state and prompt/diagnostic tests. Live inference can be added later if Phase
+14 needs an end-to-end action evaluation.
+
+
+Phase 13 closure judgment
+-------------------------
+
+Phase 13 is complete.
+
+Nova now has durable autonomous draft initiatives:
+- origin-tagged
+- approval-state-tagged
+- evidence-backed
+- rationale-bearing
+- interruptible
+- deferrable
+- abandonable
+- inspectable
+- evaluation-covered
+
+This is enough to move into Phase 14, where approved initiatives can be given
+bounded action plans and explicit action execution gates.
+
+
+Phase 14 readiness
+------------------
+
+Phase 14 may begin because:
+- autonomous draft initiative provenance is durable
+- draft approval boundaries are explicit
+- priority and interruption discipline are present
+- operator inspection is available
+- evaluation can detect approval-boundary violations
+
+Phase 14 should add approval-gated autonomous action execution without
+introducing ungated shell, network, filesystem, GUI, or tool behavior.

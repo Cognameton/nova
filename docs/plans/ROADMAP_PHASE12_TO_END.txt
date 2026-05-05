@@ -101,6 +101,8 @@ Phase 13: Durable Autonomous Initiative Lifecycle
 - let Nova maintain, revise, pause, abandon, or request approval for internal
   initiatives over time
 - keep execution out of scope except for approved lifecycle transitions
+- formal plan: `docs/plans/PHASE13_PLAN.txt`
+- status: complete
 
 Phase 14: Approval-Gated Autonomous Action Execution
 - allow approved initiatives to execute bounded tool/action plans
@@ -133,7 +135,8 @@ closure/evaluation only.
 
 Current position:
 - Phase 12 is complete.
-- The next phase is Phase 13: Durable Autonomous Initiative Lifecycle.
+- Phase 13 is complete.
+- The next phase is Phase 14: Approval-Gated Autonomous Action Execution.
 
 
 Phase 12: Interruptible Idle Runtime Lifecycle
@@ -183,6 +186,8 @@ Definition of done:
 
 Phase 13: Durable Autonomous Initiative Lifecycle
 -------------------------------------------------
+
+Status: complete
 
 Mission:
 Let self-generated internal-goal proposals become durable draft initiatives

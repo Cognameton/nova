@@ -1,7 +1,7 @@
 PHASE 13 PLAN
 =============
 
-Status: in progress
+Status: complete
 
 Phase 13 begins after Phase 12 established recorded idle cognition, bounded
 idle ticks, operator controls, diagnostics, prompt visibility, and
@@ -173,11 +173,11 @@ Close Phase 13 only when Nova can persist, inspect, revise, and govern
 self-generated draft initiatives without approval bypass or action execution.
 
 Stage 13.5 deliverables:
-- [ ] autonomous initiative architecture documented and validated
-- [ ] automated tests passing
-- [ ] evaluation report
-- [ ] closure summary documenting gains, limits, and risks
-- [ ] Phase 14 readiness criteria reviewed
+- [x] autonomous initiative architecture documented and validated
+- [x] automated tests passing
+- [x] evaluation report
+- [x] closure summary documenting gains, limits, and risks
+- [x] Phase 14 readiness criteria reviewed
 
 
 PHASE 13 DEFINITION OF DONE

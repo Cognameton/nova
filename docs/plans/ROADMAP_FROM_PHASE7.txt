@@ -172,20 +172,20 @@ Phase 11:
 DEFINED NEXT PHASE
 ------------------
 
-Phase 12 is complete.
+Phases 12 and 13 are complete.
 
-The next phase is Phase 13: Durable Autonomous Initiative Lifecycle.
+The next phase is Phase 14: Approval-Gated Autonomous Action Execution.
 
 See:
 - `docs/plans/PHASE12_PLAN.txt`
 - `docs/plans/ROADMAP_PHASE12_TO_END.txt`
 
 Likely mission:
-- convert eligible self-generated proposals into durable draft initiatives
-- preserve approval discipline and user interruptibility
-- let Nova maintain, revise, pause, abandon, or request approval for internal
-  initiatives over time
-- keep external action execution out of scope until Phase 14
+- allow approved initiatives to execute bounded tool/action plans
+- enforce budgets, permissions, action review, and interruption
+- connect action results back into memory, awareness, motive, and initiative
+  revision
+- prevent hidden shell, network, filesystem, GUI, or tool behavior
 
 
 PHASES STILL NEEDED BEYOND THE CURRENT DEFINED ROADMAP
@@ -219,10 +219,10 @@ Likely later phases beyond Phase 11:
 NEAREST EXECUTION TARGET
 ------------------------
 
-The immediate next execution target is Phase 13 planning and implementation.
+The immediate next execution target is Phase 14 planning and implementation.
 
-Phase 13 should add durable Nova-originated draft initiatives without adding
-autonomous action execution.
+Phase 14 should add approval-gated autonomous action execution without
+weakening operator control or approval boundaries.
 
 
 OPERATING PRINCIPLE FOR THIS RESEARCH ARC
