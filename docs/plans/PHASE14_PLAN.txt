@@ -1,7 +1,7 @@
 PHASE 14 PLAN
 =============
 
-Status: planned
+Status: in progress
 
 Phase 14 begins after Phase 13 established durable Nova-originated draft
 initiatives with explicit origin, approval state, provenance, rationale,
@@ -188,13 +188,18 @@ Define the contracts for execution lanes, permissions, plans, budgets, and
 audit records before any execution controller is added.
 
 Stage 14.1 deliverables:
-- [ ] execution lane taxonomy
-- [ ] action permission taxonomy
-- [ ] action surface taxonomy
-- [ ] action plan schema
-- [ ] action budget schema
-- [ ] action audit record schema
-- [ ] compatibility-safe serialization tests
+- [x] execution lane taxonomy
+- [x] action permission taxonomy
+- [x] action surface taxonomy
+- [x] action plan schema
+- [x] action budget schema
+- [x] action audit record schema
+- [x] compatibility-safe serialization tests
+
+Stage 14.1 result:
+Completed in `src/nova/types.py`, `src/nova/agent/action_plan.py`, and
+`tests/test_action_plan_schema.py`. This stage defines contracts only; it does
+not add an execution controller or perform any host/system-effect action.
 
 Stage 14.1 restrictions:
 - no execution controller yet

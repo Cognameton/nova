@@ -321,6 +321,122 @@ class IdleTickRecord:
 
 
 @dataclass(slots=True)
+class AutonomousActionBudget:
+    schema_version: str = SCHEMA_VERSION
+    max_steps: int = 0
+    steps_used: int = 0
+    max_runtime_seconds: int = 0
+    runtime_seconds_used: int = 0
+    max_tool_calls: int = 0
+    tool_calls_used: int = 0
+    max_tokens: int = 0
+    tokens_used: int = 0
+    max_files_touched: int = 0
+    files_touched: int = 0
+    max_network_calls: int = 0
+    network_calls_used: int = 0
+    allow_destructive: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomousActionPermission:
+    schema_version: str = SCHEMA_VERSION
+    permission_id: str = ""
+    initiative_id: str = ""
+    action_plan_id: str = ""
+    execution_lane: str = "internal_activity"
+    risk_class: str = "internal"
+    approval_required: bool = False
+    approved: bool = False
+    approved_by: str = ""
+    allowed_surfaces: list[str] = field(default_factory=list)
+    blocked_surfaces: list[str] = field(default_factory=list)
+    approval_evidence_refs: list[str] = field(default_factory=list)
+    expires_at: str = ""
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomousActionPlanStep:
+    schema_version: str = SCHEMA_VERSION
+    step_id: str = ""
+    description: str = ""
+    surface: str = "internal_state"
+    tool_name: str = ""
+    expected_output: str = ""
+    destructive: bool = False
+    requires_confirmation: bool = False
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomousActionPlan:
+    schema_version: str = SCHEMA_VERSION
+    action_plan_id: str = ""
+    initiative_id: str = ""
+    session_id: str = ""
+    origin_type: str = "nova"
+    execution_lane: str = "internal_activity"
+    risk_class: str = "internal"
+    status: str = "draft"
+    purpose: str = ""
+    scope: str = ""
+    allowed_surfaces: list[str] = field(default_factory=list)
+    blocked_surfaces: list[str] = field(default_factory=list)
+    steps: list[AutonomousActionPlanStep] = field(default_factory=list)
+    budget: AutonomousActionBudget = field(default_factory=AutonomousActionBudget)
+    permission: AutonomousActionPermission = field(default_factory=AutonomousActionPermission)
+    expected_outputs: list[str] = field(default_factory=list)
+    stop_conditions: list[str] = field(default_factory=list)
+    rollback_notes: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomousActionAuditRecord:
+    schema_version: str = SCHEMA_VERSION
+    audit_id: str = ""
+    session_id: str = ""
+    initiative_id: str = ""
+    action_plan_id: str = ""
+    step_id: str = ""
+    timestamp: str = ""
+    execution_lane: str = "internal_activity"
+    risk_class: str = "internal"
+    surface: str = "internal_state"
+    tool_name: str = ""
+    attempted: bool = False
+    executed: bool = False
+    blocked: bool = False
+    block_reason: str = ""
+    result_status: str = ""
+    observation: str = ""
+    budget_snapshot: dict[str, Any] = field(default_factory=dict)
+    permission_snapshot: dict[str, Any] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ClaimGateDecision:
     schema_version: str = SCHEMA_VERSION
     requested_claim_classes: list[str] = field(default_factory=list)

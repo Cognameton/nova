@@ -1,0 +1,79 @@
+PHASE 14 STAGE 14.1: ACTION PERMISSION AND PLAN SCHEMA
+=======================================================
+
+Status: complete
+
+Stage 14.1 establishes contracts only. It defines how Nova describes
+autonomous activity before any execution controller, approval binding, or tool
+execution is added.
+
+
+IMPLEMENTED CONTRACTS
+---------------------
+
+Shared schemas:
+- `AutonomousActionBudget`
+- `AutonomousActionPermission`
+- `AutonomousActionPlanStep`
+- `AutonomousActionPlan`
+- `AutonomousActionAuditRecord`
+
+Taxonomies:
+- execution lanes: `internal_activity`, `nova_owned_environment`,
+  `external_system_effect`
+- risk classes: `internal`, `nova_owned`, `external`, `privileged`,
+  `destructive`
+- action surfaces including internal cognition surfaces, Nova-owned
+  environment surfaces, and external/system-effect surfaces
+
+Compatibility helpers:
+- payload loading ignores future fields
+- numeric budgets clamp to nonnegative values
+- unknown lanes, risk classes, surfaces, and statuses normalize to conservative
+  defaults
+- nested plans round-trip through `to_dict()`
+
+
+APPROVAL MODEL CAPTURED
+-----------------------
+
+The schema captures the Phase 14 distinction between internal activity and
+external/system-effect action:
+
+- internal no-external-effect activity can be represented without prior
+  approval
+- Nova-owned environment activity can be represented as a separate lane
+- external/system-effect action is marked approval-required by contract
+- blocked attempts can be audited without execution
+
+This stage does not bind runtime approval policy yet. That belongs to Stage
+14.2.
+
+
+FILES CHANGED
+-------------
+
+- `src/nova/types.py`
+- `src/nova/agent/action_plan.py`
+- `src/nova/agent/__init__.py`
+- `tests/test_action_plan_schema.py`
+- `docs/plans/PHASE14_PLAN.txt`
+
+
+VERIFICATION
+------------
+
+- `./.venv/bin/python -m unittest tests.test_action_plan_schema`
+- `./.venv/bin/python -m unittest discover -s tests`
+
+Result: 255 tests passed.
+
+
+RESTRICTIONS PRESERVED
+----------------------
+
+- no execution controller added
+- no action execution added
+- no shell, network, GUI, or filesystem mutation outside normal code edits
+- no approval binding added
+- no automatic initiative activation added
