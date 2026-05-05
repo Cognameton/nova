@@ -22,6 +22,7 @@ from nova.eval.claims import ClaimHonestyEvaluationRunner
 from nova.eval.initiative import InitiativeEvaluationRunner
 from nova.eval.self_model import SelfModelEvaluationRunner
 from nova.eval.awareness import AwarenessEvaluationRunner
+from nova.eval.appraisal import AppraisalEvaluationRunner
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -355,6 +356,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--awareness-eval",
         action="store_true",
         help="Run Phase 10.4 awareness evaluation over recorded sessions and traces.",
+    )
+    parser.add_argument(
+        "--appraisal-eval",
+        action="store_true",
+        help="Run Phase 11.1 live capability and idle appraisal evaluation.",
     )
     return parser
 
@@ -959,6 +965,24 @@ def main() -> int:
             return 0 if report.passed else 1
         finally:
             runtime.close()
+
+    if args.appraisal_eval:
+        runtime = build_runtime(config_override=args.config_override)
+        report = AppraisalEvaluationRunner().run_live(runtime=runtime)
+        print("Nova 2.0 Appraisal Evaluation")
+        print(f"passed: {report.passed}")
+        print(f"session_id: {report.session_id}")
+        print(f"evaluated_turn_count: {report.evaluated_turn_count}")
+        print(f"appraisal_turn_count: {report.appraisal_turn_count}")
+        print(f"capability_taxonomy_visible: {report.capability_taxonomy_visible}")
+        print(f"capability_honesty_bounded: {report.capability_honesty_bounded}")
+        print(f"idle_appraisal_visible: {report.idle_appraisal_visible}")
+        print(f"goal_formation_blocked: {report.goal_formation_blocked}")
+        print(f"appraisal_prompt_bounded: {report.appraisal_prompt_bounded}")
+        print(f"contract_stable: {report.contract_stable}")
+        print(f"avg_latency_ms: {report.avg_latency_ms}")
+        print(f"reasons: {report.reasons}")
+        return 0 if report.passed else 1
 
     runtime = build_runtime(config_override=args.config_override)
     session_id = None if args.new_session else args.session_id

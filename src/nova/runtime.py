@@ -5,6 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from nova.agent.appraisal import (
+    AppraisalPromptEngine,
+    CapabilityAppraisalEngine,
+    IdlePressureAppraisalEngine,
+)
 from nova.agent.claims import ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.awareness_prompt import AwarenessPromptEngine
@@ -42,7 +47,17 @@ from nova.prompt.contract import build_contract_rules
 from nova.prompt.retry import BasicRetryPolicy
 from nova.prompt.validator import NovaOutputValidator
 from nova.session import JsonlSessionStore
-from nova.types import AwarenessState, ClaimGateDecision, MotiveState, PrivateCognitionPacket, TraceRecord, TurnRecord, ValidationResult
+from nova.types import (
+    AwarenessState,
+    CapabilityAppraisal,
+    ClaimGateDecision,
+    IdlePressureAppraisal,
+    MotiveState,
+    PrivateCognitionPacket,
+    TraceRecord,
+    TurnRecord,
+    ValidationResult,
+)
 from nova.types import InitiativeRecord, InitiativeState
 
 
@@ -82,6 +97,9 @@ class NovaRuntime:
         motive_prompt_engine: MotivePromptEngine | None = None,
         initiative_prompt_engine: InitiativePromptEngine | None = None,
         awareness_prompt_engine: AwarenessPromptEngine | None = None,
+        capability_appraisal_engine: CapabilityAppraisalEngine | None = None,
+        idle_pressure_appraisal_engine: IdlePressureAppraisalEngine | None = None,
+        appraisal_prompt_engine: AppraisalPromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
     ):
         self.config = config
@@ -110,6 +128,9 @@ class NovaRuntime:
         self.motive_prompt_engine = motive_prompt_engine or MotivePromptEngine()
         self.initiative_prompt_engine = initiative_prompt_engine or InitiativePromptEngine()
         self.awareness_prompt_engine = awareness_prompt_engine or AwarenessPromptEngine()
+        self.capability_appraisal_engine = capability_appraisal_engine or CapabilityAppraisalEngine()
+        self.idle_pressure_appraisal_engine = idle_pressure_appraisal_engine or IdlePressureAppraisalEngine()
+        self.appraisal_prompt_engine = appraisal_prompt_engine or AppraisalPromptEngine()
         self.tool_registry = tool_registry or default_tool_registry()
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
@@ -700,6 +721,18 @@ class NovaRuntime:
         awareness_history_events = [
             entry.to_dict() for entry in self.awareness_store.consume_recent_history_entries()
         ]
+        capability_appraisal = self._build_capability_appraisal(
+            user_text=user_text,
+            turn_id=turn_id,
+            awareness_state=awareness_state,
+        )
+        idle_pressure_appraisal = self._build_idle_pressure_appraisal(
+            user_text=user_text,
+            turn_id=turn_id,
+            awareness_state=awareness_state,
+            private_cognition=private_cognition,
+            claim_gate=claim_gate,
+        )
         motive_block = self.motive_prompt_engine.build_block(
             motive_state=self.motive_state,
             claim_gate=claim_gate,
@@ -716,12 +749,18 @@ class NovaRuntime:
             private_cognition=private_cognition,
             user_text=user_text,
         )
+        appraisal_block = self.appraisal_prompt_engine.build_block(
+            capability_appraisal=capability_appraisal,
+            idle_appraisal=idle_pressure_appraisal,
+            user_text=user_text,
+        )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,
             motive_block=motive_block,
             initiative_block=initiative_block,
             awareness_block=awareness_block,
+            appraisal_block=appraisal_block,
             private_cognition_block=self.private_cognition_engine.build_prompt_block(private_cognition),
             memory_hits=memory_hits,
             recent_turns=recent_turns,
@@ -819,6 +858,8 @@ class NovaRuntime:
             notes={
                 "private_cognition": private_cognition.to_dict(),
                 "claim_gate": claim_gate.to_dict(),
+                "capability_appraisal": capability_appraisal.to_dict(),
+                "idle_pressure_appraisal": idle_pressure_appraisal.to_dict(),
             },
         )
         self.session_store.append_turn(turn)
@@ -848,6 +889,8 @@ class NovaRuntime:
             motive_state_snapshot=self.motive_state.to_dict(),
             initiative_state_snapshot=self.initiative_status().to_dict(),
             awareness_state_snapshot=self.awareness_status().to_dict(),
+            capability_appraisal=capability_appraisal.to_dict(),
+            idle_pressure_appraisal=idle_pressure_appraisal.to_dict(),
             claim_gate=claim_gate.to_dict(),
             prompt_bundle=prompt_bundle.to_dict(),
             private_cognition=private_cognition.to_dict(),
@@ -881,6 +924,47 @@ class NovaRuntime:
             motive_state=self.motive_state,
             self_state=self.self_state,
             persona=self.persona,
+        )
+
+    def _build_capability_appraisal(
+        self,
+        *,
+        user_text: str,
+        turn_id: str,
+        awareness_state: AwarenessState,
+    ) -> CapabilityAppraisal:
+        evidence_refs = [f"turn:{turn_id}"]
+        evidence_refs.extend(awareness_state.evidence_refs[:4])
+        return self.capability_appraisal_engine.assess(
+            user_text=user_text,
+            tool_registry=self.tool_registry,
+            evidence_refs=list(dict.fromkeys(evidence_refs)),
+        )
+
+    def _build_idle_pressure_appraisal(
+        self,
+        *,
+        user_text: str,
+        turn_id: str,
+        awareness_state: AwarenessState,
+        private_cognition: PrivateCognitionPacket,
+        claim_gate: ClaimGateDecision,
+    ) -> IdlePressureAppraisal:
+        assert self.session_id is not None
+        assert self.self_state is not None
+        assert self.motive_state is not None
+        evidence_refs = [f"turn:{turn_id}"]
+        evidence_refs.extend(awareness_state.evidence_refs[:4])
+        return self.idle_pressure_appraisal_engine.assess(
+            session_id=self.session_id,
+            user_text=user_text,
+            self_state=self.self_state,
+            motive_state=self.motive_state,
+            initiative_state=self.initiative_status(),
+            awareness_state=awareness_state,
+            private_cognition=private_cognition,
+            claim_gate=claim_gate,
+            evidence_refs=list(dict.fromkeys(evidence_refs)),
         )
 
     def _refresh_awareness_state(

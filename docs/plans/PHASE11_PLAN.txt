@@ -111,11 +111,11 @@ Define the appraisal layer that determines what Nova can honestly claim about
 capabilities and whether current conditions justify internal goal formation.
 
 Stage 11.1 deliverables:
-- [ ] capability-claim taxonomy for current, unavailable, blocked, and
+- [x] capability-claim taxonomy for current, unavailable, blocked, and
   architecturally-extensible capabilities
-- [ ] runtime capability appraisal surface
-- [ ] idle-state and pressure appraisal schema
-- [ ] tests for capability-claim honesty and idle appraisal boundaries
+- [x] runtime capability appraisal surface
+- [x] idle-state and pressure appraisal schema
+- [x] tests for capability-claim honesty and idle appraisal boundaries
 
 Stage 11.1 restrictions:
 - no generated goals yet

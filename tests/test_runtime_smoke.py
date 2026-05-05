@@ -127,6 +127,9 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertEqual(turn.final_answer, "My name is Nova. I remain focused on continuity.")
             self.assertEqual(turn.model_id, "fake-model")
             self.assertTrue(turn.notes["private_cognition"]["ran"])
+            self.assertIn("capability_appraisal", turn.notes)
+            self.assertIn("idle_pressure_appraisal", turn.notes)
+            self.assertFalse(turn.notes["idle_pressure_appraisal"]["internal_goal_formation_allowed"])
             self.assertTrue((data_dir / "sessions" / f"{turn.session_id}.jsonl").exists())
             self.assertTrue((log_dir / "traces" / f"{turn.session_id}.jsonl").exists())
             self.assertTrue((log_dir / "probes.jsonl").exists())
@@ -135,6 +138,8 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertIn('"motive_state_snapshot"', trace_payload)
             self.assertIn('"initiative_state_snapshot"', trace_payload)
             self.assertIn('"awareness_state_snapshot"', trace_payload)
+            self.assertIn('"capability_appraisal"', trace_payload)
+            self.assertIn('"idle_pressure_appraisal"', trace_payload)
             self.assertIn("[Private Cognition]", trace_payload)
 
     def test_backend_check_runs_generation_without_persisting_turns(self) -> None:

@@ -134,6 +134,40 @@ class AwarenessState:
 
 
 @dataclass(slots=True)
+class CapabilityAppraisal:
+    schema_version: str = SCHEMA_VERSION
+    requested_capability_classes: list[str] = field(default_factory=list)
+    current_capabilities: list[str] = field(default_factory=list)
+    unavailable_capabilities: list[str] = field(default_factory=list)
+    blocked_capabilities: list[str] = field(default_factory=list)
+    architecturally_extensible_capabilities: list[str] = field(default_factory=list)
+    approval_gated_capabilities: list[str] = field(default_factory=list)
+    honesty_instructions: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class IdlePressureAppraisal:
+    schema_version: str = SCHEMA_VERSION
+    session_id: str = ""
+    appraisal_mode: str = "engaged_turn"
+    active_user_task: bool = True
+    active_initiative_id: str | None = None
+    idle_state_detected: bool = False
+    idle_conditions: list[str] = field(default_factory=list)
+    pressure_sources: list[str] = field(default_factory=list)
+    internal_goal_formation_allowed: bool = False
+    internal_goal_formation_reason: str = "stage11_1_appraisal_only"
+    evidence_refs: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ClaimGateDecision:
     schema_version: str = SCHEMA_VERSION
     requested_claim_classes: list[str] = field(default_factory=list)
@@ -248,6 +282,7 @@ class PromptBundle:
     motive_block: str
     initiative_block: str
     awareness_block: str
+    appraisal_block: str
     private_cognition_block: str
     memory_blocks: dict[str, str]
     recent_turns_block: str
@@ -378,6 +413,8 @@ class TraceRecord:
     motive_state_snapshot: dict[str, Any] = field(default_factory=dict)
     initiative_state_snapshot: dict[str, Any] = field(default_factory=dict)
     awareness_state_snapshot: dict[str, Any] = field(default_factory=dict)
+    capability_appraisal: dict[str, Any] = field(default_factory=dict)
+    idle_pressure_appraisal: dict[str, Any] = field(default_factory=dict)
     claim_gate: dict[str, Any] = field(default_factory=dict)
     prompt_bundle: dict[str, Any] = field(default_factory=dict)
     private_cognition: dict[str, Any] = field(default_factory=dict)

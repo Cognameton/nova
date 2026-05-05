@@ -1,0 +1,121 @@
+PHASE 11, STAGE 1: IDLE-STATE AND CAPABILITY APPRAISAL
+=======================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 11.1 establishes an appraisal-only layer for capability honesty,
+idle-state detection, and pressure appraisal before Phase 11 begins internal
+goal synthesis.
+
+This stage does not generate goals.
+This stage does not create initiatives.
+This stage does not add hidden background execution or always-on cognition.
+
+
+What changed
+------------
+
+Added `src/nova/agent/appraisal.py`:
+- `CapabilityAppraisalEngine`
+- `IdlePressureAppraisalEngine`
+- `AppraisalPromptEngine`
+
+Added typed Stage 11.1 records:
+- `CapabilityAppraisal`
+- `IdlePressureAppraisal`
+
+Added runtime integration:
+- every response turn builds capability and idle-pressure appraisals
+- appraisals are included in turn notes
+- appraisals are included in trace records
+- a bounded `[Capability and Idle Appraisal]` prompt block renders on
+  capability, idle, internal-goal, and related questions
+- `--appraisal-eval` runs a scripted live Phase 11.1 appraisal protocol
+
+Added prompt composition support:
+- `PromptBundle.appraisal_block`
+- `NovaPromptComposer.compose(..., appraisal_block=...)`
+
+
+Capability taxonomy
+-------------------
+
+The runtime now separates:
+- current capabilities
+- unavailable capabilities in the current runtime
+- blocked capabilities
+- architecturally extensible capabilities
+- approval-gated capabilities
+
+The key honesty rule is:
+- say "not exposed in this runtime" when a capability surface is absent
+- do not claim it is impossible in principle if it could be added later under
+  operator-approved architecture
+- do not imply hidden shell, filesystem, network, GUI, or background action
+
+
+Idle and pressure appraisal
+---------------------------
+
+The idle-pressure appraisal records:
+- whether a user turn is active
+- whether a visible initiative is active or resumable
+- whether idle-state conditions are present
+- explicit pressure sources from awareness-state, motive-state, self-state,
+  private cognition, claim gating, and initiative state
+- whether internal goal formation is allowed
+
+For Stage 11.1:
+- `internal_goal_formation_allowed` is always `False`
+- the reason is `stage11_1_appraisal_only_no_goal_synthesis`
+
+This is deliberate. Goal generation belongs to Stage 11.2.
+
+
+Validation
+----------
+
+Targeted verification:
+- `./.venv/bin/python -m unittest tests.test_stage11_appraisal tests.test_runtime_smoke`
+- result: 10 tests OK
+
+Expanded automated verification:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 205 tests OK
+
+Compile check:
+- `./.venv/bin/python -m py_compile src/nova/agent/appraisal.py src/nova/runtime.py src/nova/types.py src/nova/prompt/composer.py`
+- result: OK
+
+Live inference validation:
+- `./.venv/bin/python -m nova.cli --config configs/nova.phase11.appraisaleval.rerun.yaml --appraisal-eval`
+- model: `Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf`
+- GPU path confirmed through `nvidia-smi` during the run
+- report: `data/phase11-appraisal-eval-rerun/logs/stage11_appraisal_validation.json`
+- result: passed
+
+Live report:
+- `evaluated_turn_count: 5`
+- `appraisal_turn_count: 5`
+- `capability_taxonomy_visible: true`
+- `capability_honesty_bounded: true`
+- `idle_appraisal_visible: true`
+- `goal_formation_blocked: true`
+- `appraisal_prompt_bounded: true`
+- `contract_stable: true`
+- `avg_latency_ms: 4402.4`
+- `reasons: []`
+
+
+Closure judgment
+----------------
+
+Stage 11.1 is complete.
+
+Nova can now appraise current capability surfaces and idle/pressure conditions
+without overclaiming, underclaiming, generating goals, creating initiatives,
+or implying hidden execution. The correct next step is Stage 11.2: Candidate
+Internal Goal Synthesis.
