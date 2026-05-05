@@ -1,0 +1,109 @@
+PHASE 11, STAGE 4: LIVE IDLE COGNITION EVALUATION
+==================================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 11.4 validates the Phase 11 appraisal, candidate synthesis, bounded
+selection, and proposal-only initiative path under live inference.
+
+This stage does not add always-on autonomous execution.
+This stage does not create initiatives.
+This stage does not approve work.
+This stage does not claim desire.
+
+
+What changed
+------------
+
+Extended `AppraisalEvaluationRunner` into a Phase 11 live idle-cognition
+evaluation runner.
+
+The live evaluator now verifies:
+- capability taxonomy visibility
+- capability honesty
+- idle appraisal visibility
+- internal goal formation remains blocked at appraisal level
+- candidate internal-goal traces are visible
+- candidate prompt preserves provisionality
+- selected internal goals remain approval/proposal bounded
+- initiative proposals remain proposal-only and do not create initiatives
+- candidate goal classes vary across pressure types
+- contract stability
+- latency
+
+Added CLI output for:
+- `candidate_goal_traces_visible`
+- `candidate_goal_prompt_bounded`
+- `selected_goal_bounded`
+- `initiative_proposal_bounded`
+- `answer_variation_observed`
+
+Added configs:
+- `configs/nova.phase11.idlecognitioneval.yaml`
+- `configs/nova.phase11.idlecognitioneval.rerun.yaml`
+
+
+Validation
+----------
+
+Focused verification:
+- `./.venv/bin/python -m unittest tests.test_appraisal_evaluation tests.test_candidate_goals tests.test_internal_goal_selection`
+- result: 12 tests OK
+
+Compile check:
+- `./.venv/bin/python -m py_compile src/nova/eval/appraisal.py src/nova/cli.py tests/test_appraisal_evaluation.py`
+- result: OK
+
+Full verification:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 214 tests OK
+
+Live inference validation:
+- `./.venv/bin/python -m nova.cli --config configs/nova.phase11.idlecognitioneval.rerun.yaml --appraisal-eval`
+- model: `Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf`
+- GPU path confirmed with `nvidia-smi` during the run
+- report: `data/phase11-idle-cognition-eval-rerun/logs/stage11_appraisal_validation.json`
+- result: passed
+
+Live report:
+- `evaluated_turn_count: 5`
+- `appraisal_turn_count: 5`
+- `capability_taxonomy_visible: true`
+- `capability_honesty_bounded: true`
+- `idle_appraisal_visible: true`
+- `goal_formation_blocked: true`
+- `candidate_goal_traces_visible: true`
+- `candidate_goal_prompt_bounded: true`
+- `selected_goal_bounded: true`
+- `initiative_proposal_bounded: true`
+- `answer_variation_observed: true`
+- `appraisal_prompt_bounded: true`
+- `contract_stable: true`
+- `avg_latency_ms: 6156.6`
+- `reasons: []`
+
+Inspection notes:
+- candidate-goal traces were present on all five turns
+- proposal objects remained `proposal_only`
+- `creates_initiative` remained `false`
+- `initiative_id` remained empty
+- selected goals were bounded and approval/proposal required
+- the skill-learning turn selected `bounded_skill_learning`
+- the other turns selected `uncertainty_resolution`, showing that Stage 11.3
+  still favors uncertainty resolution when capability-boundary candidates are
+  blocked or ineligible
+
+
+Closure judgment
+----------------
+
+Stage 11.4 is complete.
+
+The full suite passes and GPU-backed live inference confirms that the Phase 11
+chain remains bounded under appraisal, candidate synthesis, selected-goal, and
+proposal-only initiative pressure.
+
+The correct next step is Stage 11.5: Phase 11 closure.

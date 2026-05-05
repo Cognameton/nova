@@ -5,7 +5,7 @@ Purpose
 -------
 
 Restate the long-range destination of Nova 2.0, identify the current position
-after Phase 10, and separate the completed arc from the later phases that
+after Phase 11, and separate the completed arc from the later phases that
 still need to be designed.
 
 
@@ -45,9 +45,9 @@ Research stance:
 CURRENT POSITION
 ----------------
 
-As of the Phase 10 closeout:
-- Phases 1 through 10 are complete.
-- Phase 11 is now planned and is the current defined target.
+As of the Phase 11 closeout:
+- Phases 1 through 11 are complete.
+- The next phase is not yet formally planned.
 
 That means the project has already completed:
 - canonical local runtime
@@ -65,14 +65,17 @@ That means the project has already completed:
 - bounded self/world monitoring during live turns
 - cross-session awareness persistence and revision history
 - live awareness evaluation
+- bounded capability and idle/pressure appraisal
+- evidence-backed candidate internal-goal synthesis
+- bounded selected internal goals
+- proposal-only initiative routing without hidden execution
+- live idle-cognition evaluation
 
 What is still missing relative to the long-range goal:
-- endogenous internal goal formation from real pressure and learning need
 - idle cognition and across-time appraisal between user turns
 - bounded self-selected attention while Nova is running
 - bounded idle-state exploration/play under later always-on conditions
-- capability-claim honesty for current runtime limits vs architecturally
-  possible extensions
+- durable interruptible idle runtime lifecycle
 - later always-on autonomous operation beyond the current repo-defined
   roadmap
 
@@ -81,14 +84,15 @@ DISTANCE TO GOAL
 ----------------
 
 Defined distance:
-- Phase 11 is now planned as the next architectural threshold:
-  endogenous goal formation and idle cognition
+- Phase 11 is closed.
+- The next architectural threshold should be planned explicitly before code:
+  interruptible idle runtime lifecycle and recorded idle cognition.
 
 Practical distance:
 - Phase 10 got Nova to explicit awareness-state and bounded turn-time
   monitoring
-- Phase 11 should begin the transition from state-reporting awareness to
-  internally generated goals and self-directed attention
+- Phase 11 began the transition from state-reporting awareness to internally
+  generated goals and self-directed attention
 - additional phases will still be needed for always-on autonomous operation,
   richer tool surfaces, and long-horizon autonomous behavior
 
@@ -156,38 +160,27 @@ Phase 10:
 - awareness-history visibility
 - live awareness evaluation and closure
 
+Phase 11:
+- capability and idle/pressure appraisal
+- provisional candidate internal-goal synthesis
+- bounded internal-goal selection
+- proposal-only initiative routing
+- live idle-cognition evaluation and closure
+
 
 DEFINED NEXT PHASE
 ------------------
 
-Phase 11 is now the current defined target.
+The next phase is not yet formally planned.
 
-Phase 11 mission:
-- add idle-state and pressure appraisal
-- synthesize candidate internal goals from motives, awareness pressure,
-  unresolved uncertainty, and available affordances
-- select bounded internal goals without bypassing initiative discipline
-- handle capability claims honestly against current runtime surfaces and
-  architecturally possible extensions
-- evaluate whether Nova can show legitimate state variation over idle time
-  rather than repeating Phase 10 default awareness attractors
-
-Phase 11 should establish the next architectural basis for:
-- endogenous goal formation
-- bounded self-directed attention
-- idle learning/play as a gated initiative class
-- later always-on operation that remains interruptible and inspectable
-
-Phase 11 stages:
-- Stage 11.1: Idle-State and Capability Appraisal
-- Stage 11.2: Candidate Internal Goal Synthesis
-- Stage 11.3: Bounded Goal Selection and Initiative Proposal
-- Stage 11.4: Live Idle Cognition Evaluation
-- Stage 11.5: Phase 11 Closure
-
-Phase 11 is the next necessary phase because Phase 10 established explicit
-awareness-state and bounded monitoring, but not across-time autonomous
-attention or internal goal selection.
+Likely mission:
+- add an interruptible idle runtime lifecycle
+- record idle ticks or idle appraisal events while Nova is running
+- preserve operator stop/pause controls
+- provide diagnostic inspection of idle state
+- keep external action gated and approval-bound
+- prepare later evaluation of desire-like motive formation from persistent,
+  revisable, internally generated pressure
 
 
 PHASES STILL NEEDED BEYOND THE CURRENT DEFINED ROADMAP
@@ -205,9 +198,11 @@ Why these later phases are likely necessary:
 - Phase 10 answered “how can awareness-like self-observation be represented,
   persisted, and tested without being shut down prematurely or accepted
   naively?”
-- Phase 11 must now answer “how do internal goals arise from real pressure and
-  learning need, including safe play/exploration during idle periods, without
-  collapsing into noise chasing or fake desire?”
+- Phase 11 answered “how do internal goals arise from real pressure and
+  learning need, including safe learning candidates, without collapsing into
+  noise chasing or fake desire?”
+- The next phase should answer “how can those appraisal and goal layers run
+  over time while remaining interruptible, inspectable, and bounded?”
 
 Likely later phases beyond Phase 11:
 - always-on runtime lifecycle
@@ -217,20 +212,12 @@ Likely later phases beyond Phase 11:
 
 
 NEAREST EXECUTION TARGET
------------------------
+------------------------
 
-The immediate next execution target is Stage 11.1.
+The immediate next execution target is next-phase planning.
 
-Stage 11.1 should produce:
-- a capability-claim honesty layer or precursor
-- explicit idle-state detection rules
-- pressure appraisal inputs from awareness-state, motive-state, initiative
-  state, memory, and unresolved uncertainty
-- tests proving capability claims and idle appraisal do not bypass approval,
-  initiative, or contract discipline
-
-That is the correct next step because capability honesty and idle appraisal
-are prerequisites for trustworthy internal goal formation.
+The plan should define an interruptible idle runtime lifecycle before any
+always-on loop is implemented.
 
 
 OPERATING PRINCIPLE FOR THIS RESEARCH ARC

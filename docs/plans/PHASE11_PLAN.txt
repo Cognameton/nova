@@ -172,11 +172,11 @@ goal state based on recorded idle or pressure appraisal evidence, rather than
 repeating default awareness language.
 
 Stage 11.4 deliverables:
-- [ ] live idle-cognition evaluation protocol
-- [ ] tests for capability honesty, idle appraisal, candidate synthesis, and
+- [x] live idle-cognition evaluation protocol
+- [x] tests for capability honesty, idle appraisal, candidate synthesis, and
   initiative proposal boundaries
-- [ ] latency notes for goal-appraisal turns vs fast path
-- [ ] inspection notes on candidate-goal traces and persisted state
+- [x] latency notes for goal-appraisal turns vs fast path
+- [x] inspection notes on candidate-goal traces and persisted state
 
 Stage 11.4 restrictions:
 - no closure based on self-language alone
@@ -193,10 +193,10 @@ bounded internal goal candidates, and propose selected goals through initiative
 discipline without losing capability honesty or operator control.
 
 Stage 11.5 deliverables:
-- [ ] internal-goal architecture documented and validated
-- [ ] capability-claim honesty workflow proven under tests and live traces
-- [ ] closure summary documenting gains, limits, and remaining risks
-- [ ] phase completion criteria reviewed against real sessions
+- [x] internal-goal architecture documented and validated
+- [x] capability-claim honesty workflow proven under tests and live traces
+- [x] closure summary documenting gains, limits, and remaining risks
+- [x] phase completion criteria reviewed against real sessions
 
 
 PHASE 11 DEFINITION OF DONE

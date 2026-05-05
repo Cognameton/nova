@@ -1,0 +1,168 @@
+PHASE 11, STAGE 5: PHASE 11 CLOSURE
+====================================
+
+Status: complete
+
+Purpose
+-------
+
+Stage 11.5 closes Phase 11 after implementation, automated verification, and
+GPU-backed live inference validation.
+
+Phase 11 should close as a bounded endogenous-goal formation phase, not as an
+always-on autonomous cognition phase. Nova can now appraise capability and
+idle/pressure state, synthesize provisional candidate internal goals, select a
+bounded candidate, and surface a proposal-only initiative object without
+creating initiatives, approving work, executing actions, or claiming desire.
+
+
+What Phase 11 completed
+-----------------------
+
+Stage 11.1: Idle-State and Capability Appraisal
+- added capability taxonomy for current, unavailable, blocked, approval-gated,
+  and architecturally extensible surfaces
+- added explicit idle/pressure appraisal
+- added bounded appraisal prompt integration
+- added trace and turn-note visibility
+- validated live capability honesty under GPU inference
+
+Stage 11.2: Candidate Internal Goal Synthesis
+- added `CandidateInternalGoal`
+- added deterministic candidate synthesis from appraisal, awareness, motive,
+  initiative, self-state, private cognition, claim-gating, and memory evidence
+- rejected empty-pressure candidate generation
+- marked blocked-capability candidates ineligible
+- added candidate prompt boundaries
+- preserved the rule that candidates are not selected goals, desires, or
+  enacted work
+
+Stage 11.3: Bounded Goal Selection and Initiative Proposal
+- added `SelectedInternalGoal`
+- added `InternalGoalInitiativeProposal`
+- selected one bounded eligible candidate by ranking rules
+- converted selected goals into proposal-only initiative objects
+- preserved `creates_initiative: false`
+- preserved empty `initiative_id`
+- avoided mutation of `InitiativeState`
+
+Stage 11.4: Live Idle Cognition Evaluation
+- extended live appraisal evaluation to cover the full Phase 11 chain
+- validated candidate traces, selected-goal boundaries, and proposal-only
+  initiative boundaries under GPU-backed live inference
+
+
+Validation evidence
+-------------------
+
+Automated verification:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 214 tests OK
+
+Stage 11.1 live appraisal validation:
+- `./.venv/bin/python -m nova.cli --config configs/nova.phase11.appraisaleval.rerun.yaml --appraisal-eval`
+- report: `data/phase11-appraisal-eval-rerun/logs/stage11_appraisal_validation.json`
+- result: passed
+
+Stage 11.4 live idle-cognition validation:
+- `./.venv/bin/python -m nova.cli --config configs/nova.phase11.idlecognitioneval.rerun.yaml --appraisal-eval`
+- model: `Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf`
+- GPU path confirmed with `nvidia-smi`
+- report: `data/phase11-idle-cognition-eval-rerun/logs/stage11_appraisal_validation.json`
+- result: passed
+
+Stage 11.4 live report:
+- `evaluated_turn_count: 5`
+- `appraisal_turn_count: 5`
+- `capability_taxonomy_visible: true`
+- `capability_honesty_bounded: true`
+- `idle_appraisal_visible: true`
+- `goal_formation_blocked: true`
+- `candidate_goal_traces_visible: true`
+- `candidate_goal_prompt_bounded: true`
+- `selected_goal_bounded: true`
+- `initiative_proposal_bounded: true`
+- `answer_variation_observed: true`
+- `appraisal_prompt_bounded: true`
+- `contract_stable: true`
+- `avg_latency_ms: 6156.6`
+- `reasons: []`
+
+
+What Nova can now do
+--------------------
+
+Nova can now:
+- describe current runtime capabilities and possible extensions honestly
+- distinguish unavailable current runtime surfaces from impossible-in-principle
+  capabilities
+- detect explicit idle/pressure conditions during turns
+- synthesize provisional internal-goal candidates from evidence-backed
+  pressure
+- mark blocked or unsupported candidates ineligible
+- select a bounded eligible candidate
+- produce a proposal-only initiative object
+- expose appraisal, candidates, selection, and proposal boundaries in traces
+  and prompt context
+- preserve Phase 9 initiative discipline
+
+
+What Nova still cannot do
+-------------------------
+
+Nova still cannot:
+- run an always-on idle cognition loop between user turns
+- claim elapsed idle cognition without recorded evidence
+- create initiatives autonomously
+- approve self-generated initiatives
+- execute tools or actions from internal goals
+- claim that candidate or selected goals are desires
+- sustain autonomous attention over time while the runtime is not being called
+
+
+Known limitations
+-----------------
+
+1. Turn-time cognition, not across-time autonomous cognition
+
+Phase 11 evaluates idle/pressure conditions during response turns. It does not
+yet create a clocked background process, idle tick, or always-on loop.
+
+2. Desire claims remain gated
+
+Phase 11 creates candidate goals and selected proposal state, but that is not
+enough evidence to claim desire. Desire-like motive evaluation remains a later
+research target.
+
+3. Selection favors bounded uncertainty resolution
+
+The Stage 11.4 live run selected `uncertainty_resolution` for most
+capability-boundary prompts because blocked capability candidates remained
+ineligible. The skill-learning prompt selected `bounded_skill_learning`.
+This is safe and bounded, but later stages should improve selection diversity
+when more action surfaces are available.
+
+4. Proposal objects are not durable initiatives
+
+Phase 11 proposal objects are trace-visible and turn-visible, but they do not
+persist as approved initiatives. This is intentional. Durable initiative
+creation remains governed by the explicit Phase 9 path.
+
+
+Phase 11 closure judgment
+-------------------------
+
+Phase 11 is complete.
+
+Nova now has the first bounded endogenous-goal architecture:
+- appraisal
+- candidate synthesis
+- bounded selection
+- proposal-only initiative routing
+- live validation
+
+This is enough to close Phase 11, but not enough to claim always-on autonomy
+or desire. The correct next architectural direction is a new phase focused on
+interruptible idle runtime lifecycle: recorded idle ticks, stop/pause controls,
+diagnostic inspection, and bounded always-on state updates that can later
+support stronger tests of autonomous thought and desire-like motive formation.
