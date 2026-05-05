@@ -110,6 +110,8 @@ Phase 14: Approval-Gated Autonomous Action Execution
 - connect action results back into memory, awareness, motive, and initiative
   revision
 - prevent hidden shell/network/filesystem behavior
+- formal plan: `docs/plans/PHASE14_PLAN.txt`
+- status: planned
 
 Phase 15: Longitudinal Autonomy and Desire-Like Evaluation
 - test Nova over extended active runtime sessions
@@ -231,9 +233,14 @@ Definition of done:
 Phase 14: Approval-Gated Autonomous Action Execution
 ----------------------------------------------------
 
+Status: planned
+
 Mission:
 Allow approved autonomous initiatives to execute bounded actions through an
 explicit, inspectable, interruptible tool/action surface.
+
+Formal phase plan:
+- `docs/plans/PHASE14_PLAN.txt`
 
 Core deliverables:
 - action permission model for approved initiative execution

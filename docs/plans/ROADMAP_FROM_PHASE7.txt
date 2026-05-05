@@ -177,6 +177,7 @@ Phases 12 and 13 are complete.
 The next phase is Phase 14: Approval-Gated Autonomous Action Execution.
 
 See:
+- `docs/plans/PHASE14_PLAN.txt`
 - `docs/plans/PHASE12_PLAN.txt`
 - `docs/plans/ROADMAP_PHASE12_TO_END.txt`
 

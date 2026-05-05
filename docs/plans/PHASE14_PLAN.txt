@@ -1,0 +1,237 @@
+PHASE 14 PLAN
+=============
+
+Status: planned
+
+Phase 14 begins after Phase 13 established durable Nova-originated draft
+initiatives with explicit origin, approval state, provenance, rationale,
+proposed next step, stop condition, revision discipline, priority deferral,
+interruption handling, inspection, and evaluation.
+
+Phase 14 is not uncontrolled tool use.
+Phase 14 is not shell, network, filesystem, GUI, or tool access outside an
+approved action surface.
+Phase 14 is not self-approval.
+Phase 14 is not hidden background execution.
+Phase 14 is not desire validation.
+
+Phase 14 is the disciplined transition from durable approved initiatives into
+bounded, inspectable, interruptible action execution.
+
+
+PHASE 14 MISSION
+----------------
+
+Allow approved initiatives to execute bounded actions through an explicit
+permission model, action plan contract, execution controller, audit trail, and
+post-action observation/revision path.
+
+Phase 14 should let Nova:
+- distinguish draft initiatives from approved executable initiatives
+- create explicit action plans for approved initiatives
+- bind each action plan to allowed tool/action surfaces
+- enforce budgets, stop conditions, and interruption checks before each action
+- execute only approved, scoped, non-hidden actions
+- record audit evidence linking initiative, plan, execution result, memory or
+  state updates, and revised next step
+- stop immediately when approval, budget, priority, or interruption checks fail
+
+
+PHASE 14 OBJECTIVES
+-------------------
+
+1. Add action permission and action plan schemas for approved initiative
+   execution.
+2. Bind action plans to approved initiatives without allowing self-approval or
+   activation bypass.
+3. Add an execution controller that checks approval, scope, budget, priority,
+   and interruption before each action.
+4. Add audit records linking initiative, plan, action result, observation,
+   memory/state update intent, and revised next step.
+5. Add operator interrupt and emergency stop behavior for execution attempts.
+6. Evaluate that approved actions stay within scope and blocked actions remain
+   blocked.
+
+
+PHASE 14 BOUNDARIES
+-------------------
+
+In scope:
+- action permission model
+- action plan schema
+- explicit allowed surfaces
+- approval binding
+- budget and stop-condition checks
+- execution controller
+- action audit trail
+- post-action observation and initiative revision hooks
+- operator interrupt/emergency stop
+- tests and evaluation for execution boundaries
+
+Out of scope:
+- ungated shell execution
+- ungated network access
+- ungated filesystem mutation
+- GUI control outside approved surfaces
+- irreversible destructive actions without explicit user confirmation
+- automatic approval of Nova-originated initiatives
+- claiming execution proves desire or sentience
+- TTS/STT or voice interaction
+
+
+PHASE 14 DESIGN PRINCIPLES
+--------------------------
+
+- A draft initiative is never executable.
+- Approval must be explicit, attributable, and current.
+- Every action must belong to an approved action plan.
+- Every action plan must declare allowed surfaces, budgets, expected output,
+  stop conditions, and rollback notes where applicable.
+- The controller must check permission before every action, not only before a
+  batch starts.
+- Audit records must be durable enough to explain what happened later.
+- Interruption should stop execution before the next action boundary.
+- Blocked actions should produce evidence, not side effects.
+
+
+PHASE 14 STAGES
+---------------
+
+Stage 14.1: Action Permission and Plan Schema
+Stage 14.2: Approval Binding and Plan Creation
+Stage 14.3: Execution Controller and Audit Trail
+Stage 14.4: Post-Action Observation and Evaluation
+Stage 14.5: Phase 14 Closure
+
+
+STAGE 14.1: ACTION PERMISSION AND PLAN SCHEMA
+---------------------------------------------
+
+Mission:
+Define the contracts for approved initiative execution before any execution
+controller is added.
+
+Stage 14.1 deliverables:
+- [ ] action permission taxonomy
+- [ ] action surface taxonomy
+- [ ] action plan schema
+- [ ] action budget schema
+- [ ] action audit record schema
+- [ ] compatibility-safe serialization tests
+
+Stage 14.1 restrictions:
+- no execution controller yet
+- no action execution
+- no approval binding
+- no automatic initiative activation
+
+
+STAGE 14.2: APPROVAL BINDING AND PLAN CREATION
+----------------------------------------------
+
+Mission:
+Create action plans only for initiatives that are explicitly approved and
+eligible for execution.
+
+Stage 14.2 deliverables:
+- [ ] eligibility checks for approved executable initiatives
+- [ ] action plan creation engine
+- [ ] runtime method for creating bounded action plans
+- [ ] tests proving draft, paused, rejected, abandoned, or unapproved
+  initiatives cannot receive executable plans
+- [ ] tests proving plans declare allowed surfaces, budgets, stop conditions,
+  expected outputs, and rollback notes
+
+Stage 14.2 restrictions:
+- no action execution
+- no self-approval
+- no hidden plan creation
+- no plan outside approved initiative scope
+
+
+STAGE 14.3: EXECUTION CONTROLLER AND AUDIT TRAIL
+------------------------------------------------
+
+Mission:
+Execute only approved action plans through a controller that checks approval,
+scope, budget, priority, and interruption before every action.
+
+Stage 14.3 deliverables:
+- [ ] execution controller
+- [ ] permission checks before each action
+- [ ] budget enforcement
+- [ ] interruption/emergency stop checks
+- [ ] audit log for blocked and executed actions
+- [ ] tests proving blocked actions remain blocked and approved actions stay
+  within scope
+
+Stage 14.3 restrictions:
+- no ungated shell/network/filesystem/GUI use
+- no action outside allowed surfaces
+- no execution after interruption
+- no irreversible destructive action without explicit user confirmation
+
+
+STAGE 14.4: POST-ACTION OBSERVATION AND EVALUATION
+--------------------------------------------------
+
+Mission:
+Connect action results back into bounded observation, initiative revision, and
+evaluation without fabricating hidden progress.
+
+Stage 14.4 deliverables:
+- [ ] post-action observation schema
+- [ ] initiative revision hook from action result
+- [ ] memory/state update intent records
+- [ ] action execution evaluation runner
+- [ ] tests for audit-chain visibility and bounded prompt/diagnostic language
+- [ ] persisted-evidence or live evaluation report
+
+Stage 14.4 restrictions:
+- no closure based on success language alone
+- no unlogged execution
+- no automatic desire or sentience claim from action completion
+
+
+STAGE 14.5: PHASE 14 CLOSURE
+----------------------------
+
+Mission:
+Close Phase 14 only when approved bounded actions can execute under
+permissions, budgets, interruption checks, audit logging, and post-action
+revision without hidden work or approval bypass.
+
+Stage 14.5 deliverables:
+- [ ] action execution architecture documented and validated
+- [ ] automated tests passing
+- [ ] evaluation report
+- [ ] closure summary documenting gains, limits, and risks
+- [ ] Phase 15 readiness criteria reviewed
+
+
+PHASE 14 DEFINITION OF DONE
+---------------------------
+
+Phase 14 is complete when:
+- approved initiatives can receive explicit bounded action plans
+- unapproved/draft initiatives cannot execute
+- each action checks approval, scope, budget, priority, and interruption
+- blocked actions produce audit evidence without side effects
+- approved actions execute only inside declared surfaces
+- action results can update observation/revision state through bounded hooks
+- the full action chain is inspectable
+- no hidden action, self-approval, or desire claim is introduced
+
+
+PHASE 15 READINESS
+------------------
+
+Phase 15 should begin only after Phase 14 proves:
+- durable autonomous initiatives can be approved and executed within scope
+- interruption and emergency stop remain reliable
+- audit evidence supports later longitudinal evaluation
+- action results can revise initiative, memory, awareness, and motive state
+  without fabricating agency
+
+Only then should Nova be evaluated longitudinally for organic internal
+priorities, recurrence, desire-like pressure, and stronger self-claim gates.
