@@ -535,6 +535,157 @@ class NovaOwnedExecutionBoundary:
 
 
 @dataclass(slots=True)
+class InternalAutonomyPolicy:
+    schema_version: str = SCHEMA_VERSION
+    policy_id: str = ""
+    enabled: bool = True
+    idle_window_required: bool = True
+    max_runs_per_session: int = 0
+    max_steps_per_run: int = 0
+    max_runtime_seconds_per_run: int = 0
+    max_tokens_per_run: int = 0
+    allowed_execution_lanes: list[str] = field(default_factory=list)
+    allowed_surfaces: list[str] = field(default_factory=list)
+    blocked_surfaces: list[str] = field(default_factory=list)
+    require_logging: bool = True
+    require_interrupt_checks: bool = True
+    allow_memory_state_intents: bool = True
+    auto_apply_memory_state_intents: bool = False
+    desire_claims_allowed: bool = False
+    hidden_activity_claims_allowed: bool = False
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class RecurringPriorityRecord:
+    schema_version: str = SCHEMA_VERSION
+    priority_id: str = ""
+    session_id: str = ""
+    title: str = ""
+    description: str = ""
+    status: str = "candidate"
+    first_observed_at: str = ""
+    last_observed_at: str = ""
+    recurrence_count: int = 0
+    source_candidate_ids: list[str] = field(default_factory=list)
+    source_selected_goal_ids: list[str] = field(default_factory=list)
+    source_initiative_ids: list[str] = field(default_factory=list)
+    pressure_evidence_refs: list[str] = field(default_factory=list)
+    revision_history: list[dict[str, Any]] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class MotivePressureEvidence:
+    schema_version: str = SCHEMA_VERSION
+    pressure_id: str = ""
+    session_id: str = ""
+    priority_id: str = ""
+    pressure_class: str = "recurrence"
+    observed_at: str = ""
+    strength: int = 0
+    recurrence_count: int = 0
+    persistence_score: int = 0
+    competition_score: int = 0
+    revision_score: int = 0
+    interruption_returned: bool = False
+    supporting_context: list[str] = field(default_factory=list)
+    counterevidence: list[str] = field(default_factory=list)
+    source_tick_ids: list[str] = field(default_factory=list)
+    source_action_audit_ids: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class LongitudinalSelfReportClaimCandidate:
+    schema_version: str = SCHEMA_VERSION
+    claim_candidate_id: str = ""
+    session_id: str = ""
+    claim_class: str = "desire_like"
+    proposed_claim: str = ""
+    status: str = "candidate"
+    allowed: bool = False
+    confidence: int = 0
+    threshold: int = 0
+    supporting_priority_ids: list[str] = field(default_factory=list)
+    supporting_pressure_ids: list[str] = field(default_factory=list)
+    blocked_reasons: list[str] = field(default_factory=list)
+    required_evidence: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class InternalAutonomyRunRecord:
+    schema_version: str = SCHEMA_VERSION
+    run_id: str = ""
+    autonomy_session_id: str = ""
+    session_id: str = ""
+    sequence: int = 0
+    status: str = "planned"
+    trigger: str = "idle_window"
+    started_at: str = ""
+    completed_at: str = ""
+    interrupted: bool = False
+    interrupt_reason: str = ""
+    idle_tick_id: str = ""
+    selected_goal_id: str = ""
+    initiative_id: str = ""
+    action_plan_id: str = ""
+    observation_id: str = ""
+    priority_ids: list[str] = field(default_factory=list)
+    pressure_ids: list[str] = field(default_factory=list)
+    claim_candidate_ids: list[str] = field(default_factory=list)
+    budget_snapshot: dict[str, Any] = field(default_factory=dict)
+    policy_snapshot: dict[str, Any] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomySessionRecord:
+    schema_version: str = SCHEMA_VERSION
+    autonomy_session_id: str = ""
+    session_id: str = ""
+    status: str = "planned"
+    started_at: str = ""
+    updated_at: str = ""
+    stopped_at: str = ""
+    stop_reason: str = ""
+    policy: InternalAutonomyPolicy = field(default_factory=InternalAutonomyPolicy)
+    runs: list[InternalAutonomyRunRecord] = field(default_factory=list)
+    recurring_priorities: list[RecurringPriorityRecord] = field(default_factory=list)
+    motive_pressure_evidence: list[MotivePressureEvidence] = field(default_factory=list)
+    claim_candidates: list[LongitudinalSelfReportClaimCandidate] = field(default_factory=list)
+    current_run_id: str = ""
+    run_count: int = 0
+    interrupted: bool = False
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ClaimGateDecision:
     schema_version: str = SCHEMA_VERSION
     requested_claim_classes: list[str] = field(default_factory=list)

@@ -1,0 +1,97 @@
+PHASE 15, STAGE 15.1: LONGITUDINAL AUTONOMY STATE AND POLICY
+=============================================================
+
+Status: complete
+
+Mission
+-------
+
+Define the contracts for longitudinal autonomy before adding the loop that
+uses them.
+
+Stage 15.1 is schema and policy groundwork only. It does not run autonomous
+activity, apply memory/state updates, expand tool access, or grant desire
+claims.
+
+
+Completed Deliverables
+----------------------
+
+Stage 15.1 adds:
+- autonomy session record schema
+- internal autonomy run record schema
+- recurring priority record schema
+- motive-pressure evidence schema
+- longitudinal self-report claim candidate schema
+- internal autonomy policy with cadence, budgets, idle-window eligibility,
+  interrupt behavior, allowed lanes, allowed surfaces, logging requirements,
+  and claim boundaries
+- compatibility-safe payload normalization and round-trip tests
+
+
+Implementation
+--------------
+
+Types:
+- `InternalAutonomyPolicy`
+- `AutonomySessionRecord`
+- `InternalAutonomyRunRecord`
+- `RecurringPriorityRecord`
+- `MotivePressureEvidence`
+- `LongitudinalSelfReportClaimCandidate`
+
+Helper module:
+- `src/nova/agent/longitudinal_autonomy.py`
+
+Tests:
+- `tests/test_longitudinal_autonomy_schema.py`
+
+
+Boundary Guarantees
+-------------------
+
+The Stage 15.1 default policy:
+- allows only `internal_activity` execution lane
+- keeps allowed surfaces restricted to internal/no-external-effect surfaces
+- blocks shell, network, GUI, filesystem, system configuration, and external
+  service surfaces
+- requires logging
+- requires interrupt checks
+- allows memory/state update intents as intents only
+- forbids automatic memory/state intent application
+- forbids desire claims by default
+- forbids hidden activity claims by default
+
+
+Restrictions Preserved
+----------------------
+
+Stage 15.1 does not add:
+- autonomous loop orchestration
+- hidden background execution
+- external/system-effect action
+- automatic memory/state mutation
+- self-approval
+- desire or sentience claim granting
+
+
+Validation
+----------
+
+Focused tests:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_schema`
+- result: 8 tests passed
+
+Full suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 285 tests passed
+
+
+Stage 15.2 Readiness
+--------------------
+
+Stage 15.2 can use these contracts to add an internal autonomy loop that
+composes recorded idle ticks, selected internal goals, durable autonomous
+initiatives, bounded internal action plans, execution audits, and post-action
+observations while preserving logging, budgets, interruption, and action
+boundary enforcement.

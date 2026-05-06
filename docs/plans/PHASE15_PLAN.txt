@@ -149,14 +149,20 @@ Define the contracts for longitudinal autonomy before adding the loop that
 uses them.
 
 Stage 15.1 deliverables:
-- autonomy session record schema
-- internal autonomy run record schema
-- recurring priority record schema
-- motive-pressure evidence schema
-- longitudinal self-report claim candidate schema
-- internal autonomy policy with cadence, budgets, idle-window eligibility,
+- [x] autonomy session record schema
+- [x] internal autonomy run record schema
+- [x] recurring priority record schema
+- [x] motive-pressure evidence schema
+- [x] longitudinal self-report claim candidate schema
+- [x] internal autonomy policy with cadence, budgets, idle-window eligibility,
   interrupt behavior, allowed lanes, and allowed surfaces
-- compatibility-safe serialization tests
+- [x] compatibility-safe serialization tests
+
+Stage 15.1 result:
+Completed in `src/nova/types.py`,
+`src/nova/agent/longitudinal_autonomy.py`, and
+`tests/test_longitudinal_autonomy_schema.py`. This stage defines contracts
+only; it does not add autonomous loop orchestration or state mutation.
 
 Stage 15.1 restrictions:
 - no autonomous loop orchestration yet

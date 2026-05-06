@@ -38,6 +38,21 @@ from nova.agent.initiative import (
     JsonInitiativeStateStore,
 )
 from nova.agent.idle import BoundedIdleController, IdleRuntimePromptEngine, JsonIdleRuntimeStore
+from nova.agent.longitudinal_autonomy import (
+    autonomy_session_record_from_payload,
+    claim_candidate_from_payload,
+    default_internal_autonomy_policy,
+    internal_autonomy_policy_from_payload,
+    internal_autonomy_run_from_payload,
+    motive_pressure_evidence_from_payload,
+    normalize_autonomy_session_status,
+    normalize_internal_autonomy_run_status,
+    normalize_longitudinal_claim_class,
+    normalize_longitudinal_claim_status,
+    normalize_motive_pressure_class,
+    normalize_recurring_priority_status,
+    recurring_priority_from_payload,
+)
 from nova.agent.awareness import AwarenessClassifier, AwarenessResult
 from nova.agent.boundaries import BoundaryPolicy, OperationalLatitude
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
@@ -113,8 +128,21 @@ __all__ = [
     "approval_required_for_action",
     "default_nova_owned_execution_boundary",
     "default_tool_registry",
+    "autonomy_session_record_from_payload",
+    "claim_candidate_from_payload",
+    "default_internal_autonomy_policy",
     "execution_boundary_from_payload",
+    "internal_autonomy_policy_from_payload",
+    "internal_autonomy_run_from_payload",
+    "motive_pressure_evidence_from_payload",
     "normalize_action_risk_class",
     "normalize_action_surface",
+    "normalize_autonomy_session_status",
     "normalize_execution_lane",
+    "normalize_internal_autonomy_run_status",
+    "normalize_longitudinal_claim_class",
+    "normalize_longitudinal_claim_status",
+    "normalize_motive_pressure_class",
+    "normalize_recurring_priority_status",
+    "recurring_priority_from_payload",
 ]
