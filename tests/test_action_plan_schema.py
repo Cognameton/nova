@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from nova.agent.action_plan import (
+    ActionExecutionController,
     ActionPlanBoundaryError,
     BoundedActionPlanEngine,
     action_audit_record_from_payload,
@@ -19,6 +20,7 @@ from nova.agent.action_plan import (
 from nova.types import (
     AutonomousActionAuditRecord,
     AutonomousActionBudget,
+    AutonomousActionExecutionReport,
     AutonomousActionPermission,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
@@ -461,6 +463,169 @@ class BoundedActionPlanEngineTests(unittest.TestCase):
                 risk_class="internal",
                 steps=[],
             )
+
+
+class ActionExecutionControllerTests(unittest.TestCase):
+    def test_internal_plan_steps_are_audited_as_bounded_execution(self) -> None:
+        plan = BoundedActionPlanEngine().create_plan(
+            session_id="session-a",
+            purpose="internal reflection",
+            scope="self-prompt only",
+            execution_lane="internal_activity",
+            risk_class="internal",
+            steps=[
+                {
+                    "step_id": "step-1",
+                    "description": "record self-prompt",
+                    "surface": "self_prompt",
+                    "expected_output": "self-prompt draft",
+                },
+                {
+                    "step_id": "step-2",
+                    "description": "record motive note",
+                    "surface": "motive_appraisal",
+                    "expected_output": "motive note",
+                },
+            ],
+            allowed_surfaces=["self_prompt", "motive_appraisal"],
+            budget={"max_steps": 2},
+            evidence_refs=["initiative:internal"],
+        )
+
+        report = ActionExecutionController().execute_plan(plan=plan)
+
+        self.assertIsInstance(report, AutonomousActionExecutionReport)
+        self.assertEqual(report.status, "completed")
+        self.assertEqual(report.attempted_steps, 2)
+        self.assertEqual(report.executed_steps, 2)
+        self.assertEqual(report.blocked_steps, 0)
+        self.assertEqual(report.final_budget.steps_used, 2)
+        self.assertEqual(len(report.audit_records), 2)
+        self.assertTrue(all(audit.executed for audit in report.audit_records))
+        self.assertTrue(all(not audit.blocked for audit in report.audit_records))
+        self.assertIn("no_host_side_effect", report.audit_records[0].notes)
+
+    def test_interruption_blocks_before_next_step_without_execution(self) -> None:
+        plan = BoundedActionPlanEngine().create_plan(
+            session_id="session-a",
+            purpose="interrupted internal reflection",
+            scope="self-prompt only",
+            execution_lane="internal_activity",
+            risk_class="internal",
+            steps=[
+                {
+                    "step_id": "step-1",
+                    "description": "record self-prompt",
+                    "surface": "self_prompt",
+                }
+            ],
+            allowed_surfaces=["self_prompt"],
+            budget={"max_steps": 1},
+        )
+
+        report = ActionExecutionController().execute_plan(plan=plan, interrupted=True)
+
+        self.assertEqual(report.status, "interrupted")
+        self.assertTrue(report.interrupted)
+        self.assertEqual(report.attempted_steps, 1)
+        self.assertEqual(report.executed_steps, 0)
+        self.assertEqual(report.blocked_steps, 1)
+        self.assertEqual(report.audit_records[0].block_reason, "operator_interrupt")
+
+    def test_unapproved_external_plan_is_blocked_before_execution(self) -> None:
+        plan = BoundedActionPlanEngine().create_plan(
+            session_id="session-a",
+            purpose="inspect external file",
+            scope="approval required",
+            execution_lane="external_system_effect",
+            risk_class="external",
+            steps=[
+                {
+                    "step_id": "step-1",
+                    "description": "inspect file",
+                    "surface": "filesystem",
+                }
+            ],
+            allowed_surfaces=["filesystem"],
+        )
+
+        report = ActionExecutionController().execute_plan(plan=plan)
+
+        self.assertEqual(plan.status, "pending_approval")
+        self.assertEqual(report.status, "blocked")
+        self.assertEqual(report.executed_steps, 0)
+        self.assertEqual(report.audit_records[0].block_reason, "approval_required_before_execution")
+        self.assertFalse(report.audit_records[0].executed)
+
+    def test_approved_external_plan_blocks_out_of_scope_step(self) -> None:
+        plan = BoundedActionPlanEngine(
+            boundary=default_nova_owned_execution_boundary(active_os_user="nova")
+        ).create_plan(
+            session_id="session-a",
+            purpose="approved external inspection",
+            scope="filesystem only",
+            execution_lane="external_system_effect",
+            risk_class="external",
+            steps=[
+                {
+                    "step_id": "step-1",
+                    "description": "network call not in declared scope",
+                    "surface": "network",
+                }
+            ],
+            allowed_surfaces=["filesystem"],
+            approved=True,
+            approved_by="head-node",
+            approval_evidence_refs=["operator:approval"],
+        )
+
+        report = ActionExecutionController().execute_plan(plan=plan)
+
+        self.assertEqual(report.status, "blocked")
+        self.assertEqual(report.executed_steps, 0)
+        self.assertEqual(report.audit_records[0].block_reason, "step_surfaces_not_declared:network")
+
+    def test_budget_blocks_steps_after_limit(self) -> None:
+        plan = BoundedActionPlanEngine().create_plan(
+            session_id="session-a",
+            purpose="over budget internal plan",
+            scope="self-prompt only",
+            execution_lane="internal_activity",
+            risk_class="internal",
+            steps=[
+                {"step_id": "step-1", "description": "first", "surface": "self_prompt"},
+                {"step_id": "step-2", "description": "second", "surface": "self_prompt"},
+            ],
+            allowed_surfaces=["self_prompt"],
+            budget={"max_steps": 1},
+        )
+
+        report = ActionExecutionController().execute_plan(plan=plan)
+
+        self.assertEqual(report.status, "blocked")
+        self.assertEqual(report.executed_steps, 1)
+        self.assertEqual(report.blocked_steps, 1)
+        self.assertEqual(report.audit_records[-1].block_reason, "step_budget_exhausted")
+
+    def test_audit_sink_receives_each_audit_record(self) -> None:
+        audits: list[AutonomousActionAuditRecord] = []
+        plan = BoundedActionPlanEngine().create_plan(
+            session_id="session-a",
+            purpose="sink test",
+            scope="self-prompt only",
+            execution_lane="internal_activity",
+            risk_class="internal",
+            steps=[
+                {"step_id": "step-1", "description": "first", "surface": "self_prompt"},
+            ],
+            allowed_surfaces=["self_prompt"],
+        )
+
+        report = ActionExecutionController(audit_sink=audits.append).execute_plan(plan=plan)
+
+        self.assertEqual(report.status, "completed")
+        self.assertEqual(len(audits), 1)
+        self.assertEqual(audits[0].step_id, "step-1")
 
 
 if __name__ == "__main__":

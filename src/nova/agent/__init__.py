@@ -12,6 +12,7 @@ from nova.agent.action import (
 from nova.agent.action_plan import (
     ACTION_RISK_CLASSES,
     ACTION_SURFACES,
+    ActionExecutionController,
     ActionPlanBoundaryError,
     BoundedActionPlanEngine,
     EXECUTION_LANES,
@@ -63,6 +64,7 @@ __all__ = [
     "ActionProposalEvaluation",
     "ACTION_RISK_CLASSES",
     "ACTION_SURFACES",
+    "ActionExecutionController",
     "ActionPlanBoundaryError",
     "EXECUTION_LANES",
     "AutonomousInitiativeDraftError",

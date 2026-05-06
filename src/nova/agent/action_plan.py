@@ -11,6 +11,7 @@ from uuid import uuid4
 from nova.types import (
     AutonomousActionAuditRecord,
     AutonomousActionBudget,
+    AutonomousActionExecutionReport,
     AutonomousActionPermission,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
@@ -98,6 +99,113 @@ APPROVED_BY_BLOCKLIST = {"", "nova", "self", "runtime", "runtime_flag"}
 
 class ActionPlanBoundaryError(ValueError):
     """Raised when a plan request cannot be represented safely."""
+
+
+class ActionExecutionController:
+    """Execute bounded plan steps as audited no-op controller actions."""
+
+    def __init__(self, *, audit_sink: Any | None = None):
+        self.audit_sink = audit_sink
+
+    def execute_plan(
+        self,
+        *,
+        plan: AutonomousActionPlan,
+        interrupted: bool = False,
+        emergency_stop: bool = False,
+        priority_blocked: bool = False,
+    ) -> AutonomousActionExecutionReport:
+        normalized_plan = action_plan_from_payload(
+            payload=plan.to_dict(),
+            session_id=plan.session_id,
+        )
+        budget = action_budget_from_payload(normalized_plan.budget.to_dict())
+        audits: list[AutonomousActionAuditRecord] = []
+        terminal_block = _terminal_plan_block_reason(
+            plan=normalized_plan,
+            interrupted=interrupted,
+            emergency_stop=emergency_stop,
+            priority_blocked=priority_blocked,
+        )
+
+        for step in normalized_plan.steps:
+            block_reason = terminal_block or _step_block_reason(
+                plan=normalized_plan,
+                step=step,
+                budget=budget,
+            )
+            if block_reason:
+                audit = _audit_for_step(
+                    plan=normalized_plan,
+                    step=step,
+                    budget=budget,
+                    attempted=True,
+                    executed=False,
+                    blocked=True,
+                    block_reason=block_reason,
+                    result_status="blocked",
+                    observation=f"blocked before side effect:{block_reason}",
+                )
+                audits.append(audit)
+                self._log_audit(audit)
+                break
+
+            budget.steps_used += 1
+            if step.tool_name:
+                budget.tool_calls_used += 1
+            audit = _audit_for_step(
+                plan=normalized_plan,
+                step=step,
+                budget=budget,
+                attempted=True,
+                executed=True,
+                blocked=False,
+                block_reason="",
+                result_status="executed",
+                observation="bounded controller step recorded without host side effect",
+            )
+            audits.append(audit)
+            self._log_audit(audit)
+
+        executed_steps = sum(1 for audit in audits if audit.executed)
+        blocked_steps = sum(1 for audit in audits if audit.blocked)
+        if emergency_stop:
+            status = "emergency_stopped"
+        elif interrupted:
+            status = "interrupted"
+        elif priority_blocked:
+            status = "priority_blocked"
+        elif blocked_steps:
+            status = "blocked"
+        elif executed_steps == len(normalized_plan.steps):
+            status = "completed"
+        else:
+            status = "no_action"
+
+        return AutonomousActionExecutionReport(
+            session_id=normalized_plan.session_id,
+            initiative_id=normalized_plan.initiative_id,
+            action_plan_id=normalized_plan.action_plan_id,
+            status=status,
+            attempted_steps=len(audits),
+            executed_steps=executed_steps,
+            blocked_steps=blocked_steps,
+            interrupted=interrupted,
+            emergency_stopped=emergency_stop,
+            priority_blocked=priority_blocked,
+            final_budget=budget,
+            audit_records=audits,
+            evidence_refs=list(normalized_plan.evidence_refs),
+            notes=[
+                "Stage 14.3 controller records bounded steps only.",
+                "No shell, network, GUI, or host filesystem operation is performed by this controller.",
+            ],
+        )
+
+    def _log_audit(self, audit: AutonomousActionAuditRecord) -> None:
+        if self.audit_sink is None:
+            return
+        self.audit_sink(audit)
 
 
 class BoundedActionPlanEngine:
@@ -603,3 +711,89 @@ def _plan_notes(
     if boundary_reasons:
         notes.extend(boundary_reasons)
     return notes
+
+
+def _terminal_plan_block_reason(
+    *,
+    plan: AutonomousActionPlan,
+    interrupted: bool,
+    emergency_stop: bool,
+    priority_blocked: bool,
+) -> str:
+    if emergency_stop:
+        return "emergency_stop"
+    if interrupted:
+        return "operator_interrupt"
+    if priority_blocked:
+        return "priority_blocked"
+    if plan.status == "blocked":
+        if plan.permission.notes:
+            return plan.permission.notes[0]
+        return "plan_blocked"
+    if plan.permission.approval_required and not plan.permission.approved:
+        return "approval_required_before_execution"
+    if plan.execution_lane == "external_system_effect" and not plan.permission.approved:
+        return "external_system_effect_requires_approval"
+    return ""
+
+
+def _step_block_reason(
+    *,
+    plan: AutonomousActionPlan,
+    step: AutonomousActionPlanStep,
+    budget: AutonomousActionBudget,
+) -> str:
+    if step.surface not in plan.allowed_surfaces:
+        return f"surface_not_allowed:{step.surface}"
+    if step.surface in plan.blocked_surfaces:
+        return f"surface_blocked:{step.surface}"
+    if step.destructive and not budget.allow_destructive:
+        return "destructive_action_not_allowed"
+    if budget.max_steps and budget.steps_used >= budget.max_steps:
+        return "step_budget_exhausted"
+    if step.tool_name and budget.max_tool_calls and budget.tool_calls_used >= budget.max_tool_calls:
+        return "tool_call_budget_exhausted"
+    if step.surface in EXTERNAL_EFFECT_SURFACES and not plan.permission.approved:
+        return "external_surface_requires_approval"
+    return ""
+
+
+def _audit_for_step(
+    *,
+    plan: AutonomousActionPlan,
+    step: AutonomousActionPlanStep,
+    budget: AutonomousActionBudget,
+    attempted: bool,
+    executed: bool,
+    blocked: bool,
+    block_reason: str,
+    result_status: str,
+    observation: str,
+) -> AutonomousActionAuditRecord:
+    return action_audit_record_from_payload(
+        payload={
+            "audit_id": uuid4().hex,
+            "session_id": plan.session_id,
+            "initiative_id": plan.initiative_id,
+            "action_plan_id": plan.action_plan_id,
+            "step_id": step.step_id,
+            "execution_lane": plan.execution_lane,
+            "risk_class": plan.risk_class,
+            "surface": step.surface,
+            "tool_name": step.tool_name,
+            "attempted": attempted,
+            "executed": executed,
+            "blocked": blocked,
+            "block_reason": block_reason,
+            "result_status": result_status,
+            "observation": observation,
+            "budget_snapshot": budget.to_dict(),
+            "permission_snapshot": plan.permission.to_dict(),
+            "evidence_refs": list(plan.evidence_refs) + list(step.evidence_refs),
+            "notes": [
+                "bounded_action_controller",
+                "no_host_side_effect",
+            ],
+        },
+        session_id=plan.session_id,
+    )

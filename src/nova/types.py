@@ -437,6 +437,28 @@ class AutonomousActionAuditRecord:
 
 
 @dataclass(slots=True)
+class AutonomousActionExecutionReport:
+    schema_version: str = SCHEMA_VERSION
+    session_id: str = ""
+    initiative_id: str = ""
+    action_plan_id: str = ""
+    status: str = "blocked"
+    attempted_steps: int = 0
+    executed_steps: int = 0
+    blocked_steps: int = 0
+    interrupted: bool = False
+    emergency_stopped: bool = False
+    priority_blocked: bool = False
+    final_budget: AutonomousActionBudget = field(default_factory=AutonomousActionBudget)
+    audit_records: list[AutonomousActionAuditRecord] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class NovaOwnedExecutionBoundary:
     schema_version: str = SCHEMA_VERSION
     expected_os_user: str = "nova"

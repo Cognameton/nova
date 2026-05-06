@@ -252,15 +252,21 @@ lane, approval requirement, scope, budget, priority, and interruption before
 every action.
 
 Stage 14.3 deliverables:
-- [ ] execution controller
-- [ ] execution lane checks before each action
-- [ ] permission checks before each action
-- [ ] budget enforcement
-- [ ] interruption/emergency stop checks
-- [ ] audit log for blocked and executed actions
-- [ ] tests proving internal actions are logged and interruptible
-- [ ] tests proving blocked actions remain blocked and approved external
+- [x] execution controller
+- [x] execution lane checks before each action
+- [x] permission checks before each action
+- [x] budget enforcement
+- [x] interruption/emergency stop checks
+- [x] audit log for blocked and executed actions
+- [x] tests proving internal actions are logged and interruptible
+- [x] tests proving blocked actions remain blocked and approved external
   actions stay within scope
+
+Stage 14.3 result:
+Completed in `src/nova/agent/action_plan.py`, `src/nova/logging/traces.py`,
+`src/nova/runtime.py`, and tests. The controller records bounded audited steps
+and blocks unsafe or out-of-scope plans before side effects. It does not add
+shell, network, GUI, or host filesystem tool execution.
 
 Stage 14.3 restrictions:
 - no ungated shell/network/filesystem/GUI use

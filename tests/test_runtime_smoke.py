@@ -570,6 +570,41 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertEqual(plan.allowed_surfaces, ["self_prompt"])
             self.assertEqual(plan.stop_conditions, ["operator_interrupt"])
 
+    def test_runtime_executes_bounded_action_plan_with_audit_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            log_dir = base / "logs"
+            runtime = build_test_runtime(data_dir=base / "data", log_dir=log_dir)
+
+            plan = runtime.create_bounded_action_plan(
+                purpose="reflect during dormancy",
+                scope="internal self-prompt only",
+                execution_lane="internal_activity",
+                risk_class="internal",
+                steps=[
+                    {
+                        "step_id": "step-1",
+                        "description": "prepare an internal self-prompt",
+                        "surface": "self_prompt",
+                        "expected_output": "logged self-prompt draft",
+                    }
+                ],
+                allowed_surfaces=["self_prompt"],
+                budget={"max_steps": 1},
+                stop_conditions=["operator_interrupt"],
+            )
+            report = runtime.execute_bounded_action_plan(plan=plan)
+            audit_payload = (
+                log_dir / "traces" / f"{report.session_id}.action-audit.jsonl"
+            ).read_text(encoding="utf-8")
+            runtime.close()
+
+            self.assertEqual(report.status, "completed")
+            self.assertEqual(report.executed_steps, 1)
+            self.assertIn('"audit"', audit_payload)
+            self.assertIn('"step_id": "step-1"', audit_payload)
+            self.assertIn('"no_host_side_effect"', audit_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

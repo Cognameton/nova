@@ -39,6 +39,7 @@ from nova.agent.action import (
     ActionProposalEngine,
 )
 from nova.agent.action_plan import (
+    ActionExecutionController,
     BoundedActionPlanEngine,
     default_nova_owned_execution_boundary,
 )
@@ -70,6 +71,7 @@ from nova.types import (
     InternalGoalInitiativeProposal,
     MotiveState,
     AutonomousActionBudget,
+    AutonomousActionExecutionReport,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
     PrivateCognitionPacket,
@@ -130,6 +132,7 @@ class NovaRuntime:
         idle_prompt_engine: IdleRuntimePromptEngine | None = None,
         tool_registry: ToolRegistry | None = None,
         action_plan_engine: BoundedActionPlanEngine | None = None,
+        action_execution_controller: ActionExecutionController | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -191,6 +194,9 @@ class NovaRuntime:
             boundary=default_nova_owned_execution_boundary(
                 nova_owned_paths=[Path(self.config.app.data_dir)]
             )
+        )
+        self.action_execution_controller = action_execution_controller or ActionExecutionController(
+            audit_sink=self._log_action_audit
         )
 
         self.session_id: str | None = None
@@ -806,6 +812,23 @@ class NovaRuntime:
             approval_evidence_refs=approval_evidence_refs,
         )
 
+    def execute_bounded_action_plan(
+        self,
+        *,
+        plan: AutonomousActionPlan,
+        interrupted: bool = False,
+        emergency_stop: bool = False,
+        priority_blocked: bool = False,
+    ) -> AutonomousActionExecutionReport:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session(session_id=plan.session_id or None)
+        return self.action_execution_controller.execute_plan(
+            plan=plan,
+            interrupted=interrupted,
+            emergency_stop=emergency_stop,
+            priority_blocked=priority_blocked,
+        )
+
     def execute_proposed_action(
         self,
         *,
@@ -956,6 +979,12 @@ class NovaRuntime:
             execution=execution.to_dict(),
         )
         return execution
+
+    def _log_action_audit(self, audit) -> None:
+        self.trace_logger.log_action_audit(
+            session_id=audit.session_id,
+            audit=audit.to_dict(),
+        )
 
     def respond(self, user_text: str) -> TurnRecord:
         if (

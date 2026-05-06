@@ -1,0 +1,80 @@
+PHASE 14 STAGE 14.3: EXECUTION CONTROLLER AND AUDIT TRAIL
+==========================================================
+
+Status: complete
+
+Stage 14.3 adds a bounded execution controller for action plans. The controller
+checks permission, scope, budget, priority, interruption, and emergency stop
+conditions before each step and writes audit records for both blocked and
+allowed steps.
+
+
+IMPLEMENTED
+-----------
+
+Execution report:
+- `AutonomousActionExecutionReport`
+
+Controller:
+- `ActionExecutionController`
+- runtime method: `NovaRuntime.execute_bounded_action_plan(...)`
+- audit logging method: `JsonlTraceLogger.log_action_audit(...)`
+
+Checks before each step:
+- plan blocked status
+- approval requirement
+- external/system-effect approval
+- allowed surface
+- blocked surface
+- destructive-action budget flag
+- step budget
+- tool-call budget
+- priority block
+- operator interruption
+- emergency stop
+
+
+EXECUTION SEMANTICS
+-------------------
+
+This stage records bounded controller steps as audited no-op actions. It does
+not run shell commands, network calls, GUI actions, or host filesystem
+operations.
+
+Internal activity can complete as a logged controller step when it stays on
+allowed internal surfaces. External/system-effect plans are blocked without
+approval, and out-of-scope approved plans are blocked before any side effect.
+
+
+FILES CHANGED
+-------------
+
+- `src/nova/types.py`
+- `src/nova/agent/action_plan.py`
+- `src/nova/agent/__init__.py`
+- `src/nova/logging/traces.py`
+- `src/nova/runtime.py`
+- `tests/test_action_plan_schema.py`
+- `tests/test_runtime_smoke.py`
+- `docs/plans/PHASE14_PLAN.txt`
+
+
+VERIFICATION
+------------
+
+- `./.venv/bin/python -m unittest tests.test_action_plan_schema tests.test_runtime_smoke`
+- `./.venv/bin/python -m unittest discover -s tests`
+
+Result: 270 tests passed.
+
+
+RESTRICTIONS PRESERVED
+----------------------
+
+- no ungated shell execution
+- no ungated network access
+- no GUI control
+- no host filesystem mutation
+- no execution outside allowed surfaces
+- no execution after interruption or emergency stop
+- no irreversible destructive action support
