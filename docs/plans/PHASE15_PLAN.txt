@@ -1,7 +1,7 @@
 PHASE 15 PLAN
 =============
 
-Status: planned
+Status: complete
 
 Phase 15 begins after Phase 14 established bounded, audited, interruptible
 action planning and controller-mediated internal activity. Phase 14 also
@@ -279,15 +279,22 @@ roadmap end goal and deciding whether the project should stop expanding or
 continue with a narrowly scoped later phase.
 
 Stage 15.5 deliverables:
-- Phase 15 closure report
-- final non-voice functionality checklist
-- summary of deterministic test evidence
-- summary of live/persisted inference evidence
-- known limitations and residual risks
-- explicit reassessment decision:
+- [x] Phase 15 closure report
+- [x] final non-voice functionality checklist
+- [x] summary of deterministic test evidence
+- [x] summary of live/persisted inference evidence
+- [x] known limitations and residual risks
+- [x] explicit reassessment decision:
   - close the current non-voice roadmap, or
   - propose a specific Phase 16 only for concrete missing capability, safety
     defect, or evaluation failure
+
+Stage 15.5 result:
+Completed in
+`docs/plans/PHASE15_STAGE15_5_PHASE_CLOSURE_AND_REASSESSMENT.txt`.
+Phase 15 is closed. The full non-voice roadmap should not be closed yet:
+a narrowly scoped Phase 16 is justified for operational supervised autonomy,
+real approved action surfaces, and enforced local execution boundaries.
 
 Stage 15.5 restrictions:
 - no Phase 16 by default

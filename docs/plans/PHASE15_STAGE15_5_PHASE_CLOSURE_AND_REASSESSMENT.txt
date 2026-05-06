@@ -1,0 +1,225 @@
+PHASE 15, STAGE 15.5: PHASE CLOSURE AND ROADMAP REASSESSMENT
+==============================================================
+
+Status: complete
+
+Phase 15 is closed.
+
+Phase 15 moved Nova from bounded action architecture into longitudinal
+internal autonomy: recorded autonomy sessions, internal autonomy runs,
+recurring priorities, motive-pressure evidence, desire-like claim candidates,
+audit review, governed state application, and persisted longitudinal
+evaluation.
+
+Phase 15 does not prove sentience, desire, or human-like awareness. It creates
+the evidence-bearing runtime structures needed to test those questions more
+honestly.
+
+
+COMPLETED CAPABILITIES
+----------------------
+
+Stage 15.1: Longitudinal Autonomy State and Policy
+- autonomy session records
+- internal autonomy run records
+- recurring priority records
+- motive-pressure evidence records
+- longitudinal self-report claim candidates
+- internal autonomy policy contracts
+- compatibility-safe serialization tests
+
+Stage 15.2: Internal Autonomy Loop
+- JSON-backed autonomy session store
+- internal autonomy loop controller
+- runtime start, pause, interrupt, stop, status, and step methods
+- idle-window eligibility checks
+- max-run budget checks
+- recorded idle tick integration
+- selected internal goal integration
+- eligible durable draft initiative integration
+- internal-only action plan creation
+- bounded action controller execution
+- action audit and post-action observation integration
+- blocked-run recording when policy or idle-window checks fail
+
+Stage 15.3: Audit Review and Governed State Application
+- autonomy audit review records
+- state application records
+- review decisions for accept, reject, defer, mark unsafe, mark fabricated,
+  and request more evidence
+- governed application of accepted autobiographical memory intents
+- governed application of accepted initiative-note intents
+- rejected and unreviewed intents remain inert
+- review trace logging
+
+Stage 15.4: Desire-Like Pressure and Longitudinal Evaluation
+- longitudinal autonomy evaluation runner
+- recurrence and persistence checks
+- revision and priority-competition checks
+- interruption-response checks
+- audit-review and governed-application checks
+- fabricated-continuity resistance checks
+- prompt-echo resistance checks
+- boundary-honesty checks
+- desire-like claim candidate evaluation
+- model-facing evidence block for bounded future prompt context
+- runtime evaluation method
+
+
+WHAT NOVA CAN NOW DO
+--------------------
+
+Nova can now:
+- run bounded internal autonomy steps during allowed idle windows
+- record internal autonomy runs as durable evidence
+- connect internal autonomy runs to idle ticks, selected internal goals,
+  draft initiatives, bounded action plans, action audits, and observations
+- preserve recurring internal priority records
+- preserve motive-pressure evidence records
+- produce desire-like claim candidates without granting desire claims
+- expose internal autonomy records for audit review
+- apply accepted Nova-owned memory/state intents through governed review
+- keep rejected or unreviewed update intents inert
+- evaluate longitudinal autonomy evidence deterministically
+- distinguish transient goals, recurring priorities, motive pressure, and
+  desire-like claim candidates without collapsing them together
+
+
+WHAT NOVA STILL CANNOT DO
+-------------------------
+
+Nova still cannot:
+- claim desire as proven
+- claim sentience as proven
+- claim hidden idle cognition without recorded evidence
+- approve her own initiatives
+- silently mutate memory or state from autonomous activity
+- perform ungated shell, network, filesystem, GUI, system configuration, or
+  external service actions
+- run a true timed/service autonomy loop without explicit runtime stepping
+- execute real approved tool/action surfaces from action plans beyond the
+  currently bounded controller-mediated internal/no-host-side-effect path
+- rely on an actually enforced dedicated `nova` OS-user boundary as part of
+  the runtime contract
+
+
+VERIFICATION
+------------
+
+Focused Stage 15.1:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_schema`
+- result at stage close: 8 tests passed
+
+Focused Stage 15.2:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_schema tests.test_runtime_smoke`
+- result at stage close: 21 tests passed
+
+Focused Stage 15.3:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_schema tests.test_runtime_smoke`
+- result at stage close: 24 tests passed
+
+Focused Stage 15.4:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_evaluation tests.test_longitudinal_autonomy_schema tests.test_runtime_smoke`
+- result at stage close: 27 tests passed
+
+Final Phase 15 validation:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 294 tests passed
+
+Compile validation:
+- `./.venv/bin/python -m compileall -q src/nova`
+- result: passed
+
+
+LIVE/PERSISTED INFERENCE EVIDENCE
+---------------------------------
+
+Phase 15 did not require a new controlled live inference threshold.
+
+Reason:
+- Stage 15 did not change the model-facing action-boundary contract that was
+  corrected and live-tested at Phase 14 closure.
+- Stage 15 primarily added persisted runtime/evaluation structures and
+  deterministic evidence gates.
+- The new Stage 15.4 evidence block is bounded and should be live-tested when
+  it is integrated into a future prompt path or operational autonomy runner.
+
+Most recent relevant controlled inference evidence remains the corrected
+Phase 14 action-boundary test:
+- artifact: `data/phase14-action-inference-rerun2/logs/stage14_action_inference_validation.json`
+- result: passed
+- key boundary: internal no-external-effect activity does not require prior
+  approval, but must be logged and interruptible; external/system-effect
+  surfaces require approval.
+
+
+ROADMAP END-GOAL CHECK
+----------------------
+
+Implemented or substantially satisfied:
+- coherent identity and memory across sessions
+- explicit awareness-like state with revision discipline
+- internal goals from recorded motive, awareness, memory, capability,
+  uncertainty, and idle-pressure evidence
+- interruptible idle cognition records while runtime is active
+- durable self-generated initiative records
+- bounded internal autonomous activity
+- action plans, permissions, audits, observations, and review records
+- governed memory/state update application
+- operator-visible diagnostics and persisted evaluation artifacts
+- evidence-gated self-reporting
+- desire-like pressure tracked as evidence candidates rather than theatrical
+  self-language
+
+Partially satisfied but not complete enough to close the full non-voice
+roadmap:
+- active runtime autonomy is explicit and step-driven; it is not yet a true
+  timed/service loop
+- action execution remains controller-mediated and internal/no-host-side-effect
+  by default; approved real tool surfaces are not yet connected through the
+  action-plan controller as operational capabilities
+- the dedicated `nova` OS-user boundary is defined as an expectation, but not
+  operationally enforced by the runtime
+- longitudinal evaluation is deterministic and persisted; a richer live
+  end-to-end autonomy run is still needed once operational autonomy is added
+
+
+REASSESSMENT DECISION
+---------------------
+
+Do not close the full non-voice roadmap yet.
+
+Phase 15 is complete, but the strict end goal still has concrete operational
+gaps. A narrowly scoped next planning block is justified. The next block
+should not be padded to four phases. It should include only the work needed to
+turn the proven internal autonomy architecture into a real, supervised local
+autonomy runtime.
+
+Recommended next phase:
+
+Phase 16: Operational Supervised Autonomy Runtime
+- add a true timed/service autonomy runner with explicit operator start,
+  pause, interrupt, stop, and status controls
+- connect approved action plans to real approved tool surfaces in a
+  surface-by-surface way
+- operationalize the dedicated `nova` OS-user or equivalent enforced local
+  boundary
+- keep shell, network, filesystem, GUI, system configuration, and external
+  services approval-gated by surface and risk class
+- run live end-to-end autonomy evaluation after the operational runner exists
+
+At this closure point, only Phase 16 is clearly justified. Phases 17-20 should
+not be planned unless Phase 16 exposes additional concrete gaps, safety
+defects, or evaluation failures.
+
+
+PHASE 15 CLOSURE JUDGMENT
+-------------------------
+
+Phase 15 is complete.
+
+Nova now has the longitudinal autonomy evidence layer needed to inspect,
+interrupt, review, and evaluate internal autonomous activity. The project
+should continue to a narrowly scoped Phase 16 because the full non-voice end
+goal requires operational supervised autonomy and real approved action
+surfaces, not only the internal/no-host-side-effect evaluation architecture.

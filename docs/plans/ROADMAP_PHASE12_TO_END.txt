@@ -111,7 +111,7 @@ Phase 14: Approval-Gated Autonomous Action Execution
   revision
 - prevent hidden shell/network/filesystem behavior
 - formal plan: `docs/plans/PHASE14_PLAN.txt`
-- status: planned
+- status: complete
 
 Phase 15: Longitudinal Autonomy and Desire-Like Evaluation
 - test Nova over extended active runtime sessions
@@ -119,11 +119,18 @@ Phase 15: Longitudinal Autonomy and Desire-Like Evaluation
   emerge from recorded state rather than prompts alone
 - strengthen or reject self-claim permissions based on evidence
 - close the roadmap if the full non-voice functionality is achieved
+- formal plan: `docs/plans/PHASE15_PLAN.txt`
+- status: complete
 
-No Phase 16 is planned now.
-
-Phase 16 or later should exist only if Phase 15 proves a concrete missing
-capability that cannot be responsibly folded into Phase 15 closure.
+Phase 15 reassessment:
+- Phase 15 is complete.
+- The full non-voice roadmap should not close yet.
+- A narrowly scoped Phase 16 is justified by concrete operational gaps:
+  supervised timed/service autonomy, real approved action surfaces, and an
+  enforced local execution boundary.
+- No Phase 17 or later is planned now.
+- Phase 17 or later should exist only if Phase 16 proves a concrete missing
+  capability, safety defect, or evaluation failure.
 
 
 Next four phases
@@ -138,7 +145,10 @@ closure/evaluation only.
 Current position:
 - Phase 12 is complete.
 - Phase 13 is complete.
-- The next phase is Phase 14: Approval-Gated Autonomous Action Execution.
+- Phase 14 is complete.
+- Phase 15 is complete.
+- The next planning step is Phase 16 only: Operational Supervised Autonomy
+  Runtime. Do not plan more phases unless Phase 16 evidence justifies them.
 
 
 Phase 12: Interruptible Idle Runtime Lifecycle
