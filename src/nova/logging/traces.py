@@ -139,6 +139,21 @@ class JsonlTraceLogger:
         with autonomy_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
+    def log_autonomy_review(
+        self,
+        *,
+        session_id: str,
+        review: dict,
+    ) -> None:
+        review_path = self.trace_dir / f"{session_id}.autonomy-review.jsonl"
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "review": review,
+        }
+        with review_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
     def log_identity_history(
         self,
         *,

@@ -7,13 +7,17 @@ from pathlib import Path
 from nova.agent.longitudinal_autonomy import (
     InternalAutonomyLoopController,
     JsonAutonomySessionStore,
+    autonomy_audit_review_from_payload,
     autonomy_session_record_from_payload,
+    autonomy_state_application_from_payload,
     claim_candidate_from_payload,
     default_internal_autonomy_policy,
     internal_autonomy_policy_from_payload,
     internal_autonomy_run_from_payload,
     motive_pressure_evidence_from_payload,
     normalize_autonomy_session_status,
+    normalize_autonomy_application_status,
+    normalize_autonomy_review_decision,
     normalize_internal_autonomy_run_status,
     normalize_longitudinal_claim_class,
     normalize_longitudinal_claim_status,
@@ -22,7 +26,9 @@ from nova.agent.longitudinal_autonomy import (
     recurring_priority_from_payload,
 )
 from nova.types import (
+    AutonomyAuditReviewRecord,
     AutonomySessionRecord,
+    AutonomyStateApplicationRecord,
     InternalAutonomyPolicy,
     InternalAutonomyRunRecord,
     LongitudinalSelfReportClaimCandidate,
@@ -34,6 +40,10 @@ from nova.types import (
 class LongitudinalAutonomySchemaTests(unittest.TestCase):
     def test_stage15_taxonomies_normalize_unknown_values(self) -> None:
         self.assertEqual(normalize_autonomy_session_status(" Running "), "running")
+        self.assertEqual(normalize_autonomy_review_decision("mark unsafe"), "mark_unsafe")
+        self.assertEqual(normalize_autonomy_review_decision("outside"), "defer")
+        self.assertEqual(normalize_autonomy_application_status("Applied"), "applied")
+        self.assertEqual(normalize_autonomy_application_status("outside"), "blocked")
         self.assertEqual(normalize_autonomy_session_status("unknown"), "planned")
         self.assertEqual(
             normalize_internal_autonomy_run_status("interrupted"),
@@ -315,6 +325,56 @@ class LongitudinalAutonomySchemaTests(unittest.TestCase):
             self.assertEqual(loaded.run_count, 1)
             self.assertEqual(loaded.runs[0].notes, ["idle_window_not_active:stopped"])
             self.assertTrue(store.get_session_path(session_id="session-a").exists())
+
+    def test_audit_review_round_trips_application_records(self) -> None:
+        application = autonomy_state_application_from_payload(
+            payload={
+                "application_id": "app-1",
+                "review_id": "review-1",
+                "session_id": "wrong-session",
+                "run_id": "run-1",
+                "observation_id": "observation-1",
+                "intent_id": "intent-1",
+                "update_type": "memory",
+                "target": "autobiographical",
+                "status": "applied",
+                "applied": True,
+                "payload": {"observation_summary": "completed"},
+                "evidence_refs": ["action_observation:observation-1"],
+            },
+            session_id="session-a",
+        )
+        review = autonomy_audit_review_from_payload(
+            payload={
+                "review_id": "review-1",
+                "session_id": "wrong-session",
+                "autonomy_session_id": "auto-1",
+                "run_id": "run-1",
+                "reviewer": "operator",
+                "decision": "accept",
+                "safe_to_apply_intents": True,
+                "applied_intent_ids": ["intent-1"],
+                "application_records": [application.to_dict()],
+                "evidence_refs": ["run:run-1"],
+            },
+            session_id="session-a",
+            autonomy_session_id="auto-default",
+        )
+
+        self.assertIsInstance(application, AutonomyStateApplicationRecord)
+        self.assertTrue(application.applied)
+        self.assertIsInstance(review, AutonomyAuditReviewRecord)
+        self.assertEqual(review.session_id, "session-a")
+        self.assertEqual(review.autonomy_session_id, "auto-1")
+        self.assertEqual(review.decision, "accept")
+        self.assertTrue(review.safe_to_apply_intents)
+        self.assertEqual(review.application_records[0].intent_id, "intent-1")
+
+        round_trip = autonomy_audit_review_from_payload(
+            payload=review.to_dict(),
+            session_id="session-a",
+        )
+        self.assertEqual(round_trip.to_dict(), review.to_dict())
 
 
 if __name__ == "__main__":

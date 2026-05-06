@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -25,6 +26,8 @@ from nova.agent.initiative_prompt import InitiativePromptEngine
 from nova.agent.longitudinal_autonomy import (
     InternalAutonomyLoopController,
     JsonAutonomySessionStore,
+    autonomy_audit_review_from_payload,
+    autonomy_state_application_from_payload,
     claim_candidate_from_payload,
     default_internal_autonomy_policy,
     internal_autonomy_policy_from_payload,
@@ -51,6 +54,7 @@ from nova.agent.action_plan import (
     ActionExecutionController,
     BoundedActionPlanEngine,
     PostActionObservationEngine,
+    action_observation_from_payload,
     default_nova_owned_execution_boundary,
 )
 from nova.agent.tool_executor import InternalToolExecutor
@@ -78,6 +82,8 @@ from nova.types import (
     IdlePressureAppraisal,
     IdleRuntimeStatus,
     IdleTickRecord,
+    AutonomyAuditReviewRecord,
+    AutonomyStateApplicationRecord,
     InternalAutonomyPolicy,
     InternalAutonomyRunRecord,
     InternalGoalInitiativeProposal,
@@ -93,6 +99,7 @@ from nova.types import (
     TraceRecord,
     TurnRecord,
     ValidationResult,
+    MemoryEvent,
 )
 from nova.types import InitiativeRecord, InitiativeState
 
@@ -380,6 +387,83 @@ class NovaRuntime:
             last_action_status="internal_autonomy_stopped",
         )
         return record
+
+    def review_internal_autonomy_run(
+        self,
+        *,
+        run_id: str,
+        decision: str,
+        reviewer: str = "operator",
+        reason: str = "",
+        apply_intents: bool = False,
+    ) -> AutonomyAuditReviewRecord:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        autonomy = self.internal_autonomy_status()
+        run = next((item for item in autonomy.runs if item.run_id == run_id), None)
+        if run is None:
+            raise ValueError(f"Unknown internal autonomy run id: {run_id}")
+
+        observation = self._load_action_observation(run.observation_id)
+        applications: list[AutonomyStateApplicationRecord] = []
+        safe_to_apply = bool(apply_intents and decision == "accept" and observation is not None)
+        if observation is not None:
+            for intent in observation.state_update_intents:
+                application = self._apply_reviewed_state_update_intent(
+                    run=run,
+                    observation=observation,
+                    intent_payload=intent.to_dict(),
+                    review_decision=decision,
+                    reviewer=reviewer,
+                    safe_to_apply=safe_to_apply,
+                )
+                applications.append(application)
+
+        review = autonomy_audit_review_from_payload(
+            payload={
+                "session_id": self.session_id,
+                "autonomy_session_id": autonomy.autonomy_session_id,
+                "run_id": run_id,
+                "reviewer": reviewer,
+                "decision": decision,
+                "reason": reason,
+                "reviewed_at": utc_now_iso(),
+                "safe_to_apply_intents": safe_to_apply,
+                "applied_intent_ids": [
+                    item.intent_id for item in applications if item.applied
+                ],
+                "rejected_intent_ids": [
+                    item.intent_id for item in applications if not item.applied
+                ],
+                "application_records": [item.to_dict() for item in applications],
+                "evidence_refs": [
+                    *run.evidence_refs,
+                    *([f"action_observation:{observation.observation_id}"] if observation else []),
+                ],
+                "notes": [
+                    "autonomy_audit_review",
+                    "unreviewed_or_rejected_intents_remain_inert",
+                ],
+            },
+            session_id=self.session_id,
+            autonomy_session_id=autonomy.autonomy_session_id,
+        )
+        stored = self.internal_autonomy_loop_controller.append_review(
+            session_id=self.session_id,
+            review=review,
+        )
+        self.trace_logger.log_autonomy_review(
+            session_id=self.session_id,
+            review=stored.to_dict(),
+        )
+        self.update_presence(
+            mode="internal_autonomy_review",
+            current_focus="internal autonomy audit reviewed",
+            interaction_summary=f"Internal autonomy run {run_id} reviewed with decision: {stored.decision}.",
+            last_action_status=f"internal_autonomy_review_{stored.decision}",
+        )
+        return stored
 
     def step_internal_autonomy(self, *, trigger: str = "idle_window") -> InternalAutonomyRunRecord:
         self._ensure_state_loaded()
@@ -1336,6 +1420,218 @@ class NovaRuntime:
                     return item.initiative_id
             return ""
         return record.initiative_id
+
+    def _load_action_observation(self, observation_id: str) -> AutonomousActionObservation | None:
+        if not observation_id or self.session_id is None:
+            return None
+        path = Path(self.config.app.log_dir) / "traces" / f"{self.session_id}.action-observation.jsonl"
+        if not path.exists():
+            return None
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                observation_payload = dict(payload.get("observation", {}) or {})
+                if observation_payload.get("observation_id") == observation_id:
+                    return action_observation_from_payload(
+                        payload=observation_payload,
+                        session_id=self.session_id,
+                    )
+        return None
+
+    def _apply_reviewed_state_update_intent(
+        self,
+        *,
+        run: InternalAutonomyRunRecord,
+        observation: AutonomousActionObservation,
+        intent_payload: dict,
+        review_decision: str,
+        reviewer: str,
+        safe_to_apply: bool,
+    ) -> AutonomyStateApplicationRecord:
+        intent_id = str(intent_payload.get("intent_id", "") or "")
+        update_type = str(intent_payload.get("update_type", "") or "")
+        target = str(intent_payload.get("target", "") or "")
+        payload = dict(intent_payload.get("payload", {}) or {})
+        evidence_refs = [
+            *run.evidence_refs,
+            *list(intent_payload.get("evidence_refs", []) or []),
+            f"action_observation:{observation.observation_id}",
+        ]
+        if not safe_to_apply:
+            return autonomy_state_application_from_payload(
+                payload={
+                    "session_id": run.session_id,
+                    "run_id": run.run_id,
+                    "observation_id": observation.observation_id,
+                    "intent_id": intent_id,
+                    "update_type": update_type,
+                    "target": target,
+                    "status": "rejected" if review_decision in {"reject", "mark_unsafe", "mark_fabricated"} else "blocked",
+                    "applied": False,
+                    "reason": f"review_decision_not_applyable:{review_decision}",
+                    "payload": payload,
+                    "evidence_refs": evidence_refs,
+                    "notes": ["intent_not_applied"],
+                },
+                session_id=run.session_id,
+            )
+        if update_type == "memory" and target == "autobiographical":
+            return self._apply_autonomy_memory_intent(
+                run=run,
+                observation=observation,
+                intent_id=intent_id,
+                payload=payload,
+                evidence_refs=evidence_refs,
+                reviewer=reviewer,
+            )
+        if update_type == "state" and target == "initiative":
+            return self._apply_autonomy_initiative_intent(
+                run=run,
+                observation=observation,
+                intent_id=intent_id,
+                payload=payload,
+                evidence_refs=evidence_refs,
+                reviewer=reviewer,
+            )
+        return autonomy_state_application_from_payload(
+            payload={
+                "session_id": run.session_id,
+                "run_id": run.run_id,
+                "observation_id": observation.observation_id,
+                "intent_id": intent_id,
+                "update_type": update_type,
+                "target": target,
+                "status": "blocked",
+                "applied": False,
+                "reason": "unsupported_autonomy_update_target",
+                "payload": payload,
+                "evidence_refs": evidence_refs,
+                "notes": ["unsupported_target_not_applied"],
+            },
+            session_id=run.session_id,
+        )
+
+    def _apply_autonomy_memory_intent(
+        self,
+        *,
+        run: InternalAutonomyRunRecord,
+        observation: AutonomousActionObservation,
+        intent_id: str,
+        payload: dict,
+        evidence_refs: list[str],
+        reviewer: str,
+    ) -> AutonomyStateApplicationRecord:
+        event_id = uuid4().hex
+        event = MemoryEvent(
+            event_id=event_id,
+            timestamp=utc_now_iso(),
+            session_id=run.session_id,
+            turn_id=run.run_id,
+            channel="autobiographical",
+            kind="autonomy_audit_summary",
+            text=(
+                "Reviewed internal autonomy run "
+                f"{run.run_id}: {payload.get('observation_summary', observation.observation_summary)}"
+            ),
+            summary="Reviewed internal autonomy audit summary",
+            tags=["nova", "autonomy", "audit", "reviewed"],
+            importance=0.55,
+            confidence=0.75,
+            continuity_weight=0.55,
+            retention="active",
+            source="autonomy_review",
+            metadata={
+                "reviewer": reviewer,
+                "intent_id": intent_id,
+                "run_id": run.run_id,
+                "observation_id": observation.observation_id,
+                "governance_status": "reviewed",
+                "claim_boundary": "not_desire_or_sentience_evidence_by_itself",
+            },
+        )
+        self.memory_router.add_events([event])
+        return autonomy_state_application_from_payload(
+            payload={
+                "session_id": run.session_id,
+                "run_id": run.run_id,
+                "observation_id": observation.observation_id,
+                "intent_id": intent_id,
+                "update_type": "memory",
+                "target": "autobiographical",
+                "status": "applied",
+                "applied": True,
+                "reason": "review_accepted_autobiographical_summary",
+                "applied_event_id": event_id,
+                "applied_at": event.timestamp,
+                "payload": payload,
+                "evidence_refs": evidence_refs,
+                "notes": ["reviewed_memory_intent_applied"],
+            },
+            session_id=run.session_id,
+        )
+
+    def _apply_autonomy_initiative_intent(
+        self,
+        *,
+        run: InternalAutonomyRunRecord,
+        observation: AutonomousActionObservation,
+        intent_id: str,
+        payload: dict,
+        evidence_refs: list[str],
+        reviewer: str,
+    ) -> AutonomyStateApplicationRecord:
+        initiative_state = self.initiative_status()
+        applied = False
+        for record in initiative_state.initiatives:
+            if record.initiative_id != run.initiative_id:
+                continue
+            record.notes = list(dict.fromkeys([
+                *record.notes,
+                f"autonomy_review_intent_applied:{intent_id}",
+                "review_applied_without_status_closure",
+            ]))
+            record.evidence_refs = list(dict.fromkeys([*record.evidence_refs, *evidence_refs]))
+            record.updated_at = utc_now_iso()
+            applied = True
+            break
+        if applied:
+            self.initiative_store.save(initiative_state)
+            self.initiative_state = initiative_state
+        return autonomy_state_application_from_payload(
+            payload={
+                "session_id": run.session_id,
+                "run_id": run.run_id,
+                "observation_id": observation.observation_id,
+                "intent_id": intent_id,
+                "update_type": "state",
+                "target": "initiative",
+                "status": "applied" if applied else "blocked",
+                "applied": applied,
+                "reason": (
+                    "review_accepted_initiative_note"
+                    if applied
+                    else "initiative_not_found_for_reviewed_intent"
+                ),
+                "applied_event_id": run.initiative_id if applied else "",
+                "applied_at": utc_now_iso() if applied else "",
+                "payload": {
+                    **payload,
+                    "reviewer": reviewer,
+                    "status_closure_allowed": False,
+                },
+                "evidence_refs": evidence_refs,
+                "notes": ["reviewed_state_intent_applied_without_closing_initiative"] if applied else [],
+            },
+            session_id=run.session_id,
+        )
 
     def respond(self, user_text: str) -> TurnRecord:
         if (

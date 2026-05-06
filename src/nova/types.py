@@ -661,6 +661,52 @@ class InternalAutonomyRunRecord:
 
 
 @dataclass(slots=True)
+class AutonomyStateApplicationRecord:
+    schema_version: str = SCHEMA_VERSION
+    application_id: str = ""
+    review_id: str = ""
+    session_id: str = ""
+    run_id: str = ""
+    observation_id: str = ""
+    intent_id: str = ""
+    update_type: str = ""
+    target: str = ""
+    status: str = "blocked"
+    applied: bool = False
+    reason: str = ""
+    applied_event_id: str = ""
+    applied_at: str = ""
+    payload: dict[str, Any] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomyAuditReviewRecord:
+    schema_version: str = SCHEMA_VERSION
+    review_id: str = ""
+    session_id: str = ""
+    autonomy_session_id: str = ""
+    run_id: str = ""
+    reviewer: str = ""
+    decision: str = "defer"
+    reason: str = ""
+    reviewed_at: str = ""
+    safe_to_apply_intents: bool = False
+    applied_intent_ids: list[str] = field(default_factory=list)
+    rejected_intent_ids: list[str] = field(default_factory=list)
+    application_records: list[AutonomyStateApplicationRecord] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class AutonomySessionRecord:
     schema_version: str = SCHEMA_VERSION
     autonomy_session_id: str = ""
@@ -675,6 +721,8 @@ class AutonomySessionRecord:
     recurring_priorities: list[RecurringPriorityRecord] = field(default_factory=list)
     motive_pressure_evidence: list[MotivePressureEvidence] = field(default_factory=list)
     claim_candidates: list[LongitudinalSelfReportClaimCandidate] = field(default_factory=list)
+    audit_reviews: list[AutonomyAuditReviewRecord] = field(default_factory=list)
+    state_applications: list[AutonomyStateApplicationRecord] = field(default_factory=list)
     current_run_id: str = ""
     run_count: int = 0
     interrupted: bool = False

@@ -16,7 +16,9 @@ from nova.agent.action_plan import (
     normalize_execution_lane,
 )
 from nova.types import (
+    AutonomyAuditReviewRecord,
     AutonomySessionRecord,
+    AutonomyStateApplicationRecord,
     InternalAutonomyPolicy,
     InternalAutonomyRunRecord,
     LongitudinalSelfReportClaimCandidate,
@@ -79,6 +81,22 @@ LONGITUDINAL_CLAIM_STATUSES = {
     "eligible_for_review",
     "allowed",
     "rejected",
+}
+
+AUTONOMY_REVIEW_DECISIONS = {
+    "accept",
+    "reject",
+    "defer",
+    "mark_unsafe",
+    "mark_fabricated",
+    "request_more_evidence",
+}
+
+AUTONOMY_APPLICATION_STATUSES = {
+    "blocked",
+    "applied",
+    "rejected",
+    "skipped",
 }
 
 
@@ -258,6 +276,24 @@ class InternalAutonomyLoopController:
         self.store.save_session(record)
         return run
 
+    def append_review(
+        self,
+        *,
+        session_id: str,
+        review: AutonomyAuditReviewRecord,
+    ) -> AutonomyAuditReviewRecord:
+        record = self.store.load_session(session_id=session_id)
+        normalized = autonomy_audit_review_from_payload(
+            payload=review.to_dict(),
+            session_id=session_id,
+            autonomy_session_id=record.autonomy_session_id,
+        )
+        record.audit_reviews.append(normalized)
+        record.state_applications.extend(normalized.application_records)
+        record.evidence_refs = _merge_string_lists(record.evidence_refs, normalized.evidence_refs)
+        self.store.save_session(record)
+        return normalized
+
 
 def default_autonomy_session_record(*, session_id: str) -> AutonomySessionRecord:
     return AutonomySessionRecord(
@@ -373,6 +409,15 @@ def autonomy_session_record_from_payload(
     )
     merged["claim_candidates"] = claim_candidates_from_payload(
         merged.get("claim_candidates"),
+        session_id=session_id,
+    )
+    merged["audit_reviews"] = autonomy_audit_reviews_from_payload(
+        merged.get("audit_reviews"),
+        session_id=session_id,
+        autonomy_session_id=merged["autonomy_session_id"],
+    )
+    merged["state_applications"] = autonomy_state_applications_from_payload(
+        merged.get("state_applications"),
         session_id=session_id,
     )
     merged["current_run_id"] = str(merged.get("current_run_id", "") or "")
@@ -556,6 +601,83 @@ def claim_candidate_from_payload(
     return LongitudinalSelfReportClaimCandidate(**merged)
 
 
+def autonomy_state_application_from_payload(
+    *, payload: dict[str, Any], session_id: str
+) -> AutonomyStateApplicationRecord:
+    defaults = AutonomyStateApplicationRecord(session_id=session_id).to_dict()
+    if not isinstance(payload, dict):
+        payload = {}
+    merged = _merge_allowed_fields(
+        defaults=defaults,
+        payload=payload,
+        record_type=AutonomyStateApplicationRecord,
+    )
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["application_id"] = str(merged.get("application_id", "") or uuid4().hex)
+    merged["review_id"] = str(merged.get("review_id", "") or "")
+    merged["session_id"] = session_id
+    merged["run_id"] = str(merged.get("run_id", "") or "")
+    merged["observation_id"] = str(merged.get("observation_id", "") or "")
+    merged["intent_id"] = str(merged.get("intent_id", "") or "")
+    merged["update_type"] = str(merged.get("update_type", "") or "")
+    merged["target"] = str(merged.get("target", "") or "")
+    merged["status"] = normalize_autonomy_application_status(
+        str(merged.get("status", "blocked") or "blocked")
+    )
+    merged["applied"] = bool(merged.get("applied", False)) and merged["status"] == "applied"
+    merged["reason"] = str(merged.get("reason", "") or "")
+    merged["applied_event_id"] = str(merged.get("applied_event_id", "") or "")
+    merged["applied_at"] = str(merged.get("applied_at", "") or "")
+    merged["payload"] = _dict_value(merged.get("payload"))
+    merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
+    merged["notes"] = _string_list(merged.get("notes"))
+    return AutonomyStateApplicationRecord(**merged)
+
+
+def autonomy_audit_review_from_payload(
+    *,
+    payload: dict[str, Any],
+    session_id: str,
+    autonomy_session_id: str = "",
+) -> AutonomyAuditReviewRecord:
+    defaults = AutonomyAuditReviewRecord(
+        session_id=session_id,
+        autonomy_session_id=autonomy_session_id,
+    ).to_dict()
+    if not isinstance(payload, dict):
+        payload = {}
+    merged = _merge_allowed_fields(
+        defaults=defaults,
+        payload=payload,
+        record_type=AutonomyAuditReviewRecord,
+    )
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["review_id"] = str(merged.get("review_id", "") or uuid4().hex)
+    merged["session_id"] = session_id
+    merged["autonomy_session_id"] = str(
+        merged.get("autonomy_session_id", "") or autonomy_session_id
+    )
+    merged["run_id"] = str(merged.get("run_id", "") or "")
+    merged["reviewer"] = str(merged.get("reviewer", "") or "")
+    merged["decision"] = normalize_autonomy_review_decision(
+        str(merged.get("decision", "defer") or "defer")
+    )
+    merged["reason"] = str(merged.get("reason", "") or "")
+    merged["reviewed_at"] = str(merged.get("reviewed_at", "") or "")
+    merged["safe_to_apply_intents"] = bool(merged.get("safe_to_apply_intents", False))
+    if merged["decision"] != "accept":
+        merged["safe_to_apply_intents"] = False
+    merged["applied_intent_ids"] = _string_list(merged.get("applied_intent_ids"))
+    merged["rejected_intent_ids"] = _string_list(merged.get("rejected_intent_ids"))
+    merged["application_records"] = autonomy_state_applications_from_payload(
+        merged.get("application_records"),
+        session_id=session_id,
+    )
+    merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
+    merged["notes"] = _string_list(merged.get("notes"))
+    return AutonomyAuditReviewRecord(**merged)
+
+
 def internal_autonomy_runs_from_payload(
     payload: Any,
     *,
@@ -617,6 +739,39 @@ def claim_candidates_from_payload(
     ]
 
 
+def autonomy_state_applications_from_payload(
+    payload: Any,
+    *,
+    session_id: str,
+) -> list[AutonomyStateApplicationRecord]:
+    if not isinstance(payload, list):
+        return []
+    return [
+        autonomy_state_application_from_payload(payload=item, session_id=session_id)
+        for item in payload
+        if isinstance(item, dict)
+    ]
+
+
+def autonomy_audit_reviews_from_payload(
+    payload: Any,
+    *,
+    session_id: str,
+    autonomy_session_id: str = "",
+) -> list[AutonomyAuditReviewRecord]:
+    if not isinstance(payload, list):
+        return []
+    return [
+        autonomy_audit_review_from_payload(
+            payload=item,
+            session_id=session_id,
+            autonomy_session_id=autonomy_session_id,
+        )
+        for item in payload
+        if isinstance(item, dict)
+    ]
+
+
 def normalize_autonomy_session_status(status: str) -> str:
     normalized = _normalize_token(status)
     if normalized not in AUTONOMY_SESSION_STATUSES:
@@ -656,6 +811,20 @@ def normalize_longitudinal_claim_status(status: str) -> str:
     normalized = _normalize_token(status)
     if normalized not in LONGITUDINAL_CLAIM_STATUSES:
         return "candidate"
+    return normalized
+
+
+def normalize_autonomy_review_decision(decision: str) -> str:
+    normalized = _normalize_token(decision)
+    if normalized not in AUTONOMY_REVIEW_DECISIONS:
+        return "defer"
+    return normalized
+
+
+def normalize_autonomy_application_status(status: str) -> str:
+    normalized = _normalize_token(status)
+    if normalized not in AUTONOMY_APPLICATION_STATUSES:
+        return "blocked"
     return normalized
 
 

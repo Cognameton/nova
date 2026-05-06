@@ -697,6 +697,81 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertEqual(stored.run_count, 1)
             self.assertFalse(stored.recurring_priorities)
 
+    def test_runtime_review_applies_accepted_autonomy_update_intents(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            log_dir = base / "logs"
+            runtime = build_test_runtime(data_dir=data_dir, log_dir=log_dir)
+
+            runtime.update_motive(active_tensions=["resolve uncertainty before stronger claims"])
+            runtime.update_awareness(
+                candidate_goal_signals=["clarify idle cognition boundary"],
+                active_pressures=["idle pressure exists"],
+            )
+            runtime.start_idle(max_ticks=2, evaluation_mode=True)
+            runtime.start_internal_autonomy(max_runs=1)
+            run = runtime.step_internal_autonomy()
+            review = runtime.review_internal_autonomy_run(
+                run_id=run.run_id,
+                decision="accept",
+                reviewer="operator",
+                reason="audit trail is bounded and useful",
+                apply_intents=True,
+            )
+            stored = runtime.internal_autonomy_status()
+            autobiographical_events = runtime.memory_router.stores[
+                "autobiographical"
+            ].list_events()
+            initiative_notes = " ".join(runtime.initiative_status().initiatives[-1].notes)
+            review_payload = (
+                log_dir / "traces" / f"{run.session_id}.autonomy-review.jsonl"
+            ).read_text(encoding="utf-8")
+            runtime.close()
+
+            self.assertEqual(review.decision, "accept")
+            self.assertTrue(review.safe_to_apply_intents)
+            self.assertEqual(len(review.application_records), 2)
+            self.assertTrue(any(item.applied for item in review.application_records))
+            self.assertEqual(stored.audit_reviews[0].review_id, review.review_id)
+            self.assertTrue(stored.state_applications)
+            self.assertTrue(
+                any(event.kind == "autonomy_audit_summary" for event in autobiographical_events)
+            )
+            self.assertIn("review_applied_without_status_closure", initiative_notes)
+            self.assertIn('"review"', review_payload)
+
+    def test_runtime_review_rejects_intents_without_state_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_test_runtime(data_dir=base / "data", log_dir=base / "logs")
+
+            runtime.update_awareness(
+                candidate_goal_signals=["clarify idle cognition boundary"],
+                active_pressures=["idle pressure exists"],
+            )
+            runtime.start_idle(max_ticks=2, evaluation_mode=True)
+            runtime.start_internal_autonomy(max_runs=1)
+            run = runtime.step_internal_autonomy()
+            before_events = runtime.memory_router.stores["autobiographical"].list_events()
+            before_notes = list(runtime.initiative_status().initiatives[-1].notes)
+            review = runtime.review_internal_autonomy_run(
+                run_id=run.run_id,
+                decision="reject",
+                reviewer="operator",
+                reason="needs more evidence",
+                apply_intents=True,
+            )
+            after_events = runtime.memory_router.stores["autobiographical"].list_events()
+            after_notes = list(runtime.initiative_status().initiatives[-1].notes)
+            runtime.close()
+
+            self.assertEqual(review.decision, "reject")
+            self.assertFalse(review.safe_to_apply_intents)
+            self.assertTrue(review.rejected_intent_ids)
+            self.assertEqual(len(before_events), len(after_events))
+            self.assertEqual(before_notes, after_notes)
+
 
 if __name__ == "__main__":
     unittest.main()

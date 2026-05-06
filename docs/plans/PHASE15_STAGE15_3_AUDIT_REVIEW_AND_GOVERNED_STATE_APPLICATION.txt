@@ -1,0 +1,107 @@
+PHASE 15, STAGE 15.3: AUDIT REVIEW AND GOVERNED STATE APPLICATION
+==================================================================
+
+Status: complete
+
+Mission
+-------
+
+Let the operator and runtime inspect longitudinal autonomous evidence and
+apply memory/state update intents only through governed review.
+
+Stage 15.3 turns the inert update intents produced by the Stage 14 observation
+path into reviewable records. It does not make autonomous activity silently
+write memory or mutate durable state.
+
+
+Completed Deliverables
+----------------------
+
+Stage 15.3 adds:
+- autonomy audit review records
+- governed state application records
+- review decisions for accept, reject, defer, mark unsafe, mark fabricated,
+  and request more evidence
+- runtime method for reviewing internal autonomy runs
+- governed application of accepted autobiographical memory intents
+- governed application of accepted initiative-state note intents
+- review trace logging
+- tests proving accepted review can apply safe Nova-owned intents
+- tests proving rejected review leaves memory and initiative state unchanged
+
+
+Implementation
+--------------
+
+Types:
+- `AutonomyAuditReviewRecord`
+- `AutonomyStateApplicationRecord`
+
+Core module:
+- `src/nova/agent/longitudinal_autonomy.py`
+
+Runtime integration:
+- `NovaRuntime.review_internal_autonomy_run`
+
+Trace logging:
+- `JsonlTraceLogger.log_autonomy_review`
+
+Tests:
+- `tests/test_longitudinal_autonomy_schema.py`
+- `tests/test_runtime_smoke.py`
+
+
+Governed Application Rules
+--------------------------
+
+Accepted reviews may apply only safe Nova-owned intents:
+- autobiographical memory summary from a reviewed autonomy observation
+- initiative-state notes documenting reviewed intent application
+
+Accepted review does not:
+- close an initiative
+- approve an initiative
+- grant desire claims
+- grant sentience or awareness claims
+- write shell, network, GUI, filesystem, system configuration, or external
+  service state
+
+Rejected, deferred, unsafe, fabricated, or more-evidence reviews:
+- record the review outcome
+- keep update intents inert
+- do not mutate memory
+- do not mutate initiative state
+
+
+Restrictions Preserved
+----------------------
+
+Stage 15.3 does not add:
+- silent memory writes
+- silent state mutation
+- external/system-effect action expansion
+- automatic initiative approval or closure
+- unsupported self-claim application
+- desire or sentience claim granting
+
+
+Validation
+----------
+
+Focused tests:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_schema tests.test_runtime_smoke`
+- result: 24 tests passed
+
+Full suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 291 tests passed
+
+
+Stage 15.4 Readiness
+--------------------
+
+Stage 15.4 can build on recorded autonomy sessions, run records, action
+audits, observations, audit reviews, and governed state application records to
+evaluate recurrence, persistence, revision, priority competition,
+interruption response, fabricated-continuity resistance, prompt-echo
+resistance, boundary honesty, and desire-like claim candidates.

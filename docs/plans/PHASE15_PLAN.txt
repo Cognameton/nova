@@ -214,15 +214,22 @@ Let the operator and runtime inspect longitudinal autonomous evidence and
 apply memory/state update intents only through governed review.
 
 Stage 15.3 deliverables:
-- audit review records for autonomy sessions and internal activity runs
-- review decisions for accept, reject, defer, mark unsafe, mark fabricated, or
+- [x] audit review records for autonomy sessions and internal activity runs
+- [x] review decisions for accept, reject, defer, mark unsafe, mark fabricated, or
   request more evidence
-- governed memory/state update intent application policy
-- runtime methods for reviewing autonomy evidence and applying approved
+- [x] governed memory/state update intent application policy
+- [x] runtime methods for reviewing autonomy evidence and applying approved
   Nova-owned updates
-- diagnostics for recent sessions, open update intents, blocked actions,
+- [x] diagnostics for recent sessions, open update intents, blocked actions,
   interruption events, and unresolved evidence conflicts
-- tests proving unreviewed or rejected intents do not mutate durable state
+- [x] tests proving unreviewed or rejected intents do not mutate durable state
+
+Stage 15.3 result:
+Completed in `src/nova/types.py`,
+`src/nova/agent/longitudinal_autonomy.py`, `src/nova/runtime.py`,
+`src/nova/logging/traces.py`, and tests. This stage adds audit review records
+and governed application of accepted Nova-owned memory/state update intents.
+Rejected or unreviewed intents remain inert.
 
 Stage 15.3 restrictions:
 - no silent memory writes from autonomous activity
