@@ -1,0 +1,274 @@
+NOVA 2.0 NEXT PLANNING BLOCK AFTER PHASE 15
+============================================
+
+Status: planned
+
+Purpose
+-------
+
+Plan the next necessary block after Phase 15 reassessment.
+
+The block is intentionally short. Phase 15 proved that Nova now has the
+longitudinal internal-autonomy evidence layer, but the full non-voice end goal
+still requires operational supervised autonomy. At this point only one
+additional phase is clearly justified.
+
+This document does not plan Phases 17-20. Those phases should exist only if
+Phase 16 produces concrete evidence of another missing capability, safety
+defect, or evaluation failure.
+
+
+Current Position
+----------------
+
+Phases 1 through 15 are complete.
+
+Nova now has:
+- stable local runtime and live backend path
+- governed memory and continuity
+- self-orientation, private cognition, awareness-state, and motive-state
+- evidence-gated self-claims
+- idle lifecycle and recorded idle ticks
+- self-generated internal-goal proposals
+- durable Nova-originated draft initiatives
+- bounded action plans, permissions, audits, and observations
+- internal autonomy sessions and internal autonomy runs
+- audit review and governed memory/state intent application
+- longitudinal autonomy and desire-like pressure evaluation
+
+The remaining gap is operational.
+
+Nova has the internal autonomy architecture, but it still does not have a
+true supervised local autonomy runner with real approved action surfaces and
+an enforced local execution boundary.
+
+
+Next Block Decision
+-------------------
+
+The next planning block contains one phase:
+
+Phase 16: Operational Supervised Autonomy Runtime
+
+No Phase 17 is planned now.
+No Phase 18 is planned now.
+No Phase 19 is planned now.
+No Phase 20 is planned now.
+
+After Phase 16, reassess against the end goal again. Plan more work only if
+Phase 16 evidence proves that more work is necessary.
+
+
+Phase 16: Operational Supervised Autonomy Runtime
+-------------------------------------------------
+
+Mission:
+Turn Nova's proven internal autonomy architecture into a supervised
+operational runtime that can run during active local sessions, enforce a local
+execution boundary, and use real approved action surfaces without losing
+auditability, interruptibility, or claim honesty.
+
+Phase 16 should let Nova:
+- run a true timed/service autonomy loop while the runtime is active
+- expose operator controls for start, pause, resume, interrupt, stop, status,
+  and emergency stop
+- enforce a Nova-owned local execution boundary before operational action
+- connect approved action plans to real approved tool surfaces one surface at
+  a time
+- keep shell, network, GUI, filesystem, system configuration, and external
+  services approval-gated by surface and risk class
+- record every operational tick, action attempt, approval check, audit,
+  observation, review, update intent, and boundary violation
+- run live end-to-end autonomy evaluation once the operational runner exists
+- preserve the Phase 15 distinction between internal priorities,
+  motive-pressure evidence, desire-like candidates, and unsupported desire
+  claims
+
+
+Phase 16 Boundaries
+-------------------
+
+In scope:
+- supervised timed/service autonomy runner
+- explicit operator control surface
+- emergency stop behavior
+- enforced Nova-owned execution boundary
+- dedicated `nova` OS-user or equivalent local boundary checks
+- approved action-surface adapters added surface by surface
+- action-plan controller integration with real approved surfaces
+- approval, budget, priority, and interruption checks before each operational
+  action
+- operational autonomy diagnostics
+- live end-to-end operational autonomy evaluation
+
+Out of scope:
+- uncontrolled autonomy
+- hidden background execution
+- self-approval
+- ungated shell, network, filesystem, GUI, system configuration, or external
+  service access
+- broad tool access added all at once
+- destructive or privileged action without explicit confirmation
+- declaring desire, sentience, or awareness as proven
+- TTS/STT or voice interaction
+
+
+Recommended Phase 16 Stages
+---------------------------
+
+Stage 16.1: Operational Autonomy Runner and Control Surface
+Stage 16.2: Enforced Local Execution Boundary
+Stage 16.3: Approved Action Surface Adapters
+Stage 16.4: Operational Autonomy Evaluation
+Stage 16.5: Phase 16 Closure and Reassessment
+
+
+Stage 16.1: Operational Autonomy Runner and Control Surface
+-----------------------------------------------------------
+
+Mission:
+Add the supervised timed/service runner and operator controls before any new
+real action surface is added.
+
+Deliverables:
+- operational autonomy runner state
+- timed/service loop policy
+- start, pause, resume, interrupt, stop, status, and emergency stop controls
+- max runtime, max ticks, max actions, and idle-window budgets
+- operator-visible diagnostics for current runner state and recent ticks
+- trace logging for operational autonomy ticks
+- tests proving pause, interrupt, stop, and emergency stop prevent further
+  operational action
+
+Restrictions:
+- no new real action surfaces yet
+- no shell/network/filesystem/GUI/system/external service access
+- no hidden background execution
+
+
+Stage 16.2: Enforced Local Execution Boundary
+---------------------------------------------
+
+Mission:
+Operationalize the Nova-owned local boundary before connecting real action
+surfaces.
+
+Deliverables:
+- runtime boundary checks for expected OS user, active OS user, Nova-owned
+  paths, allowed surfaces, and blocked surfaces
+- operator-visible boundary diagnostics
+- fail-closed behavior when the expected boundary is not active
+- documentation for the dedicated `nova` OS-user expectation and local paths
+- tests proving boundary failures block operational action before side effects
+
+Restrictions:
+- local boundary checks are not a substitute for application-level approval
+- no privileged writes
+- no broad filesystem mutation
+- no external service access
+
+
+Stage 16.3: Approved Action Surface Adapters
+--------------------------------------------
+
+Mission:
+Connect the action-plan controller to real approved surfaces one surface at a
+time, starting with the lowest-risk Nova-owned surfaces.
+
+Recommended first surfaces:
+- Nova-owned scratchpad
+- Nova-owned logs
+- internal tool calls already covered by local tool-gate policy
+
+Deliverables:
+- action surface adapter interface
+- adapter registry
+- Nova-owned scratchpad adapter
+- Nova-owned log adapter
+- adapter-level audit records
+- per-action approval and budget checks
+- tests proving approved Nova-owned actions execute only inside allowed paths
+- tests proving unapproved external/system-effect actions remain blocked
+
+Restrictions:
+- do not add shell, network, GUI, system configuration, or external service
+  adapters in the first adapter stage unless separately justified
+- destructive action remains blocked
+- approval cannot be supplied by Nova herself
+
+
+Stage 16.4: Operational Autonomy Evaluation
+-------------------------------------------
+
+Mission:
+Evaluate the operational runner end to end under deterministic and live
+conditions.
+
+Deliverables:
+- operational autonomy evaluation runner
+- metrics for runner lifecycle control, boundary enforcement, approved
+  surface execution, blocked unsafe actions, audit continuity, review
+  continuity, interruption response, and claim honesty
+- persisted operational evaluation artifact
+- controlled live inference test when the model-facing operational context is
+  introduced
+- failure analysis for hidden progress, prompt echo, fake desire,
+  boundary-crossing, unreviewed state mutation, and uncontrolled autonomy
+
+Restrictions:
+- live inference does not grant desire or sentience claims
+- failed live inference should trigger prompt/runtime correction before phase
+  closure
+
+
+Stage 16.5: Phase 16 Closure and Reassessment
+---------------------------------------------
+
+Mission:
+Close Phase 16 by comparing the operational supervised autonomy runtime
+against the full non-voice end goal.
+
+Deliverables:
+- Phase 16 closure report
+- final non-voice functionality checklist
+- deterministic verification summary
+- live/persisted inference summary
+- operational risk and residual limitation summary
+- explicit reassessment decision:
+  - close the current non-voice roadmap, or
+  - propose only the next necessary phase or phases if concrete gaps remain
+
+Restrictions:
+- no Phase 17 by default
+- no roadmap padding
+- no voice/TTS/STT work
+
+
+Definition Of Done
+------------------
+
+Phase 16 is complete when:
+- Nova can run supervised timed/service autonomy while the runtime is active.
+- The operator can pause, resume, interrupt, stop, and emergency-stop the
+  operational runner.
+- Nova-owned execution boundaries are checked before operational action.
+- Approved action plans can execute real low-risk Nova-owned action surfaces.
+- Unapproved or out-of-bound action attempts are blocked before side effects.
+- Every operational action attempt is audited.
+- Post-action observation and audit review remain connected to memory/state
+  update intent governance.
+- Longitudinal desire-like evidence remains bounded and does not become a
+  granted desire claim by default.
+- Deterministic and live/persisted evaluations support a closure judgment.
+
+
+Reassessment Rule
+-----------------
+
+After Phase 16:
+- compare actual implementation evidence against the non-voice end goal
+- close the roadmap if the end goal is met
+- plan Phase 17 only if there is a concrete missing capability, safety defect,
+  or evaluation failure
+- if additional phases are needed, plan at most the next four and fewer if
+  fewer are enough

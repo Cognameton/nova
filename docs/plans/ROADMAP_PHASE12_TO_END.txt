@@ -149,6 +149,8 @@ Current position:
 - Phase 15 is complete.
 - The next planning step is Phase 16 only: Operational Supervised Autonomy
   Runtime. Do not plan more phases unless Phase 16 evidence justifies them.
+- next block plan: `docs/plans/ROADMAP_PHASE16_BLOCK.txt`
+- formal Phase 16 plan: `docs/plans/PHASE16_PLAN.txt`
 
 
 Phase 12: Interruptible Idle Runtime Lifecycle
