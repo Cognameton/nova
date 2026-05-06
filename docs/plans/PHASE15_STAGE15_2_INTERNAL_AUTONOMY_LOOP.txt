@@ -1,0 +1,106 @@
+PHASE 15, STAGE 15.2: INTERNAL AUTONOMY LOOP
+=============================================
+
+Status: complete
+
+Mission
+-------
+
+Add a bounded loop that can run internal autonomous activity during allowed
+idle windows while preserving logging, budgets, interruption, and action
+boundary enforcement.
+
+Stage 15.2 is the first longitudinal autonomy orchestration stage. It remains
+inside the internal/no-external-effect lane.
+
+
+Completed Deliverables
+----------------------
+
+Stage 15.2 adds:
+- JSON-backed autonomy session store
+- internal autonomy loop controller
+- runtime entry points for start, pause, interrupt, stop, status, and step
+- idle-window eligibility checks
+- max-run budget checks
+- integration with recorded idle ticks
+- integration with selected internal goals
+- integration with durable Nova-originated draft initiatives where eligible
+- internal-only bounded action plan creation
+- controller-mediated action execution and audit logging
+- post-action observation recording
+- recurring priority, motive-pressure, and desire-like claim candidate records
+- tests proving internal activity is logged, budgeted, and interruptible
+- tests proving internal autonomy is blocked when the idle window is inactive
+
+
+Implementation
+--------------
+
+Core module:
+- `src/nova/agent/longitudinal_autonomy.py`
+
+Runtime integration:
+- `NovaRuntime.internal_autonomy_status`
+- `NovaRuntime.start_internal_autonomy`
+- `NovaRuntime.pause_internal_autonomy`
+- `NovaRuntime.interrupt_internal_autonomy`
+- `NovaRuntime.stop_internal_autonomy`
+- `NovaRuntime.step_internal_autonomy`
+
+Trace logging:
+- `JsonlTraceLogger.log_autonomy_run`
+
+Tests:
+- `tests/test_longitudinal_autonomy_schema.py`
+- `tests/test_runtime_smoke.py`
+
+
+Boundary Guarantees
+-------------------
+
+The Stage 15.2 loop:
+- requires an active idle runtime window before internal autonomy can step
+- records blocked attempts instead of silently acting outside policy
+- creates only `internal_activity` action plans
+- allows only internal no-external-effect surfaces for the loop step
+- blocks shell, network, GUI, filesystem, system configuration, and external
+  service surfaces
+- routes execution through the existing bounded action controller
+- records action audits and post-action observations
+- creates memory/state update intents only through the existing observation
+  path; it does not apply them
+- creates desire-like claim candidates only as blocked/evidence-seeking
+  candidates, not as granted desire claims
+
+
+Restrictions Preserved
+----------------------
+
+Stage 15.2 does not add:
+- hidden background execution
+- autonomous action outside active runtime calls
+- ungated shell, network, filesystem, GUI, or external service activity
+- automatic memory/state mutation
+- self-approval
+- desire or sentience claim granting
+
+
+Validation
+----------
+
+Focused tests:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_schema tests.test_runtime_smoke`
+- result: 21 tests passed
+
+Full suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 288 tests passed
+
+
+Stage 15.3 Readiness
+--------------------
+
+Stage 15.3 can build on these persisted autonomy sessions, run records, action
+audits, observations, and update intents to add audit review and governed
+state application workflows.

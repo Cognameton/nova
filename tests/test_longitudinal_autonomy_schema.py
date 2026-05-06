@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 
 from nova.agent.longitudinal_autonomy import (
+    InternalAutonomyLoopController,
+    JsonAutonomySessionStore,
     autonomy_session_record_from_payload,
     claim_candidate_from_payload,
     default_internal_autonomy_policy,
@@ -289,6 +293,28 @@ class LongitudinalAutonomySchemaTests(unittest.TestCase):
             session_id="session-a",
         )
         self.assertEqual(round_trip.to_dict(), record.to_dict())
+
+    def test_autonomy_store_and_controller_record_blocked_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = JsonAutonomySessionStore(Path(tmpdir) / "autonomy")
+            controller = InternalAutonomyLoopController(store=store)
+
+            session = controller.start(session_id="session-a")
+            run = controller.append_run(
+                session_id="session-a",
+                status="blocked",
+                trigger="idle_window",
+                evidence_refs=["idle_tick_blocked:session-a"],
+                notes=["idle_window_not_active:stopped"],
+            )
+            loaded = store.load_session(session_id="session-a")
+
+            self.assertEqual(session.status, "running")
+            self.assertEqual(run.status, "blocked")
+            self.assertEqual(run.sequence, 1)
+            self.assertEqual(loaded.run_count, 1)
+            self.assertEqual(loaded.runs[0].notes, ["idle_window_not_active:stopped"])
+            self.assertTrue(store.get_session_path(session_id="session-a").exists())
 
 
 if __name__ == "__main__":

@@ -124,6 +124,21 @@ class JsonlTraceLogger:
         with observation_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
+    def log_autonomy_run(
+        self,
+        *,
+        session_id: str,
+        run: dict,
+    ) -> None:
+        autonomy_path = self.trace_dir / f"{session_id}.autonomy.jsonl"
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "run": run,
+        }
+        with autonomy_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
     def log_identity_history(
         self,
         *,

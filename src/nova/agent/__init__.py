@@ -39,8 +39,11 @@ from nova.agent.initiative import (
 )
 from nova.agent.idle import BoundedIdleController, IdleRuntimePromptEngine, JsonIdleRuntimeStore
 from nova.agent.longitudinal_autonomy import (
+    InternalAutonomyLoopController,
+    JsonAutonomySessionStore,
     autonomy_session_record_from_payload,
     claim_candidate_from_payload,
+    default_autonomy_session_record,
     default_internal_autonomy_policy,
     internal_autonomy_policy_from_payload,
     internal_autonomy_run_from_payload,
@@ -95,8 +98,10 @@ __all__ = [
     "ContextPressureOrientationChecker",
     "ContextPressureOrientationReport",
     "InternalToolExecutor",
+    "InternalAutonomyLoopController",
     "InitiativeTransitionError",
     "JsonIdleRuntimeStore",
+    "JsonAutonomySessionStore",
     "JsonInitiativeStateStore",
     "JsonPresenceStore",
     "MaintenanceOrientationReport",
@@ -127,6 +132,7 @@ __all__ = [
     "action_plan_step_from_payload",
     "approval_required_for_action",
     "default_nova_owned_execution_boundary",
+    "default_autonomy_session_record",
     "default_tool_registry",
     "autonomy_session_record_from_payload",
     "claim_candidate_from_payload",

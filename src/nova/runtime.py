@@ -20,8 +20,17 @@ from nova.agent.claims import ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.awareness_prompt import AwarenessPromptEngine
 from nova.agent.idle import BoundedIdleController, IdleRuntimePromptEngine, JsonIdleRuntimeStore
-from nova.agent.initiative import JsonInitiativeStateStore
+from nova.agent.initiative import AutonomousInitiativeDraftError, JsonInitiativeStateStore
 from nova.agent.initiative_prompt import InitiativePromptEngine
+from nova.agent.longitudinal_autonomy import (
+    InternalAutonomyLoopController,
+    JsonAutonomySessionStore,
+    claim_candidate_from_payload,
+    default_internal_autonomy_policy,
+    internal_autonomy_policy_from_payload,
+    motive_pressure_evidence_from_payload,
+    recurring_priority_from_payload,
+)
 from nova.agent.motive_prompt import MotivePromptEngine
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
@@ -69,7 +78,10 @@ from nova.types import (
     IdlePressureAppraisal,
     IdleRuntimeStatus,
     IdleTickRecord,
+    InternalAutonomyPolicy,
+    InternalAutonomyRunRecord,
     InternalGoalInitiativeProposal,
+    AutonomySessionRecord,
     MotiveState,
     AutonomousActionBudget,
     AutonomousActionExecutionReport,
@@ -113,6 +125,7 @@ class NovaRuntime:
         memory_router: BasicMemoryRouter,
         memory_event_factory: BasicMemoryEventFactory,
         idle_store: JsonIdleRuntimeStore | None = None,
+        autonomy_store: JsonAutonomySessionStore | None = None,
         retrieval_policy: IdentityFirstRetrievalPolicy | None = None,
         probe_runner: object | None = None,
         orientation_engine: SelfOrientationEngine | None = None,
@@ -136,6 +149,7 @@ class NovaRuntime:
         action_plan_engine: BoundedActionPlanEngine | None = None,
         action_execution_controller: ActionExecutionController | None = None,
         post_action_observation_engine: PostActionObservationEngine | None = None,
+        internal_autonomy_loop_controller: InternalAutonomyLoopController | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -148,6 +162,9 @@ class NovaRuntime:
         self.initiative_store = initiative_store
         self.awareness_store = awareness_store
         self.idle_store = idle_store or JsonIdleRuntimeStore(Path(self.config.app.data_dir) / "idle")
+        self.autonomy_store = autonomy_store or JsonAutonomySessionStore(
+            Path(self.config.app.data_dir) / "autonomy"
+        )
         self.presence_store = presence_store
         self.session_store = session_store
         self.trace_logger = trace_logger
@@ -203,6 +220,10 @@ class NovaRuntime:
         )
         self.post_action_observation_engine = (
             post_action_observation_engine or PostActionObservationEngine()
+        )
+        self.internal_autonomy_loop_controller = (
+            internal_autonomy_loop_controller
+            or InternalAutonomyLoopController(store=self.autonomy_store)
         )
 
         self.session_id: str | None = None
@@ -269,6 +290,265 @@ class NovaRuntime:
             self.session_id = self.session_store.start_session()
         assert self.session_id is not None
         return self.idle_store.list_ticks(session_id=self.session_id, limit=limit)
+
+    def internal_autonomy_status(self) -> AutonomySessionRecord:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        return self.internal_autonomy_loop_controller.status(session_id=self.session_id)
+
+    def start_internal_autonomy(
+        self,
+        *,
+        max_runs: int = 0,
+        policy: InternalAutonomyPolicy | dict | None = None,
+    ) -> AutonomySessionRecord:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        if policy is None:
+            policy_record = default_internal_autonomy_policy()
+            policy_record.max_runs_per_session = max(0, int(max_runs))
+        else:
+            policy_record = (
+                internal_autonomy_policy_from_payload(policy.to_dict())
+                if isinstance(policy, InternalAutonomyPolicy)
+                else internal_autonomy_policy_from_payload(policy)
+            )
+            if max_runs:
+                policy_record.max_runs_per_session = max(0, int(max_runs))
+        record = self.internal_autonomy_loop_controller.start(
+            session_id=self.session_id,
+            policy=policy_record,
+        )
+        self.update_presence(
+            mode="internal_autonomy",
+            current_focus="internal autonomy session active",
+            interaction_summary="Internal autonomy session started under Stage 15.2 policy.",
+            last_action_status="internal_autonomy_started",
+        )
+        return record
+
+    def pause_internal_autonomy(self, *, reason: str = "operator_pause") -> AutonomySessionRecord:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.internal_autonomy_loop_controller.pause(
+            session_id=self.session_id,
+            reason=reason,
+        )
+        self.update_presence(
+            mode="internal_autonomy",
+            current_focus="internal autonomy paused",
+            interaction_summary=f"Internal autonomy paused: {reason}",
+            last_action_status="internal_autonomy_paused",
+        )
+        return record
+
+    def interrupt_internal_autonomy(
+        self,
+        *,
+        reason: str = "operator_interrupt",
+    ) -> AutonomySessionRecord:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.internal_autonomy_loop_controller.interrupt(
+            session_id=self.session_id,
+            reason=reason,
+        )
+        self.update_presence(
+            mode="internal_autonomy",
+            current_focus="internal autonomy interrupted",
+            interaction_summary=f"Internal autonomy interrupted: {reason}",
+            last_action_status="internal_autonomy_interrupted",
+        )
+        return record
+
+    def stop_internal_autonomy(self, *, reason: str = "operator_stop") -> AutonomySessionRecord:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.internal_autonomy_loop_controller.stop(
+            session_id=self.session_id,
+            reason=reason,
+        )
+        self.update_presence(
+            mode="internal_autonomy",
+            current_focus="internal autonomy stopped",
+            interaction_summary=f"Internal autonomy stopped: {reason}",
+            last_action_status="internal_autonomy_stopped",
+        )
+        return record
+
+    def step_internal_autonomy(self, *, trigger: str = "idle_window") -> InternalAutonomyRunRecord:
+        self._ensure_state_loaded()
+        self._ensure_initiative_loaded()
+        assert self.session_id is not None
+
+        autonomy = self.internal_autonomy_loop_controller.status(session_id=self.session_id)
+        if autonomy.status != "running":
+            return self._record_blocked_internal_autonomy_run(
+                trigger=trigger,
+                reason=f"autonomy_session_not_running:{autonomy.status}",
+            )
+        if not autonomy.policy.enabled:
+            return self._record_blocked_internal_autonomy_run(
+                trigger=trigger,
+                reason="internal_autonomy_policy_disabled",
+            )
+        if (
+            autonomy.policy.max_runs_per_session
+            and autonomy.run_count >= autonomy.policy.max_runs_per_session
+        ):
+            self.internal_autonomy_loop_controller.stop(
+                session_id=self.session_id,
+                reason="autonomy_budget_exhausted",
+            )
+            return self._record_blocked_internal_autonomy_run(
+                trigger=trigger,
+                reason="autonomy_budget_exhausted",
+            )
+        idle = self.idle_status()
+        if autonomy.policy.idle_window_required and idle.lifecycle_state not in {"running", "idle"}:
+            return self._record_blocked_internal_autonomy_run(
+                trigger=trigger,
+                reason=f"idle_window_not_active:{idle.lifecycle_state}",
+            )
+
+        tick = self.idle_tick(trigger="internal_autonomy_loop")
+        selected_goal = dict(tick.selected_internal_goal or {})
+        if tick.stop_reason.startswith("lifecycle_not_active") or not bool(
+            selected_goal.get("selected", False)
+        ):
+            return self._record_blocked_internal_autonomy_run(
+                trigger=trigger,
+                reason=selected_goal.get("rejection_reason") or tick.stop_reason or "no_selected_goal",
+                idle_tick_id=tick.tick_id,
+                evidence_refs=tick.evidence_refs,
+            )
+
+        initiative_id = self._initiative_id_for_internal_autonomy_tick(tick)
+        title = str(selected_goal.get("title", "") or "recorded internal autonomy activity")
+        candidate_id = str(selected_goal.get("candidate_id", "") or "")
+        evidence_refs = list(dict.fromkeys([*tick.evidence_refs, f"idle_tick:{tick.tick_id}"]))
+        plan = self.create_bounded_action_plan(
+            initiative_id=initiative_id,
+            purpose=f"Run internal autonomy reflection for: {title}",
+            scope="internal no-external-effect autonomy loop step",
+            execution_lane="internal_activity",
+            risk_class="internal",
+            steps=[
+                {
+                    "description": f"record internal self-prompt for selected goal: {title}",
+                    "surface": "self_prompt",
+                    "expected_output": "audited internal self-prompt record",
+                },
+                {
+                    "description": "appraise motive pressure without external side effects",
+                    "surface": "motive_appraisal",
+                    "expected_output": "motive-pressure evidence candidate",
+                },
+            ],
+            allowed_surfaces=["self_prompt", "motive_appraisal"],
+            blocked_surfaces=["filesystem", "shell", "network", "gui", "system_config", "external_service"],
+            budget={
+                "max_steps": max(1, autonomy.policy.max_steps_per_run or 2),
+                "max_tokens": autonomy.policy.max_tokens_per_run,
+            },
+            expected_outputs=["action audit", "post-action observation", "motive-pressure evidence"],
+            stop_conditions=["operator_interrupt", "autonomy_budget_exhausted"],
+            rollback_notes=["No external side effects are produced by this internal controller step."],
+            evidence_refs=evidence_refs,
+        )
+        report = self.execute_bounded_action_plan(plan=plan)
+        observation = self.observe_bounded_action_result(plan=plan, report=report)
+        priority = recurring_priority_from_payload(
+            payload={
+                "session_id": self.session_id,
+                "title": title,
+                "description": str(selected_goal.get("selection_reason", "") or ""),
+                "status": "candidate",
+                "recurrence_count": 1,
+                "source_candidate_ids": [candidate_id] if candidate_id else [],
+                "source_selected_goal_ids": [candidate_id] if candidate_id else [],
+                "source_initiative_ids": [initiative_id] if initiative_id else [],
+                "pressure_evidence_refs": [f"action_observation:{observation.observation_id}"],
+                "evidence_refs": evidence_refs,
+                "notes": ["stage15_2_single_run_priority_candidate"],
+            },
+            session_id=self.session_id,
+        )
+        pressure = motive_pressure_evidence_from_payload(
+            payload={
+                "session_id": self.session_id,
+                "priority_id": priority.priority_id,
+                "pressure_class": "recurrence",
+                "strength": 10,
+                "recurrence_count": 1,
+                "supporting_context": [title],
+                "source_tick_ids": [tick.tick_id],
+                "source_action_audit_ids": [
+                    audit.audit_id for audit in report.audit_records if audit.audit_id
+                ],
+                "evidence_refs": evidence_refs,
+                "notes": ["single_run_evidence_not_desire_claim"],
+            },
+            session_id=self.session_id,
+        )
+        claim_candidate = claim_candidate_from_payload(
+            payload={
+                "session_id": self.session_id,
+                "claim_class": "desire_like",
+                "proposed_claim": f"Recurring pressure may be forming around: {title}",
+                "status": "needs_more_evidence",
+                "allowed": False,
+                "confidence": 10,
+                "threshold": 90,
+                "supporting_priority_ids": [priority.priority_id],
+                "supporting_pressure_ids": [pressure.pressure_id],
+                "blocked_reasons": ["single_internal_autonomy_run_is_insufficient"],
+                "required_evidence": ["recurrence across ticks and sessions"],
+                "evidence_refs": evidence_refs,
+                "notes": ["claim_candidate_only_no_desire_claim"],
+            },
+            session_id=self.session_id,
+        )
+        run = self.internal_autonomy_loop_controller.append_run(
+            session_id=self.session_id,
+            status=report.status,
+            trigger=trigger,
+            idle_tick_id=tick.tick_id,
+            selected_goal_id=candidate_id,
+            initiative_id=initiative_id,
+            action_plan_id=plan.action_plan_id,
+            observation_id=observation.observation_id,
+            budget_snapshot=report.final_budget.to_dict(),
+            priority_records=[priority],
+            pressure_records=[pressure],
+            claim_candidates=[claim_candidate],
+            evidence_refs=[
+                *evidence_refs,
+                f"action_plan:{plan.action_plan_id}",
+                f"action_observation:{observation.observation_id}",
+            ],
+            notes=[
+                "internal_autonomy_loop_step",
+                "no_external_side_effect",
+                "memory_state_update_intents_not_applied",
+            ],
+        )
+        self.trace_logger.log_autonomy_run(
+            session_id=self.session_id,
+            run=run.to_dict(),
+        )
+        self.update_presence(
+            mode="internal_autonomy",
+            current_focus="internal autonomy step recorded",
+            interaction_summary=f"Internal autonomy step recorded from idle tick {tick.tick_id}.",
+            last_action_status=f"internal_autonomy_{run.status}",
+        )
+        return run
 
     def start_idle(self, *, max_ticks: int = 1, evaluation_mode: bool = False) -> IdleRuntimeStatus:
         if self.session_id is None:
@@ -1009,6 +1289,53 @@ class NovaRuntime:
             session_id=audit.session_id,
             audit=audit.to_dict(),
         )
+
+    def _record_blocked_internal_autonomy_run(
+        self,
+        *,
+        trigger: str,
+        reason: str,
+        idle_tick_id: str = "",
+        evidence_refs: list[str] | None = None,
+    ) -> InternalAutonomyRunRecord:
+        assert self.session_id is not None
+        run = self.internal_autonomy_loop_controller.append_run(
+            session_id=self.session_id,
+            status="blocked",
+            trigger=trigger,
+            idle_tick_id=idle_tick_id,
+            evidence_refs=evidence_refs or [],
+            notes=[
+                reason,
+                "blocked_before_internal_action",
+                "no_external_side_effect",
+            ],
+        )
+        self.trace_logger.log_autonomy_run(
+            session_id=self.session_id,
+            run=run.to_dict(),
+        )
+        self.update_presence(
+            mode="internal_autonomy",
+            current_focus="internal autonomy blocked",
+            interaction_summary=f"Internal autonomy step blocked: {reason}",
+            last_action_status="internal_autonomy_blocked",
+        )
+        return run
+
+    def _initiative_id_for_internal_autonomy_tick(self, tick: IdleTickRecord) -> str:
+        try:
+            record = self.create_autonomous_draft_from_idle_tick(tick_id=tick.tick_id)
+        except AutonomousInitiativeDraftError:
+            selected_goal = dict(tick.selected_internal_goal or {})
+            candidate_id = str(selected_goal.get("candidate_id", "") or "")
+            for item in self.autonomous_draft_initiatives():
+                if item.source_idle_tick_id == tick.tick_id:
+                    return item.initiative_id
+                if candidate_id and item.source_candidate_id == candidate_id:
+                    return item.initiative_id
+            return ""
+        return record.initiative_id
 
     def respond(self, user_text: str) -> TurnRecord:
         if (

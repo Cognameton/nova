@@ -180,18 +180,24 @@ idle windows while preserving logging, budgets, interruption, and action
 boundary enforcement.
 
 Stage 15.2 deliverables:
-- internal autonomy loop controller
-- runtime entry points for starting, stepping, pausing, interrupting, and
+- [x] internal autonomy loop controller
+- [x] runtime entry points for starting, stepping, pausing, interrupting, and
   stopping an autonomy session
-- integration with recorded idle ticks, selected internal goals, durable
+- [x] integration with recorded idle ticks, selected internal goals, durable
   autonomous initiatives, bounded internal action plans, execution audits, and
   post-action observations
-- priority handling so active user tasks and explicit interruptions outrank
+- [x] priority handling so active user tasks and explicit interruptions outrank
   autonomous activity
-- deterministic tests proving internal activity is logged, budgeted, and
+- [x] deterministic tests proving internal activity is logged, budgeted, and
   interruptible
-- deterministic tests proving external/system-effect activity remains blocked
+- [x] deterministic tests proving external/system-effect activity remains blocked
   unless explicitly approved
+
+Stage 15.2 result:
+Completed in `src/nova/agent/longitudinal_autonomy.py`,
+`src/nova/runtime.py`, `src/nova/logging/traces.py`, and tests. This stage
+adds an explicit runtime-stepped internal autonomy loop. It does not add
+hidden background execution or any new external/system-effect action surface.
 
 Stage 15.2 restrictions:
 - no hidden background execution

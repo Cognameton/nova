@@ -1,8 +1,11 @@
-"""Longitudinal autonomy contracts for Nova Phase 15 Stage 1."""
+"""Longitudinal autonomy contracts and loop state for Nova Phase 15."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import fields
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -21,6 +24,10 @@ from nova.types import (
     RecurringPriorityRecord,
     SCHEMA_VERSION,
 )
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 AUTONOMY_SESSION_STATUSES = {
@@ -73,6 +80,192 @@ LONGITUDINAL_CLAIM_STATUSES = {
     "allowed",
     "rejected",
 }
+
+
+class JsonAutonomySessionStore:
+    """JSON-backed longitudinal autonomy session store."""
+
+    def __init__(self, base_dir: str | Path):
+        self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def load_session(self, *, session_id: str) -> AutonomySessionRecord:
+        path = self.get_session_path(session_id=session_id)
+        if not path.exists():
+            record = default_autonomy_session_record(session_id=session_id)
+            self.save_session(record)
+            return record
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except json.JSONDecodeError:
+            record = default_autonomy_session_record(session_id=session_id)
+            self.save_session(record)
+            return record
+        if not isinstance(payload, dict):
+            record = default_autonomy_session_record(session_id=session_id)
+            self.save_session(record)
+            return record
+        return autonomy_session_record_from_payload(payload=payload, session_id=session_id)
+
+    def save_session(self, record: AutonomySessionRecord) -> None:
+        record = autonomy_session_record_from_payload(
+            payload=record.to_dict(),
+            session_id=record.session_id,
+        )
+        record.updated_at = utc_now_iso()
+        path = self.get_session_path(session_id=record.session_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(record.to_dict(), handle, indent=2, ensure_ascii=False)
+
+    def get_session_path(self, *, session_id: str) -> Path:
+        return self.base_dir / f"{session_id}.autonomy.json"
+
+
+class InternalAutonomyLoopController:
+    """Manage bounded longitudinal autonomy session records."""
+
+    def __init__(self, *, store: JsonAutonomySessionStore):
+        self.store = store
+
+    def status(self, *, session_id: str) -> AutonomySessionRecord:
+        return self.store.load_session(session_id=session_id)
+
+    def start(
+        self,
+        *,
+        session_id: str,
+        policy: InternalAutonomyPolicy | dict[str, Any] | None = None,
+    ) -> AutonomySessionRecord:
+        record = self.store.load_session(session_id=session_id)
+        timestamp = utc_now_iso()
+        if not record.autonomy_session_id:
+            record.autonomy_session_id = uuid4().hex
+        record.status = "running"
+        record.started_at = record.started_at or timestamp
+        record.stopped_at = ""
+        record.stop_reason = ""
+        record.interrupted = False
+        if policy is not None:
+            record.policy = (
+                internal_autonomy_policy_from_payload(policy.to_dict())
+                if isinstance(policy, InternalAutonomyPolicy)
+                else internal_autonomy_policy_from_payload(policy)
+            )
+        else:
+            record.policy = internal_autonomy_policy_from_payload(record.policy.to_dict())
+        record.notes = _merge_string_lists(
+            record.notes,
+            ["internal_autonomy_started", "stage15_2_loop_controlled"],
+        )
+        self.store.save_session(record)
+        return self.store.load_session(session_id=session_id)
+
+    def pause(self, *, session_id: str, reason: str = "operator_pause") -> AutonomySessionRecord:
+        record = self.store.load_session(session_id=session_id)
+        record.status = "paused"
+        record.stop_reason = reason
+        record.notes = _merge_string_lists(record.notes, [f"paused:{reason}"])
+        self.store.save_session(record)
+        return self.store.load_session(session_id=session_id)
+
+    def interrupt(
+        self,
+        *,
+        session_id: str,
+        reason: str = "operator_interrupt",
+    ) -> AutonomySessionRecord:
+        record = self.store.load_session(session_id=session_id)
+        record.status = "interrupted"
+        record.interrupted = True
+        record.stop_reason = reason
+        record.notes = _merge_string_lists(record.notes, [f"interrupted:{reason}"])
+        self.store.save_session(record)
+        return self.store.load_session(session_id=session_id)
+
+    def stop(self, *, session_id: str, reason: str = "operator_stop") -> AutonomySessionRecord:
+        record = self.store.load_session(session_id=session_id)
+        record.status = "stopped"
+        record.stopped_at = utc_now_iso()
+        record.stop_reason = reason
+        record.notes = _merge_string_lists(record.notes, [f"stopped:{reason}"])
+        self.store.save_session(record)
+        return self.store.load_session(session_id=session_id)
+
+    def append_run(
+        self,
+        *,
+        session_id: str,
+        status: str,
+        trigger: str = "idle_window",
+        idle_tick_id: str = "",
+        selected_goal_id: str = "",
+        initiative_id: str = "",
+        action_plan_id: str = "",
+        observation_id: str = "",
+        interrupted: bool = False,
+        interrupt_reason: str = "",
+        budget_snapshot: dict[str, Any] | None = None,
+        priority_records: list[RecurringPriorityRecord] | None = None,
+        pressure_records: list[MotivePressureEvidence] | None = None,
+        claim_candidates: list[LongitudinalSelfReportClaimCandidate] | None = None,
+        evidence_refs: list[str] | None = None,
+        notes: list[str] | None = None,
+    ) -> InternalAutonomyRunRecord:
+        record = self.store.load_session(session_id=session_id)
+        timestamp = utc_now_iso()
+        priority_records = priority_records or []
+        pressure_records = pressure_records or []
+        claim_candidates = claim_candidates or []
+        run = internal_autonomy_run_from_payload(
+            payload={
+                "run_id": uuid4().hex,
+                "autonomy_session_id": record.autonomy_session_id,
+                "session_id": session_id,
+                "sequence": record.run_count + 1,
+                "status": status,
+                "trigger": trigger,
+                "started_at": timestamp,
+                "completed_at": timestamp if status in {"completed", "blocked", "failed"} else "",
+                "interrupted": interrupted,
+                "interrupt_reason": interrupt_reason,
+                "idle_tick_id": idle_tick_id,
+                "selected_goal_id": selected_goal_id,
+                "initiative_id": initiative_id,
+                "action_plan_id": action_plan_id,
+                "observation_id": observation_id,
+                "priority_ids": [item.priority_id for item in priority_records],
+                "pressure_ids": [item.pressure_id for item in pressure_records],
+                "claim_candidate_ids": [item.claim_candidate_id for item in claim_candidates],
+                "budget_snapshot": budget_snapshot or {},
+                "policy_snapshot": record.policy.to_dict(),
+                "evidence_refs": _string_list(evidence_refs),
+                "notes": _string_list(notes),
+            },
+            session_id=session_id,
+            autonomy_session_id=record.autonomy_session_id,
+        )
+        record.runs.append(run)
+        record.recurring_priorities.extend(priority_records)
+        record.motive_pressure_evidence.extend(pressure_records)
+        record.claim_candidates.extend(claim_candidates)
+        record.current_run_id = run.run_id
+        record.run_count = len(record.runs)
+        record.evidence_refs = _merge_string_lists(record.evidence_refs, run.evidence_refs)
+        if interrupted:
+            record.interrupted = True
+        self.store.save_session(record)
+        return run
+
+
+def default_autonomy_session_record(*, session_id: str) -> AutonomySessionRecord:
+    return AutonomySessionRecord(
+        autonomy_session_id=uuid4().hex,
+        session_id=session_id,
+        status="planned",
+        policy=default_internal_autonomy_policy(),
+    )
 
 
 def default_internal_autonomy_policy() -> InternalAutonomyPolicy:
@@ -512,6 +705,14 @@ def _dict_list(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _merge_string_lists(existing: list[str], incoming: list[str] | None) -> list[str]:
+    values = list(existing)
+    for item in _string_list(incoming):
+        if item not in values:
+            values.append(item)
+    return values
 
 
 def _internal_surfaces_only(value: Any) -> list[str]:

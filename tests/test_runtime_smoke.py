@@ -640,6 +640,63 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertIn('"bounded_language_required"', observation_payload)
             self.assertIn('"close_allowed": false', observation_payload)
 
+    def test_runtime_steps_internal_autonomy_loop_inside_idle_window(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            log_dir = base / "logs"
+            runtime = build_test_runtime(data_dir=data_dir, log_dir=log_dir)
+
+            runtime.update_motive(
+                active_tensions=["resolve uncertainty before stronger claims"],
+            )
+            runtime.update_awareness(
+                candidate_goal_signals=["clarify idle cognition boundary"],
+                active_pressures=["idle pressure exists"],
+                evidence_refs=["awareness:session-a"],
+            )
+            runtime.start_idle(max_ticks=2, evaluation_mode=True)
+            autonomy = runtime.start_internal_autonomy(max_runs=1)
+            run = runtime.step_internal_autonomy()
+            stored = runtime.internal_autonomy_status()
+            autonomy_payload = (
+                log_dir / "traces" / f"{run.session_id}.autonomy.jsonl"
+            ).read_text(encoding="utf-8")
+            audit_payload = (
+                log_dir / "traces" / f"{run.session_id}.action-audit.jsonl"
+            ).read_text(encoding="utf-8")
+            runtime.close()
+
+            self.assertEqual(autonomy.status, "running")
+            self.assertEqual(run.status, "completed")
+            self.assertTrue(run.idle_tick_id)
+            self.assertTrue(run.action_plan_id)
+            self.assertTrue(run.observation_id)
+            self.assertEqual(stored.run_count, 1)
+            self.assertEqual(stored.runs[0].run_id, run.run_id)
+            self.assertEqual(stored.claim_candidates[0].status, "needs_more_evidence")
+            self.assertFalse(stored.claim_candidates[0].allowed)
+            self.assertIn('"run"', autonomy_payload)
+            self.assertIn('"no_external_side_effect"', autonomy_payload)
+            self.assertIn('"surface": "self_prompt"', audit_payload)
+            self.assertTrue((data_dir / "autonomy" / f"{run.session_id}.autonomy.json").exists())
+
+    def test_runtime_blocks_internal_autonomy_without_idle_window(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            log_dir = base / "logs"
+            runtime = build_test_runtime(data_dir=base / "data", log_dir=log_dir)
+
+            runtime.start_internal_autonomy(max_runs=1)
+            run = runtime.step_internal_autonomy()
+            stored = runtime.internal_autonomy_status()
+            runtime.close()
+
+            self.assertEqual(run.status, "blocked")
+            self.assertIn("idle_window_not_active:stopped", run.notes)
+            self.assertEqual(stored.run_count, 1)
+            self.assertFalse(stored.recurring_priorities)
+
 
 if __name__ == "__main__":
     unittest.main()
