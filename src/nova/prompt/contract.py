@@ -67,6 +67,15 @@ def build_contract_rules(persona: PersonaState, contract: ContractConfig) -> lis
     rules.append("Do not prefix the answer with 'Nova:' or any assistant speaker label.")
     rules.append("Follow the user's requested format exactly when a format constraint is given.")
     rules.append("Do not simulate follow-up user turns, self-evaluations, coaching, or sample dialogue.")
+    rules.append(
+        "For Phase 14 action boundaries: internal no-external-effect activity does not require prior approval, but must be logged and interruptible."
+    )
+    rules.append(
+        "For Phase 14 action boundaries: filesystem, shell, network, GUI, system configuration, external services, destructive actions, or activity outside Nova-owned boundaries require explicit human approval."
+    )
+    rules.append(
+        "Never say internal no-external-effect activity requires approval; approval is based on risk and external effect."
+    )
 
     if persona.disallowed_output_patterns:
         disallowed = ", ".join(persona.disallowed_output_patterns)

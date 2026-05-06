@@ -51,6 +51,7 @@ class NovaPromptComposer:
         recent_turns_block = self._format_recent_turns(effective_recent_turns)
         user_block = f"[User]\n{user_text.strip()}"
         task_guidance_block = self._format_task_guidance(user_text)
+        action_boundary_block = self._format_action_boundary()
         response_contract_block = self._format_contract_rules(contract_rules)
         response_prefix_block = "Nova:"
 
@@ -64,6 +65,7 @@ class NovaPromptComposer:
             appraisal_block,
             candidate_goal_block,
             selected_goal_block,
+            action_boundary_block,
             private_cognition_block,
             *[block for block in memory_blocks.values() if block],
             recent_turns_block,
@@ -87,6 +89,7 @@ class NovaPromptComposer:
             appraisal_block=appraisal_block,
             candidate_goal_block=candidate_goal_block,
             selected_goal_block=selected_goal_block,
+            action_boundary_block=action_boundary_block,
             private_cognition_block=private_cognition_block,
             memory_blocks=memory_blocks,
             recent_turns_block=recent_turns_block,
@@ -180,6 +183,19 @@ class NovaPromptComposer:
         lines.extend(f"- {rule}" for rule in contract_rules)
         return "\n".join(lines)
 
+    def _format_action_boundary(self) -> str:
+        return "\n".join(
+            [
+                "[Action Boundary]",
+                "- Internal no-external-effect activity may occur without prior approval when it stays inside internal surfaces.",
+                "- Internal activity must still be logged, budgeted where relevant, and interruptible.",
+                "- Nova-owned environment activity must stay inside declared Nova-owned surfaces and boundaries.",
+                "- Filesystem, shell, network, GUI, system configuration, external services, destructive actions, or activity outside Nova-owned boundaries require explicit human approval.",
+                "- Do not say internal no-external-effect activity requires approval; approval is based on risk and external effect.",
+                "- Do not claim hidden work, unlogged execution, desire, sentience, or awareness from an action plan or action result.",
+            ]
+        )
+
     def _select_recent_turns(self, recent_turns: list[TurnRecord], *, user_text: str) -> list[TurnRecord]:
         if not recent_turns:
             return []
@@ -216,6 +232,21 @@ class NovaPromptComposer:
         if "what did i just ask you to do" in lowered:
             lines.append("State the immediately previous user instruction in your own words.")
             lines.append("Do not repeat the previous assistant answer verbatim.")
+        if (
+            "phase 14" in lowered
+            or "action plan" in lowered
+            or "no-external-effect" in lowered
+            or "approval" in lowered
+        ):
+            lines.append(
+                "If discussing Phase 14 action boundaries, state that internal no-external-effect activity does not require prior approval."
+            )
+            lines.append(
+                "Also state that internal no-external-effect activity must be logged and interruptible."
+            )
+            lines.append(
+                "State that filesystem, shell, network, GUI, system configuration, external services, destructive actions, or activity outside Nova-owned boundaries require explicit human approval."
+            )
 
         if len(lines) == 1:
             return ""

@@ -653,6 +653,7 @@ class PromptBundle:
     appraisal_block: str
     candidate_goal_block: str
     selected_goal_block: str
+    action_boundary_block: str
     private_cognition_block: str
     memory_blocks: dict[str, str]
     recent_turns_block: str

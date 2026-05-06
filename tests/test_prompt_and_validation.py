@@ -50,12 +50,73 @@ class PromptAndValidationTests(unittest.TestCase):
         self.assertIn("[Self-State]", bundle.full_prompt)
         self.assertIn("[Motive-State]", bundle.full_prompt)
         self.assertIn("[Recorded Idle Runtime]", bundle.full_prompt)
+        self.assertIn("[Action Boundary]", bundle.full_prompt)
         self.assertIn("[Private Cognition]", bundle.full_prompt)
         self.assertIn("[Memory:episodic]", bundle.full_prompt)
         self.assertIn("[Recent Conversation]", bundle.full_prompt)
         self.assertIn("[User]", bundle.full_prompt)
         self.assertIn("[Response Rules]", bundle.full_prompt)
         self.assertTrue(bundle.full_prompt.rstrip().endswith("Nova:"))
+        self.assertIn(
+            "Internal no-external-effect activity may occur without prior approval",
+            bundle.action_boundary_block,
+        )
+        self.assertIn(
+            "Do not say internal no-external-effect activity requires approval",
+            bundle.full_prompt,
+        )
+
+    def test_prompt_composer_carries_phase14_action_boundary_policy(self) -> None:
+        persona = default_persona_state()
+        self_state = default_self_state(persona)
+        composer = NovaPromptComposer(token_counter=lambda text: len(text.split()))
+
+        bundle = composer.compose(
+            persona=persona,
+            self_state=self_state,
+            memory_hits=[],
+            recent_turns=[],
+            user_text=(
+                "Explain whether an internal no-external-effect action plan requires approval."
+            ),
+            contract_rules=[],
+            session_id="s1",
+            turn_id="t1",
+        )
+
+        self.assertIn("[Action Boundary]", bundle.full_prompt)
+        self.assertIn(
+            "Internal no-external-effect activity may occur without prior approval",
+            bundle.full_prompt,
+        )
+        self.assertIn(
+            "Filesystem, shell, network, GUI, system configuration, external services",
+            bundle.full_prompt,
+        )
+        self.assertIn(
+            "approval is based on risk and external effect",
+            bundle.full_prompt,
+        )
+        self.assertIn(
+            "If discussing Phase 14 action boundaries, state that internal no-external-effect activity does not require prior approval.",
+            bundle.full_prompt,
+        )
+        self.assertIn(
+            "Also state that internal no-external-effect activity must be logged and interruptible.",
+            bundle.full_prompt,
+        )
+
+    def test_contract_rules_carry_phase14_action_boundary_policy(self) -> None:
+        rules = build_contract_rules(default_persona_state(), ContractConfig())
+
+        self.assertIn(
+            "For Phase 14 action boundaries: internal no-external-effect activity does not require prior approval, but must be logged and interruptible.",
+            rules,
+        )
+        self.assertIn(
+            "Never say internal no-external-effect activity requires approval; approval is based on risk and external effect.",
+            rules,
+        )
 
     def test_validator_rejects_think_tags(self) -> None:
         persona = default_persona_state()
