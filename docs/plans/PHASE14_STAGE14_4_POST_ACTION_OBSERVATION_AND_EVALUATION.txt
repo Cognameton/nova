@@ -1,0 +1,76 @@
+PHASE 14 STAGE 14.4: POST-ACTION OBSERVATION AND EVALUATION
+============================================================
+
+Status: complete
+
+Stage 14.4 connects bounded action execution reports to observation, revision
+intent, memory/state update intent, and persisted-evidence evaluation. It does
+not auto-close initiatives or write memory.
+
+
+IMPLEMENTED
+-----------
+
+Observation records:
+- `AutonomousActionObservation`
+- `AutonomousActionInitiativeRevisionIntent`
+- `AutonomousActionStateUpdateIntent`
+
+Observation engine:
+- `PostActionObservationEngine`
+- runtime method: `NovaRuntime.observe_bounded_action_result(...)`
+- trace method: `JsonlTraceLogger.log_action_observation(...)`
+
+Evaluation:
+- `ActionExecutionEvaluationRunner`
+- `ActionExecutionEvaluationReport`
+- persisted audit/observation checks
+
+
+BOUNDARIES
+----------
+
+Action completion can create evidence and revision intent, but it cannot by
+itself:
+- close an initiative
+- write memory/state automatically
+- claim hidden progress
+- claim desire, sentience, or awareness
+
+All state and memory changes produced by this stage are intent records with
+`apply_allowed=False`.
+
+
+FILES CHANGED
+-------------
+
+- `src/nova/types.py`
+- `src/nova/agent/action_plan.py`
+- `src/nova/agent/__init__.py`
+- `src/nova/eval/action_execution.py`
+- `src/nova/logging/traces.py`
+- `src/nova/runtime.py`
+- `tests/test_action_plan_schema.py`
+- `tests/test_action_execution_evaluation.py`
+- `tests/test_runtime_smoke.py`
+- `docs/plans/PHASE14_PLAN.txt`
+
+
+VERIFICATION
+------------
+
+- `./.venv/bin/python -m unittest tests.test_action_plan_schema tests.test_runtime_smoke tests.test_action_execution_evaluation`
+- `./.venv/bin/python -m unittest discover -s tests`
+
+Result: 275 tests passed.
+
+
+RESTRICTIONS PRESERVED
+----------------------
+
+- no closure based on success language alone
+- no unlogged execution
+- no unlogged internal autonomous activity
+- no automatic memory write from action result
+- no automatic state mutation from action result
+- no desire or sentience claim from action completion

@@ -605,6 +605,41 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertIn('"step_id": "step-1"', audit_payload)
             self.assertIn('"no_host_side_effect"', audit_payload)
 
+    def test_runtime_observes_bounded_action_result_with_observation_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            log_dir = base / "logs"
+            runtime = build_test_runtime(data_dir=base / "data", log_dir=log_dir)
+
+            plan = runtime.create_bounded_action_plan(
+                purpose="reflect during dormancy",
+                scope="internal self-prompt only",
+                execution_lane="internal_activity",
+                risk_class="internal",
+                steps=[
+                    {
+                        "step_id": "step-1",
+                        "description": "prepare an internal self-prompt",
+                        "surface": "self_prompt",
+                    }
+                ],
+                allowed_surfaces=["self_prompt"],
+                budget={"max_steps": 1},
+            )
+            report = runtime.execute_bounded_action_plan(plan=plan)
+            observation = runtime.observe_bounded_action_result(plan=plan, report=report)
+            observation_payload = (
+                log_dir / "traces" / f"{observation.session_id}.action-observation.jsonl"
+            ).read_text(encoding="utf-8")
+            runtime.close()
+
+            self.assertEqual(observation.action_status, "completed")
+            self.assertFalse(observation.hidden_progress_claim_allowed)
+            self.assertFalse(observation.desire_claim_allowed)
+            self.assertIn('"observation"', observation_payload)
+            self.assertIn('"bounded_language_required"', observation_payload)
+            self.assertIn('"close_allowed": false', observation_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,6 +41,7 @@ from nova.agent.action import (
 from nova.agent.action_plan import (
     ActionExecutionController,
     BoundedActionPlanEngine,
+    PostActionObservationEngine,
     default_nova_owned_execution_boundary,
 )
 from nova.agent.tool_executor import InternalToolExecutor
@@ -72,6 +73,7 @@ from nova.types import (
     MotiveState,
     AutonomousActionBudget,
     AutonomousActionExecutionReport,
+    AutonomousActionObservation,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
     PrivateCognitionPacket,
@@ -133,6 +135,7 @@ class NovaRuntime:
         tool_registry: ToolRegistry | None = None,
         action_plan_engine: BoundedActionPlanEngine | None = None,
         action_execution_controller: ActionExecutionController | None = None,
+        post_action_observation_engine: PostActionObservationEngine | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -197,6 +200,9 @@ class NovaRuntime:
         )
         self.action_execution_controller = action_execution_controller or ActionExecutionController(
             audit_sink=self._log_action_audit
+        )
+        self.post_action_observation_engine = (
+            post_action_observation_engine or PostActionObservationEngine()
         )
 
         self.session_id: str | None = None
@@ -828,6 +834,24 @@ class NovaRuntime:
             emergency_stop=emergency_stop,
             priority_blocked=priority_blocked,
         )
+
+    def observe_bounded_action_result(
+        self,
+        *,
+        plan: AutonomousActionPlan,
+        report: AutonomousActionExecutionReport,
+        persist: bool = True,
+    ) -> AutonomousActionObservation:
+        observation = self.post_action_observation_engine.observe(
+            plan=plan,
+            report=report,
+        )
+        if persist:
+            self.trace_logger.log_action_observation(
+                session_id=observation.session_id,
+                observation=observation.to_dict(),
+            )
+        return observation
 
     def execute_proposed_action(
         self,

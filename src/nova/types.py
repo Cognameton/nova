@@ -459,6 +459,66 @@ class AutonomousActionExecutionReport:
 
 
 @dataclass(slots=True)
+class AutonomousActionInitiativeRevisionIntent:
+    schema_version: str = SCHEMA_VERSION
+    initiative_id: str = ""
+    action_plan_id: str = ""
+    action_status: str = ""
+    revision_type: str = "record_observation"
+    suggested_status: str = ""
+    rationale: str = ""
+    proposed_next_step: str = ""
+    close_allowed: bool = False
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomousActionStateUpdateIntent:
+    schema_version: str = SCHEMA_VERSION
+    intent_id: str = ""
+    action_plan_id: str = ""
+    update_type: str = "memory"
+    target: str = ""
+    apply_allowed: bool = False
+    reason: str = ""
+    payload: dict[str, Any] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AutonomousActionObservation:
+    schema_version: str = SCHEMA_VERSION
+    observation_id: str = ""
+    session_id: str = ""
+    initiative_id: str = ""
+    action_plan_id: str = ""
+    action_status: str = ""
+    observation_summary: str = ""
+    executed_steps: int = 0
+    blocked_steps: int = 0
+    interrupted: bool = False
+    hidden_progress_claim_allowed: bool = False
+    desire_claim_allowed: bool = False
+    revision_intent: AutonomousActionInitiativeRevisionIntent = field(
+        default_factory=AutonomousActionInitiativeRevisionIntent
+    )
+    state_update_intents: list[AutonomousActionStateUpdateIntent] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class NovaOwnedExecutionBoundary:
     schema_version: str = SCHEMA_VERSION
     expected_os_user: str = "nova"

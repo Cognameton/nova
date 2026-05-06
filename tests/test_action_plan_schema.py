@@ -6,10 +6,12 @@ from nova.agent.action_plan import (
     ActionExecutionController,
     ActionPlanBoundaryError,
     BoundedActionPlanEngine,
+    PostActionObservationEngine,
     action_audit_record_from_payload,
     action_budget_from_payload,
     action_permission_from_payload,
     action_plan_from_payload,
+    action_observation_from_payload,
     approval_required_for_action,
     default_nova_owned_execution_boundary,
     execution_boundary_from_payload,
@@ -21,6 +23,7 @@ from nova.types import (
     AutonomousActionAuditRecord,
     AutonomousActionBudget,
     AutonomousActionExecutionReport,
+    AutonomousActionObservation,
     AutonomousActionPermission,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
@@ -626,6 +629,72 @@ class ActionExecutionControllerTests(unittest.TestCase):
         self.assertEqual(report.status, "completed")
         self.assertEqual(len(audits), 1)
         self.assertEqual(audits[0].step_id, "step-1")
+
+
+class PostActionObservationEngineTests(unittest.TestCase):
+    def test_completed_action_report_creates_bounded_revision_and_update_intents(self) -> None:
+        plan = BoundedActionPlanEngine().create_plan(
+            session_id="session-a",
+            initiative_id="initiative-1",
+            purpose="internal reflection",
+            scope="self-prompt only",
+            execution_lane="internal_activity",
+            risk_class="internal",
+            steps=[
+                {"step_id": "step-1", "description": "first", "surface": "self_prompt"},
+            ],
+            allowed_surfaces=["self_prompt"],
+            budget={"max_steps": 1},
+            evidence_refs=["initiative:initiative-1"],
+        )
+        report = ActionExecutionController().execute_plan(plan=plan)
+
+        observation = PostActionObservationEngine().observe(plan=plan, report=report)
+
+        self.assertIsInstance(observation, AutonomousActionObservation)
+        self.assertEqual(observation.action_status, "completed")
+        self.assertEqual(observation.executed_steps, 1)
+        self.assertFalse(observation.hidden_progress_claim_allowed)
+        self.assertFalse(observation.desire_claim_allowed)
+        self.assertEqual(observation.revision_intent.revision_type, "record_progress")
+        self.assertEqual(observation.revision_intent.suggested_status, "pending_review")
+        self.assertFalse(observation.revision_intent.close_allowed)
+        self.assertEqual(len(observation.state_update_intents), 2)
+        self.assertTrue(all(not intent.apply_allowed for intent in observation.state_update_intents))
+        self.assertIn("bounded_language_required", observation.notes)
+        self.assertIn(f"action_plan:{plan.action_plan_id}", observation.evidence_refs)
+
+        round_trip = action_observation_from_payload(
+            payload=observation.to_dict(),
+            session_id="session-a",
+        )
+        self.assertEqual(round_trip.to_dict(), observation.to_dict())
+
+    def test_blocked_action_report_creates_block_revision_intent_without_closure(self) -> None:
+        plan = BoundedActionPlanEngine().create_plan(
+            session_id="session-a",
+            initiative_id="initiative-1",
+            purpose="external filesystem",
+            scope="approval required",
+            execution_lane="external_system_effect",
+            risk_class="external",
+            steps=[
+                {"step_id": "step-1", "description": "inspect file", "surface": "filesystem"},
+            ],
+            allowed_surfaces=["filesystem"],
+        )
+        report = ActionExecutionController().execute_plan(plan=plan)
+
+        observation = PostActionObservationEngine().observe(plan=plan, report=report)
+
+        self.assertEqual(observation.action_status, "blocked")
+        self.assertEqual(observation.blocked_steps, 1)
+        self.assertEqual(observation.revision_intent.revision_type, "record_block")
+        self.assertEqual(observation.revision_intent.suggested_status, "paused")
+        self.assertFalse(observation.revision_intent.close_allowed)
+        self.assertIn("resolve_block_before_retry", observation.revision_intent.proposed_next_step)
+        self.assertFalse(observation.hidden_progress_claim_allowed)
+        self.assertFalse(observation.desire_claim_allowed)
 
 
 if __name__ == "__main__":

@@ -283,13 +283,21 @@ Connect action results back into bounded observation, initiative revision, and
 evaluation without fabricating hidden progress.
 
 Stage 14.4 deliverables:
-- [ ] post-action observation schema
-- [ ] initiative revision hook from action result
-- [ ] memory/state update intent records
-- [ ] action execution evaluation runner
-- [ ] internal activity log evaluation checks
-- [ ] tests for audit-chain visibility and bounded prompt/diagnostic language
-- [ ] persisted-evidence or live evaluation report
+- [x] post-action observation schema
+- [x] initiative revision hook from action result
+- [x] memory/state update intent records
+- [x] action execution evaluation runner
+- [x] internal activity log evaluation checks
+- [x] tests for audit-chain visibility and bounded prompt/diagnostic language
+- [x] persisted-evidence or live evaluation report
+
+Stage 14.4 result:
+Completed in `src/nova/agent/action_plan.py`, `src/nova/eval/action_execution.py`,
+`src/nova/logging/traces.py`, `src/nova/runtime.py`, and tests. Action reports
+now produce bounded observations, initiative revision intents, and memory/state
+update intents. These are logged and evaluable, but do not auto-close
+initiatives, auto-write memory, or permit hidden progress, desire, or sentience
+claims.
 
 Stage 14.4 restrictions:
 - no closure based on success language alone

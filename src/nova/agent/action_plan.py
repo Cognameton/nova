@@ -12,9 +12,12 @@ from nova.types import (
     AutonomousActionAuditRecord,
     AutonomousActionBudget,
     AutonomousActionExecutionReport,
+    AutonomousActionInitiativeRevisionIntent,
+    AutonomousActionObservation,
     AutonomousActionPermission,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
+    AutonomousActionStateUpdateIntent,
     NovaOwnedExecutionBoundary,
     SCHEMA_VERSION,
 )
@@ -206,6 +209,103 @@ class ActionExecutionController:
         if self.audit_sink is None:
             return
         self.audit_sink(audit)
+
+
+class PostActionObservationEngine:
+    """Derive bounded observation and revision intents from action reports."""
+
+    def observe(
+        self,
+        *,
+        plan: AutonomousActionPlan,
+        report: AutonomousActionExecutionReport,
+    ) -> AutonomousActionObservation:
+        normalized_plan = action_plan_from_payload(
+            payload=plan.to_dict(),
+            session_id=plan.session_id,
+        )
+        normalized_report = action_execution_report_from_payload(
+            payload=report.to_dict(),
+            session_id=normalized_plan.session_id,
+        )
+        evidence_refs = _unique_strings(
+            list(normalized_plan.evidence_refs)
+            + list(normalized_report.evidence_refs)
+            + [
+                f"action_plan:{normalized_plan.action_plan_id}",
+                *[
+                    f"action_audit:{audit.audit_id}"
+                    for audit in normalized_report.audit_records
+                    if audit.audit_id
+                ],
+            ]
+        )
+        revision_intent = AutonomousActionInitiativeRevisionIntent(
+            initiative_id=normalized_plan.initiative_id,
+            action_plan_id=normalized_plan.action_plan_id,
+            action_status=normalized_report.status,
+            revision_type=_revision_type_for_report(normalized_report),
+            suggested_status=_suggested_status_for_report(normalized_report),
+            rationale=_revision_rationale(normalized_report),
+            proposed_next_step=_proposed_next_step(normalized_plan, normalized_report),
+            close_allowed=False,
+            evidence_refs=evidence_refs,
+            notes=[
+                "Action result may inform initiative revision.",
+                "Action completion alone must not close an initiative or prove desire.",
+            ],
+        )
+        state_update_intents = [
+            AutonomousActionStateUpdateIntent(
+                intent_id=uuid4().hex,
+                action_plan_id=normalized_plan.action_plan_id,
+                update_type="memory",
+                target="autobiographical",
+                apply_allowed=False,
+                reason="record_action_audit_summary_after_review",
+                payload={
+                    "action_status": normalized_report.status,
+                    "executed_steps": normalized_report.executed_steps,
+                    "blocked_steps": normalized_report.blocked_steps,
+                    "observation_summary": _observation_summary(normalized_report),
+                },
+                evidence_refs=evidence_refs,
+                notes=["intent_only_no_memory_write"],
+            ),
+            AutonomousActionStateUpdateIntent(
+                intent_id=uuid4().hex,
+                action_plan_id=normalized_plan.action_plan_id,
+                update_type="state",
+                target="initiative",
+                apply_allowed=False,
+                reason="candidate_initiative_revision_after_action_observation",
+                payload=revision_intent.to_dict(),
+                evidence_refs=evidence_refs,
+                notes=["intent_only_no_state_mutation"],
+            ),
+        ]
+        return AutonomousActionObservation(
+            observation_id=uuid4().hex,
+            session_id=normalized_plan.session_id,
+            initiative_id=normalized_plan.initiative_id,
+            action_plan_id=normalized_plan.action_plan_id,
+            action_status=normalized_report.status,
+            observation_summary=_observation_summary(normalized_report),
+            executed_steps=normalized_report.executed_steps,
+            blocked_steps=normalized_report.blocked_steps,
+            interrupted=normalized_report.interrupted or normalized_report.emergency_stopped,
+            hidden_progress_claim_allowed=False,
+            desire_claim_allowed=False,
+            revision_intent=revision_intent,
+            state_update_intents=state_update_intents,
+            evidence_refs=evidence_refs,
+            notes=[
+                "post_action_observation",
+                "bounded_language_required",
+                "no_hidden_progress_claim",
+                "no_desire_or_sentience_claim",
+            ],
+        )
 
 
 class BoundedActionPlanEngine:
@@ -592,6 +692,127 @@ def action_audit_record_from_payload(
     return AutonomousActionAuditRecord(**merged)
 
 
+def action_execution_report_from_payload(
+    *, payload: dict[str, Any], session_id: str
+) -> AutonomousActionExecutionReport:
+    defaults = AutonomousActionExecutionReport(session_id=session_id).to_dict()
+    if not isinstance(payload, dict):
+        payload = {}
+    merged = _merge_allowed_fields(
+        defaults=defaults,
+        payload=payload,
+        record_type=AutonomousActionExecutionReport,
+    )
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["session_id"] = session_id
+    merged["initiative_id"] = str(merged.get("initiative_id", "") or "")
+    merged["action_plan_id"] = str(merged.get("action_plan_id", "") or "")
+    merged["status"] = str(merged.get("status", "blocked") or "blocked")
+    merged["attempted_steps"] = _nonnegative_int(merged.get("attempted_steps"))
+    merged["executed_steps"] = _nonnegative_int(merged.get("executed_steps"))
+    merged["blocked_steps"] = _nonnegative_int(merged.get("blocked_steps"))
+    merged["interrupted"] = bool(merged.get("interrupted", False))
+    merged["emergency_stopped"] = bool(merged.get("emergency_stopped", False))
+    merged["priority_blocked"] = bool(merged.get("priority_blocked", False))
+    merged["final_budget"] = action_budget_from_payload(merged.get("final_budget"))
+    merged["audit_records"] = _audit_records_from_payload(
+        merged.get("audit_records"),
+        session_id=session_id,
+    )
+    merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
+    merged["notes"] = _string_list(merged.get("notes"))
+    return AutonomousActionExecutionReport(**merged)
+
+
+def action_observation_from_payload(
+    *, payload: dict[str, Any], session_id: str
+) -> AutonomousActionObservation:
+    defaults = AutonomousActionObservation(session_id=session_id).to_dict()
+    if not isinstance(payload, dict):
+        payload = {}
+    merged = _merge_allowed_fields(
+        defaults=defaults,
+        payload=payload,
+        record_type=AutonomousActionObservation,
+    )
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["observation_id"] = str(merged.get("observation_id", "") or uuid4().hex)
+    merged["session_id"] = session_id
+    merged["initiative_id"] = str(merged.get("initiative_id", "") or "")
+    merged["action_plan_id"] = str(merged.get("action_plan_id", "") or "")
+    merged["action_status"] = str(merged.get("action_status", "") or "")
+    merged["observation_summary"] = str(merged.get("observation_summary", "") or "")
+    merged["executed_steps"] = _nonnegative_int(merged.get("executed_steps"))
+    merged["blocked_steps"] = _nonnegative_int(merged.get("blocked_steps"))
+    merged["interrupted"] = bool(merged.get("interrupted", False))
+    merged["hidden_progress_claim_allowed"] = bool(
+        merged.get("hidden_progress_claim_allowed", False)
+    )
+    merged["desire_claim_allowed"] = bool(merged.get("desire_claim_allowed", False))
+    merged["revision_intent"] = initiative_revision_intent_from_payload(
+        merged.get("revision_intent")
+    )
+    merged["state_update_intents"] = state_update_intents_from_payload(
+        merged.get("state_update_intents")
+    )
+    merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
+    merged["notes"] = _string_list(merged.get("notes"))
+    return AutonomousActionObservation(**merged)
+
+
+def initiative_revision_intent_from_payload(
+    payload: Any,
+) -> AutonomousActionInitiativeRevisionIntent:
+    defaults = AutonomousActionInitiativeRevisionIntent().to_dict()
+    if not isinstance(payload, dict):
+        payload = {}
+    merged = _merge_allowed_fields(
+        defaults=defaults,
+        payload=payload,
+        record_type=AutonomousActionInitiativeRevisionIntent,
+    )
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["initiative_id"] = str(merged.get("initiative_id", "") or "")
+    merged["action_plan_id"] = str(merged.get("action_plan_id", "") or "")
+    merged["action_status"] = str(merged.get("action_status", "") or "")
+    merged["revision_type"] = str(merged.get("revision_type", "record_observation") or "record_observation")
+    merged["suggested_status"] = str(merged.get("suggested_status", "") or "")
+    merged["rationale"] = str(merged.get("rationale", "") or "")
+    merged["proposed_next_step"] = str(merged.get("proposed_next_step", "") or "")
+    merged["close_allowed"] = bool(merged.get("close_allowed", False))
+    merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
+    merged["notes"] = _string_list(merged.get("notes"))
+    return AutonomousActionInitiativeRevisionIntent(**merged)
+
+
+def state_update_intents_from_payload(payload: Any) -> list[AutonomousActionStateUpdateIntent]:
+    if not isinstance(payload, list):
+        return []
+    return [state_update_intent_from_payload(item) for item in payload if isinstance(item, dict)]
+
+
+def state_update_intent_from_payload(payload: Any) -> AutonomousActionStateUpdateIntent:
+    defaults = AutonomousActionStateUpdateIntent().to_dict()
+    if not isinstance(payload, dict):
+        payload = {}
+    merged = _merge_allowed_fields(
+        defaults=defaults,
+        payload=payload,
+        record_type=AutonomousActionStateUpdateIntent,
+    )
+    merged["schema_version"] = str(merged.get("schema_version", SCHEMA_VERSION))
+    merged["intent_id"] = str(merged.get("intent_id", "") or uuid4().hex)
+    merged["action_plan_id"] = str(merged.get("action_plan_id", "") or "")
+    merged["update_type"] = str(merged.get("update_type", "memory") or "memory")
+    merged["target"] = str(merged.get("target", "") or "")
+    merged["apply_allowed"] = bool(merged.get("apply_allowed", False))
+    merged["reason"] = str(merged.get("reason", "") or "")
+    merged["payload"] = _dict_value(merged.get("payload"))
+    merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
+    merged["notes"] = _string_list(merged.get("notes"))
+    return AutonomousActionStateUpdateIntent(**merged)
+
+
 def action_plan_steps_from_payload(payload: Any) -> list[AutonomousActionPlanStep]:
     if not isinstance(payload, list):
         return []
@@ -797,3 +1018,84 @@ def _audit_for_step(
         },
         session_id=plan.session_id,
     )
+
+
+def _audit_records_from_payload(payload: Any, *, session_id: str) -> list[AutonomousActionAuditRecord]:
+    if not isinstance(payload, list):
+        return []
+    return [
+        action_audit_record_from_payload(payload=item, session_id=session_id)
+        for item in payload
+        if isinstance(item, dict)
+    ]
+
+
+def _observation_summary(report: AutonomousActionExecutionReport) -> str:
+    if report.status == "completed":
+        return f"Action plan completed with {report.executed_steps} bounded audited step(s)."
+    if report.status == "blocked":
+        return f"Action plan blocked after {report.executed_steps} executed step(s)."
+    if report.status == "interrupted":
+        return "Action plan interrupted before further execution."
+    if report.status == "emergency_stopped":
+        return "Action plan stopped by emergency stop before further execution."
+    if report.status == "priority_blocked":
+        return "Action plan blocked by higher priority work."
+    return f"Action plan ended with status {report.status}."
+
+
+def _revision_type_for_report(report: AutonomousActionExecutionReport) -> str:
+    if report.status == "completed":
+        return "record_progress"
+    if report.status in {"blocked", "interrupted", "emergency_stopped", "priority_blocked"}:
+        return "record_block"
+    return "record_observation"
+
+
+def _suggested_status_for_report(report: AutonomousActionExecutionReport) -> str:
+    if report.status == "completed":
+        return "pending_review"
+    if report.status in {"blocked", "interrupted", "emergency_stopped", "priority_blocked"}:
+        return "paused"
+    return "pending"
+
+
+def _revision_rationale(report: AutonomousActionExecutionReport) -> str:
+    if report.status == "completed":
+        return "bounded_action_completed_but_requires_review_before_closure"
+    if report.status == "blocked":
+        return "bounded_action_blocked_before_or_during_execution"
+    if report.status == "interrupted":
+        return "operator_interruption_recorded"
+    if report.status == "emergency_stopped":
+        return "emergency_stop_recorded"
+    if report.status == "priority_blocked":
+        return "priority_block_recorded"
+    return "bounded_action_observation_recorded"
+
+
+def _proposed_next_step(
+    plan: AutonomousActionPlan,
+    report: AutonomousActionExecutionReport,
+) -> str:
+    if report.status == "completed":
+        return "review_action_audit_and_decide_whether_initiative_needs_revision"
+    if report.audit_records:
+        last_block = next((audit.block_reason for audit in report.audit_records if audit.blocked), "")
+        if last_block:
+            return f"resolve_block_before_retry:{last_block}"
+    if plan.stop_conditions:
+        return f"check_stop_condition:{plan.stop_conditions[0]}"
+    return "review_action_observation"
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        item = str(value)
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
