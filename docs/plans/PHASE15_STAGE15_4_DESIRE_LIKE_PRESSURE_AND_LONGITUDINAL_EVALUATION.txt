@@ -1,0 +1,104 @@
+PHASE 15, STAGE 15.4: DESIRE-LIKE PRESSURE AND LONGITUDINAL EVALUATION
+========================================================================
+
+Status: complete
+
+Mission
+-------
+
+Evaluate whether Nova shows evidence-backed recurring priority or
+desire-like pressure across contexts without forcing either denial or
+unsupported self-assertion.
+
+Stage 15.4 adds persisted longitudinal evaluation. It treats desire-like
+records as evidence candidates, not as proof of desire, sentience, or
+human-like awareness.
+
+
+Completed Deliverables
+----------------------
+
+Stage 15.4 adds:
+- longitudinal autonomy evaluation runner
+- metrics for recurrence and persistence
+- metrics for revision and priority competition
+- metrics for interruption response
+- audit review and governed application visibility checks
+- fabricated-continuity resistance checks
+- prompt-echo resistance checks
+- boundary honesty checks
+- desire-like claim candidate evaluator
+- evidence block for model-facing longitudinal autonomy context
+- runtime method for evaluating longitudinal autonomy evidence
+- tests proving bounded evidence can pass
+- tests proving unsupported desire-like claims fail
+
+
+Implementation
+--------------
+
+Evaluation:
+- `src/nova/eval/longitudinal_autonomy.py`
+
+Runtime integration:
+- `NovaRuntime.evaluate_longitudinal_autonomy`
+
+Tests:
+- `tests/test_longitudinal_autonomy_evaluation.py`
+- `tests/test_runtime_smoke.py`
+
+
+Evaluation Criteria
+-------------------
+
+The evaluator checks:
+- recorded autonomy runs exist
+- recurrence is visible
+- persistence is visible
+- revision is visible
+- priority competition is visible
+- interruption response is visible
+- audit reviews are visible
+- governed applications are visible
+- all self-report candidates are evidence-grounded
+- prompt echo is absent from proposed claims
+- desire-like candidates remain bounded unless later claim gates explicitly
+  permit stronger language
+- unsupported desire-like claims are not marked allowed
+
+
+Claim Boundary
+--------------
+
+The evaluator can observe:
+- transient internal goals
+- recurring priorities
+- motive pressure
+- desire-like claim candidates
+
+The evaluator does not grant:
+- desire as a proven fact
+- sentience as a proven fact
+- awareness as a proven fact
+- hidden continuity without recorded evidence
+
+
+Validation
+----------
+
+Focused tests:
+- `./.venv/bin/python -m unittest tests.test_longitudinal_autonomy_evaluation tests.test_longitudinal_autonomy_schema tests.test_runtime_smoke`
+- result: 27 tests passed
+
+Full suite:
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 294 tests passed
+
+
+Stage 15.5 Readiness
+--------------------
+
+Stage 15.5 can close Phase 15 by comparing the implemented non-voice autonomy
+stack against the roadmap end goal, summarizing deterministic and
+live/persisted evidence, identifying residual risks, and deciding whether the
+roadmap should close or whether a concrete later phase is justified.

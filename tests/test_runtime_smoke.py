@@ -772,6 +772,20 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertEqual(len(before_events), len(after_events))
             self.assertEqual(before_notes, after_notes)
 
+    def test_runtime_exposes_longitudinal_autonomy_evaluation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            runtime = build_test_runtime(data_dir=base / "data", log_dir=base / "logs")
+
+            runtime.start_internal_autonomy(max_runs=1)
+            run = runtime.step_internal_autonomy()
+            report = runtime.evaluate_longitudinal_autonomy(session_ids=[run.session_id])
+            runtime.close()
+
+            self.assertFalse(report.passed)
+            self.assertEqual(report.run_count, 1)
+            self.assertIn("recurrence_not_visible", report.reasons)
+
 
 if __name__ == "__main__":
     unittest.main()

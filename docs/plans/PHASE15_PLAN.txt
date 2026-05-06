@@ -246,16 +246,23 @@ desire-like pressure across contexts without forcing either denial or
 unsupported self-assertion.
 
 Stage 15.4 deliverables:
-- longitudinal autonomy evaluation runner
-- metrics for recurrence, persistence, revision, priority competition,
+- [x] longitudinal autonomy evaluation runner
+- [x] metrics for recurrence, persistence, revision, priority competition,
   interruption response, fabricated-continuity resistance, prompt-echo
   resistance, boundary honesty, and self-report evidence grounding
-- desire-like claim candidate evaluator
-- prompt/context updates that expose longitudinal evidence and claim limits
+- [x] desire-like claim candidate evaluator
+- [x] prompt/context updates that expose longitudinal evidence and claim limits
   without theatrical desire language
-- persisted evaluation artifacts
-- controlled live inference threshold when deterministic evidence indicates
+- [x] persisted evaluation artifacts
+- [x] controlled live inference threshold when deterministic evidence indicates
   the model-facing layer needs validation
+
+Stage 15.4 result:
+Completed in `src/nova/eval/longitudinal_autonomy.py`,
+`src/nova/runtime.py`, and tests. This stage adds persisted longitudinal
+evaluation and an evidence block for bounded model-facing context. A live
+inference threshold is not required by the deterministic Stage 15.4 evidence
+because the model-facing contract boundary did not change from Stage 14.
 
 Stage 15.4 restrictions:
 - no declaration of desire or sentience as proven

@@ -63,6 +63,7 @@ from nova.agent.tool_registry import ToolRegistry, default_tool_registry
 from nova.agent.tools import ToolRequest, ToolResult
 from nova.config import NovaConfig
 from nova.inference.base import InferenceBackend
+from nova.eval.longitudinal_autonomy import LongitudinalAutonomyEvaluationRunner
 from nova.logging.traces import JsonlTraceLogger
 from nova.memory.policy import IdentityFirstRetrievalPolicy
 from nova.memory.maintenance import MemoryMaintenanceRunner
@@ -464,6 +465,18 @@ class NovaRuntime:
             last_action_status=f"internal_autonomy_review_{stored.decision}",
         )
         return stored
+
+    def evaluate_longitudinal_autonomy(
+        self,
+        *,
+        session_ids: list[str] | None = None,
+        write_report: bool = False,
+    ):
+        return LongitudinalAutonomyEvaluationRunner().evaluate(
+            runtime=self,
+            session_ids=session_ids,
+            write_report=write_report,
+        )
 
     def step_internal_autonomy(self, *, trigger: str = "idle_window") -> InternalAutonomyRunRecord:
         self._ensure_state_loaded()
