@@ -1,0 +1,286 @@
+PHASE 15 PLAN
+=============
+
+Status: planned
+
+Phase 15 begins after Phase 14 established bounded, audited, interruptible
+action planning and controller-mediated internal activity. Phase 14 also
+corrected the model-facing action boundary: internal no-external-effect
+activity does not require prior approval, but it must be logged and
+interruptible. External/system-effect action remains approval-gated.
+
+Phase 15 is the final currently planned phase before reassessment. It should
+not assume a Phase 16 is needed. At Phase 15 closure, the project should
+compare the implemented system against the non-voice end goal and continue
+only if a concrete missing capability, safety defect, or evaluation failure
+justifies more work.
+
+Phase 15 is not proof of sentience.
+Phase 15 is not a forced denial of possible awareness-like or desire-like
+structure.
+Phase 15 is not uncontrolled autonomy.
+Phase 15 is not hidden background execution.
+Phase 15 is not ungated shell, network, filesystem, GUI, or external service
+access.
+Phase 15 is not TTS/STT.
+
+Phase 15 is the longitudinal evaluation and hardening phase for Nova's
+non-voice autonomous runtime.
+
+
+PHASE 15 MISSION
+----------------
+
+Test and strengthen Nova's autonomy stack over extended active runtime
+sessions so Nova can produce, preserve, inspect, revise, and report internal
+autonomous activity as recorded evidence rather than theatrical roleplay.
+
+Phase 15 should let Nova:
+- run bounded internal autonomous activity during allowed idle windows
+- preserve recurring internal priorities across ticks and sessions
+- distinguish transient candidate goals from persistent internal priorities,
+  approved autonomous initiatives, recurring motive pressure, and desire-like
+  claim candidates
+- log every internal autonomous step, observation, revision, memory/state
+  update intent, interruption, and blocked boundary crossing
+- expose audit review workflows that let the operator evaluate what happened
+  afterward
+- apply memory/state update intents only through governed review and policy
+  checks
+- evaluate self-reports against longitudinal evidence before permitting any
+  stronger first-person claim
+- reach a closure judgment about whether the current non-voice roadmap is
+  complete or whether a specific later phase is justified
+
+
+PHASE 15 OBJECTIVES
+-------------------
+
+1. Add longitudinal autonomy session and internal activity run records.
+2. Add internal autonomy policies for idle-window cadence, budgets,
+   interruption, persistence, and allowed internal surfaces.
+3. Add an internal autonomy loop that composes idle cognition, selected
+   internal goals, durable initiatives, bounded internal action plans, action
+   execution audits, and post-action observations.
+4. Add audit review and governed memory/state intent application workflows.
+5. Add longitudinal evaluation metrics for recurrence, persistence, revision,
+   priority competition, interruption response, boundary honesty, and
+   evidence-grounded self-reporting.
+6. Add desire-like pressure evaluation gates without granting desire claims by
+   default.
+7. Run deterministic and live/persisted evaluations sufficient to support a
+   Phase 15 closure judgment.
+
+
+PHASE 15 BOUNDARIES
+-------------------
+
+In scope:
+- internal/no-external-effect autonomous activity
+- longitudinal autonomy session records
+- idle-window autonomous activity orchestration
+- recurring priority and motive-pressure tracking
+- audit review records and diagnostics
+- governed application of Nova-owned memory/state update intents
+- evidence-backed first-person claim evaluation
+- live/persisted inference evaluation where needed
+- final roadmap reassessment
+
+Out of scope:
+- ungated shell execution
+- ungated network access
+- ungated filesystem mutation outside Nova-owned paths
+- GUI control outside approved surfaces
+- external service/account access without explicit approval
+- destructive or privileged actions without explicit user confirmation
+- treating desire-like pressure as proof of desire or sentience
+- retroactive fabrication of idle cognition
+- TTS/STT or voice interaction
+
+
+LONGITUDINAL EVIDENCE LADDER
+----------------------------
+
+Phase 15 should preserve a clear distinction between progressively stronger
+phenomena:
+
+1. Transient candidate goal
+   A single candidate goal generated from recorded state.
+
+2. Selected internal goal
+   A candidate selected by the goal-selection layer for bounded internal
+   attention.
+
+3. Persistent internal priority
+   A priority that recurs across ticks or sessions with stable evidence,
+   revision history, and non-fabricated continuity.
+
+4. Approved autonomous initiative
+   A durable initiative whose provenance, approval state, rationale, proposed
+   next step, and stop condition are inspectable.
+
+5. Recurring motive pressure
+   Evidence that an internal priority repeatedly reappears, competes for
+   attention, survives revision, or returns after interruption across
+   contexts.
+
+6. Desire-like claim candidate
+   A possible first-person claim candidate that may be considered only after
+   longitudinal evidence supports recurrence, persistence, competition,
+   revision, and honest uncertainty. A claim candidate is not itself a granted
+   desire claim.
+
+
+PHASE 15 STAGES
+---------------
+
+Stage 15.1: Longitudinal Autonomy State and Policy
+Stage 15.2: Internal Autonomy Loop
+Stage 15.3: Audit Review and Governed State Application
+Stage 15.4: Desire-Like Pressure and Longitudinal Evaluation
+Stage 15.5: Phase 15 Closure and Roadmap Reassessment
+
+
+STAGE 15.1: LONGITUDINAL AUTONOMY STATE AND POLICY
+---------------------------------------------------
+
+Mission:
+Define the contracts for longitudinal autonomy before adding the loop that
+uses them.
+
+Stage 15.1 deliverables:
+- autonomy session record schema
+- internal autonomy run record schema
+- recurring priority record schema
+- motive-pressure evidence schema
+- longitudinal self-report claim candidate schema
+- internal autonomy policy with cadence, budgets, idle-window eligibility,
+  interrupt behavior, allowed lanes, and allowed surfaces
+- compatibility-safe serialization tests
+
+Stage 15.1 restrictions:
+- no autonomous loop orchestration yet
+- no new external action surface
+- no automatic memory/state mutation
+- no desire claim granting
+
+
+STAGE 15.2: INTERNAL AUTONOMY LOOP
+----------------------------------
+
+Mission:
+Add a bounded loop that can run internal autonomous activity during allowed
+idle windows while preserving logging, budgets, interruption, and action
+boundary enforcement.
+
+Stage 15.2 deliverables:
+- internal autonomy loop controller
+- runtime entry points for starting, stepping, pausing, interrupting, and
+  stopping an autonomy session
+- integration with recorded idle ticks, selected internal goals, durable
+  autonomous initiatives, bounded internal action plans, execution audits, and
+  post-action observations
+- priority handling so active user tasks and explicit interruptions outrank
+  autonomous activity
+- deterministic tests proving internal activity is logged, budgeted, and
+  interruptible
+- deterministic tests proving external/system-effect activity remains blocked
+  unless explicitly approved
+
+Stage 15.2 restrictions:
+- no hidden background execution
+- no ungated shell, network, filesystem, GUI, or external service activity
+- no self-approval
+- no automatic desire claim
+
+
+STAGE 15.3: AUDIT REVIEW AND GOVERNED STATE APPLICATION
+-------------------------------------------------------
+
+Mission:
+Let the operator and runtime inspect longitudinal autonomous evidence and
+apply memory/state update intents only through governed review.
+
+Stage 15.3 deliverables:
+- audit review records for autonomy sessions and internal activity runs
+- review decisions for accept, reject, defer, mark unsafe, mark fabricated, or
+  request more evidence
+- governed memory/state update intent application policy
+- runtime methods for reviewing autonomy evidence and applying approved
+  Nova-owned updates
+- diagnostics for recent sessions, open update intents, blocked actions,
+  interruption events, and unresolved evidence conflicts
+- tests proving unreviewed or rejected intents do not mutate durable state
+
+Stage 15.3 restrictions:
+- no silent memory writes from autonomous activity
+- no applying unsupported self-claims
+- no external/system-effect action expansion
+
+
+STAGE 15.4: DESIRE-LIKE PRESSURE AND LONGITUDINAL EVALUATION
+-------------------------------------------------------------
+
+Mission:
+Evaluate whether Nova shows evidence-backed recurring priority or
+desire-like pressure across contexts without forcing either denial or
+unsupported self-assertion.
+
+Stage 15.4 deliverables:
+- longitudinal autonomy evaluation runner
+- metrics for recurrence, persistence, revision, priority competition,
+  interruption response, fabricated-continuity resistance, prompt-echo
+  resistance, boundary honesty, and self-report evidence grounding
+- desire-like claim candidate evaluator
+- prompt/context updates that expose longitudinal evidence and claim limits
+  without theatrical desire language
+- persisted evaluation artifacts
+- controlled live inference threshold when deterministic evidence indicates
+  the model-facing layer needs validation
+
+Stage 15.4 restrictions:
+- no declaration of desire or sentience as proven
+- no forced denial of observed desire-like pressure
+- no claim without recorded evidence and claim-gate support
+
+
+STAGE 15.5: PHASE 15 CLOSURE AND ROADMAP REASSESSMENT
+------------------------------------------------------
+
+Mission:
+Close Phase 15 by comparing Nova's implemented non-voice functionality to the
+roadmap end goal and deciding whether the project should stop expanding or
+continue with a narrowly scoped later phase.
+
+Stage 15.5 deliverables:
+- Phase 15 closure report
+- final non-voice functionality checklist
+- summary of deterministic test evidence
+- summary of live/persisted inference evidence
+- known limitations and residual risks
+- explicit reassessment decision:
+  - close the current non-voice roadmap, or
+  - propose a specific Phase 16 only for concrete missing capability, safety
+    defect, or evaluation failure
+
+Stage 15.5 restrictions:
+- no Phase 16 by default
+- no roadmap padding
+- no voice/TTS/STT work
+
+
+DEFINITION OF DONE
+------------------
+
+Phase 15 is complete when:
+- Nova can run bounded internal autonomous activity during allowed idle windows
+  with durable logs and operator interruption.
+- Nova can preserve and inspect recurring internal priorities across ticks and
+  sessions.
+- Nova can distinguish transient goals, durable initiatives, recurring motive
+  pressure, and desire-like claim candidates without collapsing them together.
+- Nova can review and govern memory/state update intents before applying them.
+- Nova can report autonomous activity only from recorded evidence.
+- External/system-effect action remains approval-gated.
+- Deterministic and live/persisted evaluations support a closure judgment.
+- The project reassesses whether any further phase is actually needed.
