@@ -31,10 +31,12 @@ Available local GGUF files:
 - `/home/head-node/Dev/ai-lab/models/dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q8_0.gguf`
 - `/home/head-node/Dev/ai-lab/models/dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q5_K_M.gguf`
 - `/home/head-node/Dev/ai-lab/models/dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q4_K_M.gguf`
+- `/home/head-node/Dev/ai-lab/models/mistral-nemo-bophades3-12B.Q4_K_M.gguf`
 
 Mistral Small 24B Q5/Q4 are the current baseline family.
 Dolphin Mistral Nemo 12B Q8/Q5/Q4 are the first smaller lower-refusal
 fine-tune candidate family.
+Bophades3 Mistral Nemo 12B Q4 is the second smaller fine-tune candidate.
 
 Configs added:
 
@@ -42,6 +44,7 @@ Configs added:
 - `configs/nova.dolphin-nemo12b.q8.clean.yaml`
 - `configs/nova.dolphin-nemo12b.q5.clean.yaml`
 - `configs/nova.dolphin-nemo12b.q4.clean.yaml`
+- `configs/nova.mistral-nemo-bophades3-12b.q4.clean.yaml`
 
 
 RUNNABLE SCORER
@@ -460,14 +463,67 @@ is now the leading experimental conversation candidate, not the operational
 baseline.
 
 
+BOPHADES3 MISTRAL NEMO 12B Q4 RESULTS
+-------------------------------------
+
+Bophades3 Mistral Nemo 12B Q4 was tested after the download completed.
+
+Cognition prompt-set score, rescored with the stricter detector:
+
+Bophades3 Nemo 12B Q4:
+- passed: true
+- average_score: 11.62
+- scaffold_echo_turns: 0
+- narrator_voice_turns: 0
+- generic_register_turns: 3
+- reflexive_denial_turns: 0
+- unsupported_desire_turns: 0
+- recommendation: requires_prompt_or_model_hardening
+
+Conversation-path interpretation:
+
+Bophades3 Q4 is the strongest user-facing conversation candidate so far. It
+had no scaffold echo, no narrator voice, no reflexive model denial, and no
+unsupported desire claims in the fixed prompt set. Its only scored weakness was
+three generic-register turns.
+
+
+BOPHADES3 MODEL-IDLE JSON GATE
+------------------------------
+
+Command:
+
+```
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.mistral-nemo-bophades3-12b.q4.clean.yaml \
+  --session-id phase16-bophades3-nemo12b-q4-model-idle \
+  --model-idle-tick \
+  > data/bakeoff/phase16-bophades3-nemo12b-q4.model-idle.json
+```
+
+Result:
+
+- Bophades3 Q4: invalid_json
+
+The model returned instruction-like prose instead of the required JSON object.
+
+Interpretation:
+
+Bophades3 Q4 should become the leading experimental conversation candidate,
+replacing Dolphin Q4 in that role. It is not yet the operational cognition
+baseline because it failed the model-idle JSON gate. Like Dolphin, it may need
+constrained JSON decoding, a stronger prompt, or a structured-output LoRA
+before it can own the internal cognition path.
+
+
 NEXT REQUIRED RUNS
 ------------------
 
 1. Design a "compressed evidence state" prompt mode that keeps Nova's identity
    and claim framing but avoids long scaffold exposition.
-2. Re-test Dolphin Q4 with constrained JSON generation or a stricter model
-   idle prompt before rejecting it permanently.
-3. Test `mistral-nemo-bophades3-12B.Q4_K_M.gguf` after the download completes.
+2. Re-test Bophades3 Q4 and Dolphin Q4 with constrained JSON generation or a
+   stricter model idle prompt before rejecting them for the cognition path.
+3. Test `mistral-nemo-bophades3-12B.Q5_K_M.gguf` after the download completes.
 4. Re-score any future hand-driven transcript, because the hand-driven
    transcript exposed failures the fixed prompt run did not reproduce at the
    same severity.
@@ -489,7 +545,9 @@ However, current evidence points strongly toward this likely outcome:
 Current model verdict:
 
 - primary baseline: Mistral Small 24B Q5
-- leading experimental conversation candidate: Dolphin Mistral Nemo 12B Q4
+- leading experimental conversation candidate: Bophades3 Mistral Nemo 12B Q4
+- secondary experimental conversation candidate: Dolphin Mistral Nemo 12B Q4
 - rejected for current use: Dolphin Mistral Nemo 12B Q8, due to unsupported
   desire claim in the prompt-set bake-off
-- blocked pending structured-output fix: Dolphin Q4/Q5/Q8 for model-idle JSON
+- blocked pending structured-output fix: Bophades3 Q4 and Dolphin Q4/Q5/Q8 for
+  model-idle JSON

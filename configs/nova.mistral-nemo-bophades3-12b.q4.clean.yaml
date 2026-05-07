@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/bakeoff/mistral-nemo-bophades3-12b-q4-clean
+  log_dir: ./data/bakeoff/mistral-nemo-bophades3-12b-q4-clean/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/models/mistral-nemo-bophades3-12B.Q4_K_M.gguf
+
+generation:
+  max_tokens: 192
