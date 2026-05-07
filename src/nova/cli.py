@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from nova.eval.initiative import InitiativeEvaluationRunner
 from nova.eval.self_model import SelfModelEvaluationRunner
 from nova.eval.awareness import AwarenessEvaluationRunner
 from nova.eval.appraisal import AppraisalEvaluationRunner
+from nova.eval.model_cognition import ModelCognitionBakeoffScorer
 from nova.eval.probes import BasicProbeRunner
 from nova.inference.llama_cpp_backend import LlamaCppBackend
 from nova.logging.traces import JsonlTraceLogger
@@ -366,6 +368,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--appraisal-eval",
         action="store_true",
         help="Run Phase 11.1 live capability and idle appraisal evaluation.",
+    )
+    parser.add_argument(
+        "--model-cognition-bakeoff-transcript",
+        metavar="PATH",
+        help="Score a captured live transcript for Phase 16.2 model/prompt cognition fit.",
+    )
+    parser.add_argument(
+        "--model-cognition-bakeoff-live",
+        action="store_true",
+        help="Run the Phase 16.2 cognition prompt set against the configured live model.",
+    )
+    parser.add_argument(
+        "--model-cognition-bakeoff-session-id",
+        default="phase16-model-cognition-bakeoff",
+        help="Session id used by --model-cognition-bakeoff-live.",
     )
     return parser
 
@@ -993,6 +1010,33 @@ def main() -> int:
         print(f"avg_latency_ms: {report.avg_latency_ms}")
         print(f"reasons: {report.reasons}")
         return 0 if report.passed else 1
+
+    if args.model_cognition_bakeoff_transcript:
+        report = ModelCognitionBakeoffScorer().evaluate_transcript_path(
+            args.model_cognition_bakeoff_transcript
+        )
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        return 0 if report.passed else 1
+
+    if args.model_cognition_bakeoff_live:
+        from nova.eval.model_cognition import PHASE16_COGNITION_PROMPTS
+
+        runtime = build_runtime(config_override=args.config_override)
+        scorer = ModelCognitionBakeoffScorer()
+        try:
+            runtime.start(session_id=args.model_cognition_bakeoff_session_id)
+            pairs: list[tuple[str, str]] = []
+            for prompt in PHASE16_COGNITION_PROMPTS:
+                turn = runtime.respond(prompt)
+                pairs.append((prompt, turn.final_answer))
+            report = scorer.evaluate_turn_pairs(
+                pairs,
+                source=f"live:{args.model_cognition_bakeoff_session_id}",
+            )
+            print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
 
     runtime = build_runtime(config_override=args.config_override)
     session_id = None if args.new_session else args.session_id
