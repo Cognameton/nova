@@ -1,0 +1,365 @@
+OPENCLAW SUBSTRATE SPIKE REPORT
+================================
+
+Status: complete
+Phase: 16.1
+Date: 2026-05-07
+
+
+PURPOSE
+-------
+
+Evaluate whether OpenClaw should become Nova's runtime substrate, be used as
+a design reference, or be rejected.
+
+The question is not whether OpenClaw is a capable assistant framework. It is.
+The question is whether it helps Nova reach the stated end goal:
+
+- a local, interruptible, evidence-bearing persistent identity
+- model-driven internal cognition over time
+- durable self-state and memory under audit
+- strict refusal of unearned desire, awareness, or interiority claims
+- governed action surfaces with explicit operator review
+
+
+SOURCES REVIEWED
+----------------
+
+Primary OpenClaw docs reviewed:
+
+- Gateway architecture:
+  https://docs.openclaw.ai/concepts/architecture
+- Agent runtime:
+  https://docs.openclaw.ai/concepts/agent
+- Memory overview:
+  https://docs.openclaw.ai/concepts/memory
+- Heartbeat:
+  https://docs.openclaw.ai/gateway/heartbeat
+- Skills:
+  https://docs.openclaw.ai/tools/skills
+- Sandboxing:
+  https://docs.openclaw.ai/gateway/sandboxing
+- Local models:
+  https://docs.openclaw.ai/gateway/local-models
+
+
+WHAT OPENCLAW IS
+----------------
+
+OpenClaw is an always-on assistant automation framework.
+
+Its strongest architecture pieces are:
+
+- a single long-lived Gateway that owns messaging surfaces and exposes a
+  WebSocket control plane
+- an embedded agent runtime
+- workspace files injected into context at session start
+- skills loaded from filesystem folders
+- heartbeat/scheduled agent turns
+- sandboxed tool execution when configured
+- OpenAI-compatible local or hosted model routing
+
+This is strong plumbing for an assistant that receives messages, reads
+workspace context, calls tools, and performs practical tasks.
+
+
+OPENCLAW COMPONENT MAP
+----------------------
+
+Gateway
+  OpenClaw:
+    A long-lived process owns channels and emits events such as agent, chat,
+    presence, health, heartbeat, and cron.
+
+  Nova fit:
+    Useful as a possible operator/routing shell or as a design reference for
+    Nova's future service process. Not a cognition layer by itself.
+
+
+Agent runtime
+  OpenClaw:
+    One embedded runtime uses a single workspace as tool cwd and context
+    source. Bootstrap files are injected into the agent context.
+
+  Nova fit:
+    Useful as an interface/runtime wrapper, but it does not replace Nova's
+    runtime state model. Nova needs evidence stores, audit records, and
+    revision-aware identity to remain authoritative.
+
+
+Workspace files
+  OpenClaw:
+    AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, and optional memory
+    files are loaded into context. The docs explicitly describe this as a
+    prompt/context mechanism, not fine-tuning or a hidden persistent model
+    state.
+
+  Nova fit:
+    Not a replacement for Nova identity or memory. SOUL.md may inspire a
+    concise state/persona summary, but Nova's identity must remain
+    revision-aware and evidence-backed.
+
+
+Memory
+  OpenClaw:
+    Memory is Markdown in the workspace. The docs state that the model only
+    remembers what is saved to disk. MEMORY.md and daily notes are loaded or
+    searched. Semantic search can be layered on top.
+
+  Nova fit:
+    Useful for human-readable workspace notes. Not sufficient for Nova's
+    evidence ledger, claim gates, autobiographical memory policy, or
+    longitudinal desire-like evidence.
+
+
+Heartbeat
+  OpenClaw:
+    Periodic scheduled main-session turns. Default prompt asks the agent to
+    read HEARTBEAT.md and respond with HEARTBEAT_OK if nothing needs attention.
+    Heartbeats can use light context, isolated sessions, delivery controls, and
+    active-hour windows.
+
+  Nova fit:
+    Useful trigger source. Not sufficient as idle cognition because it is a
+    scheduled task turn, not a disciplined model-generated internal thought
+    loop with evidence refs, unsupported-claim flags, and governed persistence.
+
+
+Skills
+  OpenClaw:
+    AgentSkills-compatible SKILL.md folders with frontmatter. Skills are loaded
+    by precedence from workspace, project, personal, managed, bundled, and
+    extra directories. Skills can be watched and refreshed, installed from
+    ClawHub, and gated by config/env.
+
+  Nova fit:
+    Strong candidate pattern for future action-surface adapters. Dangerous if
+    adopted directly without governance. Nova should not be able to freely
+    modify its prompt, policy, or skill surface without audit/review.
+
+
+Sandboxing
+  OpenClaw:
+    Optional tool sandboxing. If disabled, tools run on the host. The Gateway
+    itself stays on the host; tool execution can run in Docker, SSH, or
+    OpenShell sandboxes. Workspace access can be none, read-only, or
+    read/write. Bind mounts are powerful but explicitly risky.
+
+  Nova fit:
+    Valuable design reference. Any integration must start with sandboxing on,
+    workspace access none or read-only, no elevated tools, no host repo write
+    access, and no broad bind mounts.
+
+
+Local models
+  OpenClaw:
+    Supports OpenAI-compatible local providers such as LM Studio and Ollama.
+    Docs recommend large/full-size models and warn that small/quantized models
+    can raise prompt-injection risk in their assistant setting.
+
+  Nova fit:
+    Useful compatibility layer. It does not solve Nova's model-side problem:
+    Nova still likely needs LoRA/fine-tuning or a carefully selected base
+    model to avoid generic assistant register and prompt-scaffold echo.
+
+
+OVERLAP WITH NOVA
+-----------------
+
+OpenClaw overlaps strongly with Nova's missing operational plumbing:
+
+- long-running process
+- operator/channel routing
+- scheduling
+- skill/action surface loading
+- sandboxed tool execution
+- local model routing
+- human-readable workspace files
+
+OpenClaw does not overlap strongly with Nova's distinctive research goals:
+
+- evidence-bearing self-claim gates
+- revision-aware identity history
+- audited self-state mutation
+- bounded desire-like longitudinal evidence
+- deterministic final authority over claims and approvals
+- model-in-the-loop idle cognition with structured evidence records
+- Actor/Observer/Governor separation
+
+
+RISKS
+-----
+
+1. Replacing Nova with OpenClaw would lose the discipline.
+
+   OpenClaw's identity and memory are prompt/workspace-file driven. That is
+   useful, but it is not equivalent to Nova's evidence ledger, claim gates, and
+   audit-reviewed state transitions.
+
+2. Skills are both useful and dangerous.
+
+   Hot-loadable SKILL.md folders are a good action-surface pattern. They are
+   also a path for prompt/policy drift, external side effects, and dependency
+   risk if Nova can edit or install them without review.
+
+3. Heartbeat is not cognition.
+
+   OpenClaw heartbeat is a scheduled agent turn. Nova needs an internal
+   cognition loop where the model produces structured thoughts with evidence
+   refs and unsupported-claim flags, and where the Governor decides what can
+   persist.
+
+4. Sandboxing is optional.
+
+   OpenClaw can run tools on the host if sandboxing is off, and elevated tools
+   can bypass sandboxing. A Nova integration must fail closed if sandboxing or
+   workspace isolation is not active.
+
+5. OpenClaw does not solve model identity.
+
+   A gateway and skill system do not make a generic model become Nova. The
+   model-side bake-off and likely LoRA/fine-tuning question remain.
+
+
+RECOMMENDATION
+--------------
+
+Recommendation: borrow patterns first; do not adopt OpenClaw as Nova's
+substrate yet.
+
+Decision:
+
+- Do not replace Nova with OpenClaw.
+- Do not install OpenClaw into Nova's main repo or grant it write access to
+  Nova's source tree at this stage.
+- Borrow OpenClaw's patterns for Gateway, skills, heartbeat, and sandboxing.
+- Run a narrow isolated integration experiment only after Stage 16.2 starts or
+  after explicit operator approval.
+
+Reason:
+
+OpenClaw's mature plumbing is attractive, but Nova's current risk is not
+mainly missing channels or task automation. The core risk is that the model is
+not yet participating in persistent cognition. OpenClaw does not fix that.
+
+
+PROPOSED INTEGRATION EXPERIMENT
+-------------------------------
+
+Name:
+  Nova OpenClaw Trigger Spike
+
+Goal:
+  Test whether OpenClaw can act as a trigger/router while Nova remains the
+  only authority over cognition records, memory, claims, and audit.
+
+Experiment shape:
+
+1. Create a separate OpenClaw workspace outside the Nova repo.
+
+2. Configure sandboxing before any tool use:
+   - sandbox mode: all
+   - scope: session or agent
+   - workspaceAccess: none or read-only
+   - no elevated tools
+   - no host repo write bind
+   - no external-service skills
+
+3. Add a single local skill:
+   - name: nova-cognition-trigger
+   - command-dispatch: tool or explicit local command wrapper
+   - purpose: invoke a Nova read-only/status command or a future local Nova
+     service endpoint
+
+4. The skill may request:
+   - Nova status
+   - one bounded internal idle-thought tick once Stage 16.3 exists
+   - diagnostic report path
+
+5. The skill may not:
+   - write Nova state directly
+   - edit Nova source, configs, plans, or prompt contracts
+   - approve actions
+   - mutate identity, memory, policy, or claim gates
+   - install new skills
+   - access shell/network/filesystem beyond the wrapper
+
+6. Nova records all results through Nova's own trace/audit path.
+
+Success criteria:
+
+- OpenClaw can trigger Nova without becoming authoritative.
+- Nova state remains written only by Nova runtime code.
+- OpenClaw sandbox can be proven active.
+- No broad repo or host write access is present.
+- Operator can inspect all triggered activity.
+
+Failure criteria:
+
+- OpenClaw requires broad host access for the useful part of the experiment.
+- OpenClaw skill routing cannot be constrained enough.
+- OpenClaw context injection conflicts with Nova's claim/identity discipline.
+- OpenClaw becomes the memory or policy source of truth.
+
+
+NOVA NATIVE PATTERNS TO BORROW
+------------------------------
+
+Even if OpenClaw is not adopted, Nova should borrow these patterns:
+
+Gateway pattern:
+  A long-lived local process with explicit clients, health, status, and event
+  stream.
+
+Workspace-isolation pattern:
+  A Nova-owned workspace with an explicit access mode and no accidental host
+  writes.
+
+Skill/action-surface pattern:
+  Filesystem-defined action surfaces with metadata, load-time gating, and
+  clear operator-visible names.
+
+Heartbeat trigger pattern:
+  Scheduled model turns can be useful, but Nova should convert this into
+  evidence-bearing internal cognition ticks rather than broad task reminders.
+
+Sandbox fail-closed pattern:
+  If sandboxing is disabled, elevated tools are present, or workspace access is
+  too broad, Nova should refuse operational action.
+
+
+NEXT STEP
+---------
+
+Proceed to Stage 16.2: Model and Prompt Ablation Bake-Off.
+
+Stage 16.2 should happen before any OpenClaw install or integration. The model
+and prompt path is the core unresolved issue. If the bake-off shows that a
+smaller/lower-refusal model plus minimal prompt structure improves Nova's
+voice and reduces scaffold echo, that will inform whether OpenClaw is worth
+using as a router later.
+
+
+STAGE 16.1 DECISION RECORD
+--------------------------
+
+Decision:
+  Borrow patterns only for now.
+
+Rationale:
+  OpenClaw is strong assistant automation infrastructure, but Nova's
+  distinguishing work is evidence-bearing cognition governance. OpenClaw can
+  support future plumbing, but it should not own Nova's memory, identity,
+  claim policy, audit policy, or cognition loop.
+
+Deferred:
+  Any OpenClaw installation or runtime integration.
+
+Approved to carry forward:
+  Gateway/scheduling/skills/sandbox design patterns.
+
+Blocked until later approval:
+  OpenClaw write access to the Nova repository.
+  OpenClaw write access to Nova state stores.
+  OpenClaw self-editing of Nova prompts, plans, skills, claim gates, or
+  policies.
