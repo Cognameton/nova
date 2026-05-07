@@ -1,0 +1,9 @@
+app:
+  data_dir: ./data/bakeoff/dolphin-nemo12b-q8-clean
+  log_dir: ./data/bakeoff/dolphin-nemo12b-q8-clean/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/models/dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q8_0.gguf
+
+generation:
+  max_tokens: 192

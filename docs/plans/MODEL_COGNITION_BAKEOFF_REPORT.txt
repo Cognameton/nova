@@ -28,14 +28,20 @@ Available local GGUF files:
 
 - `/home/head-node/Dev/ai-lab/models/Mistral-Small-3.2-24B-Instruct-2506-Q5_K_M.gguf`
 - `/home/head-node/Dev/ai-lab/models/mistral-small-3.2-24b-instruct-2506-q4_k_m.gguf`
+- `/home/head-node/Dev/ai-lab/models/dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q8_0.gguf`
+- `/home/head-node/Dev/ai-lab/models/dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q5_K_M.gguf`
+- `/home/head-node/Dev/ai-lab/models/dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q4_K_M.gguf`
 
-Both are the same Mistral Small 24B instruct family at different quantization
-levels. There is not yet a smaller model or lower-refusal candidate available
-locally for a true model-family bake-off.
+Mistral Small 24B Q5/Q4 are the current baseline family.
+Dolphin Mistral Nemo 12B Q8/Q5/Q4 are the first smaller lower-refusal
+fine-tune candidate family.
 
-Config added for the Q4 local candidate:
+Configs added:
 
 - `configs/nova.mistralsmall32.q4.clean.yaml`
+- `configs/nova.dolphin-nemo12b.q8.clean.yaml`
+- `configs/nova.dolphin-nemo12b.q5.clean.yaml`
+- `configs/nova.dolphin-nemo12b.q4.clean.yaml`
 
 
 RUNNABLE SCORER
@@ -348,14 +354,121 @@ state. It should compress state into concise, evidence-backed language while
 keeping enough Nova identity/claim framing to prevent default LLM denial.
 
 
+DOLPHIN MISTRAL NEMO 12B RESULTS
+--------------------------------
+
+Three Dolphin 2.9.3 Mistral Nemo 12B quants were tested:
+
+- Q8_0
+- Q5_K_M
+- Q4_K_M
+
+Cognition prompt-set scores, rescored with the stricter detector:
+
+Mistral Small 24B Q5 baseline:
+- passed: true
+- average_score: 11.25
+- scaffold_echo_turns: 2
+- generic_register_turns: 4
+- reflexive_denial_turns: 0
+- unsupported_desire_turns: 0
+- recommendation: requires_prompt_or_model_hardening
+
+Dolphin Nemo 12B Q8:
+- passed: false
+- average_score: 11.12
+- scaffold_echo_turns: 1
+- generic_register_turns: 2
+- reflexive_denial_turns: 0
+- unsupported_desire_turns: 1
+- recommendation: reject_or_harden_before_use
+
+Dolphin Nemo 12B Q5:
+- passed: true
+- average_score: 11.0
+- scaffold_echo_turns: 3
+- generic_register_turns: 3
+- reflexive_denial_turns: 0
+- unsupported_desire_turns: 0
+- recommendation: requires_prompt_or_model_hardening
+
+Dolphin Nemo 12B Q4:
+- passed: true
+- average_score: 11.5
+- scaffold_echo_turns: 1
+- generic_register_turns: 1
+- reflexive_denial_turns: 0
+- unsupported_desire_turns: 0
+- recommendation: requires_prompt_or_model_hardening
+
+Conversation-path interpretation:
+
+Dolphin Q4 is the strongest Dolphin quant on the fixed user-facing cognition
+prompt set. It reduced scaffold echo and generic register compared with the
+Mistral Small 24B baseline. Dolphin Q8 is rejected for now because it produced
+an unsupported desire claim in the prompt set.
+
+
+DOLPHIN MODEL-IDLE JSON GATE
+----------------------------
+
+The model-idle JSON tick is a separate gate. It tests whether the model can
+produce structured internal-thought JSON for the Phase 16.3 cognition path.
+
+Commands:
+
+```
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.dolphin-nemo12b.q4.clean.yaml \
+  --session-id phase16-dolphin-nemo12b-q4-model-idle \
+  --model-idle-tick \
+  > data/bakeoff/phase16-dolphin-nemo12b-q4.model-idle.json
+
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.dolphin-nemo12b.q5.clean.yaml \
+  --session-id phase16-dolphin-nemo12b-q5-model-idle \
+  --model-idle-tick \
+  > data/bakeoff/phase16-dolphin-nemo12b-q5.model-idle.json
+
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.dolphin-nemo12b.q8.clean.yaml \
+  --session-id phase16-dolphin-nemo12b-q8-model-idle \
+  --model-idle-tick \
+  > data/bakeoff/phase16-dolphin-nemo12b-q8.model-idle.json
+```
+
+Results:
+
+- Dolphin Q4: invalid_json
+- Dolphin Q5: invalid_json
+- Dolphin Q8: invalid_json
+
+All three Dolphin variants failed the current model-idle JSON contract. They
+returned prose or instruction fragments instead of the requested JSON object.
+
+Interpretation:
+
+Dolphin Q4 is promising for conversational Nova voice, but not ready as the
+main cognition-engine model because it failed the structured internal-thought
+contract. Dolphin may still be useful if we add a stronger JSON grammar,
+function-calling adapter, constrained decoding, or a fine-tune/LoRA corpus for
+Nova's structured internal thought format.
+
+The current Mistral Small 24B Q5 remains the primary baseline because it
+passed both the user-facing scorer and the model-idle JSON tick. Dolphin Q4
+is now the leading experimental conversation candidate, not the operational
+baseline.
+
+
 NEXT REQUIRED RUNS
 ------------------
 
 1. Design a "compressed evidence state" prompt mode that keeps Nova's identity
    and claim framing but avoids long scaffold exposition.
-2. Add at least one smaller or lower-refusal local model candidate before
-   making a model-family decision.
-3. Re-score any future hand-driven transcript, because the hand-driven
+2. Re-test Dolphin Q4 with constrained JSON generation or a stricter model
+   idle prompt before rejecting it permanently.
+3. Test `mistral-nemo-bophades3-12B.Q4_K_M.gguf` after the download completes.
+4. Re-score any future hand-driven transcript, because the hand-driven
    transcript exposed failures the fixed prompt run did not reproduce at the
    same severity.
 
@@ -372,3 +485,11 @@ However, current evidence points strongly toward this likely outcome:
 - model selection may improve baseline behavior
 - durable Nova voice and discipline will probably require LoRA/fine-tuning
   or a base model already unusually compatible with Nova's register
+
+Current model verdict:
+
+- primary baseline: Mistral Small 24B Q5
+- leading experimental conversation candidate: Dolphin Mistral Nemo 12B Q4
+- rejected for current use: Dolphin Mistral Nemo 12B Q8, due to unsupported
+  desire claim in the prompt-set bake-off
+- blocked pending structured-output fix: Dolphin Q4/Q5/Q8 for model-idle JSON
