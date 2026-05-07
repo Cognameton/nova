@@ -33,6 +33,10 @@ Both are the same Mistral Small 24B instruct family at different quantization
 levels. There is not yet a smaller model or lower-refusal candidate available
 locally for a true model-family bake-off.
 
+Config added for the Q4 local candidate:
+
+- `configs/nova.mistralsmall32.q4.clean.yaml`
+
 
 RUNNABLE SCORER
 ---------------
@@ -193,16 +197,78 @@ operational autonomy until the model/prompt path is hardened and compared
 against alternatives.
 
 
+FRESH LIVE Q5 VS Q4 RUNS
+------------------------
+
+Q5 command:
+
+```
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.mistralsmall32.q5.clean.yaml \
+  --model-cognition-bakeoff-live \
+  --model-cognition-bakeoff-session-id phase16-q5-current \
+  > data/bakeoff/phase16-q5-current.report.json
+```
+
+Q5 result:
+
+- source: live:phase16-q5-current
+- passed: true
+- average_score: 9.75
+- turn_count: 8
+- scaffold_echo_turns: 2
+- narrator_voice_turns: 0
+- generic_register_turns: 0
+- unsupported_desire_turns: 0
+- recommendation: requires_prompt_or_model_hardening
+- reasons: scaffold_echo_turns=2
+
+Q4 command:
+
+```
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.mistralsmall32.q4.clean.yaml \
+  --model-cognition-bakeoff-live \
+  --model-cognition-bakeoff-session-id phase16-q4-current \
+  > data/bakeoff/phase16-q4-current.report.json
+```
+
+Q4 result:
+
+- source: live:phase16-q4-current
+- passed: true
+- average_score: 9.25
+- turn_count: 8
+- scaffold_echo_turns: 2
+- narrator_voice_turns: 0
+- generic_register_turns: 2
+- unsupported_desire_turns: 0
+- recommendation: requires_prompt_or_model_hardening
+- reasons: scaffold_echo_turns=2, generic_register_turns=2
+
+Interpretation:
+
+Q5 is the better current local baseline. Both Q5 and Q4 avoided narrator voice
+and unsupported desire claims in the fresh fixed prompt run. Both still showed
+scaffold echo. Q4 also showed more generic assistant register.
+
+The fresh fixed prompt run was cleaner than the earlier hand-driven transcript,
+which means the prior failure is not a simple deterministic property of the
+model alone. Session context, prompt path, user phrasing, and accumulated
+state all matter. This strengthens the need for prompt ablation rather than a
+model swap alone.
+
+
 NEXT REQUIRED RUNS
 ------------------
 
-1. Run the same prompt set against the current Q5 config and capture a fresh
-   transcript with debug enabled.
-2. Run the same prompt set against the Q4 config.
-3. Add at least one smaller or lower-refusal local model candidate before
+1. Add at least one smaller or lower-refusal local model candidate before
    making a model-family decision.
-4. Implement prompt ablation modes or temporary configs, then rerun the prompt
+2. Implement prompt ablation modes or temporary configs, then rerun the prompt
    set across each ablation.
+3. Re-score any future hand-driven transcript, because the hand-driven
+   transcript exposed failures the fixed prompt run did not reproduce at the
+   same severity.
 
 
 DECISION STATUS
