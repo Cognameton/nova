@@ -225,6 +225,7 @@ class BoundedIdleController:
         private_cognition: PrivateCognitionPacket | None = None,
         claim_gate: ClaimGateDecision | None = None,
         memory_hits: list | None = None,
+        model_cognition: dict[str, Any] | None = None,
         trigger: str = "idle_tick",
         user_text: str = "",
     ) -> IdleTickRecord:
@@ -313,6 +314,7 @@ class BoundedIdleController:
             candidate_internal_goals=[candidate.to_dict() for candidate in candidates],
             selected_internal_goal=selected_goal.to_dict(),
             internal_goal_initiative_proposal=proposal.to_dict(),
+            model_cognition=dict(model_cognition or {}),
             stop_reason=stop_reason,
             evidence_refs=evidence_refs,
             notes=[
@@ -494,6 +496,7 @@ def idle_tick_record_from_payload(*, payload: dict[str, Any], session_id: str) -
     merged["internal_goal_initiative_proposal"] = _dict_value(
         merged.get("internal_goal_initiative_proposal")
     )
+    merged["model_cognition"] = _dict_value(merged.get("model_cognition"))
     merged["stop_reason"] = str(merged.get("stop_reason", "") or "")
     merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
     merged["notes"] = _string_list(merged.get("notes"))

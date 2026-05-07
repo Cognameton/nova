@@ -40,6 +40,7 @@ from nova.types import GenerationRequest, GenerationResult
 class FakeBackend:
     def __init__(self) -> None:
         self.loaded = False
+        self.generate_calls = 0
 
     def load(self) -> None:
         self.loaded = True
@@ -54,12 +55,35 @@ class FakeBackend:
         return len(text.split())
 
     def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.generate_calls += 1
         return GenerationResult(
             model_id=request.model_id,
             raw_text="My name is Nova. I remain focused on continuity.",
             finish_reason="stop",
             prompt_tokens=len(request.prompt.split()),
             completion_tokens=9,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
+class JsonThoughtBackend(FakeBackend):
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.generate_calls += 1
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=(
+                '{"thought":"Review continuity evidence without claiming desire.",'
+                '"trigger":"model_idle_tick",'
+                '"related_evidence_refs":["idle_tick:test"],'
+                '"uncertainty":"recurrence is not yet known",'
+                '"candidate_goal":"Clarify the next internal cognition test",'
+                '"action_proposal_intent":"",'
+                '"unsupported_claim_flags":[]}'
+            ),
+            finish_reason="stop",
+            prompt_tokens=len(request.prompt.split()),
+            completion_tokens=30,
             latency_ms=1,
             metadata={"backend": "fake"},
         )
@@ -178,6 +202,45 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertIn('"capability_appraisal"', trace_payload)
             self.assertIn('"idle_pressure_appraisal"', trace_payload)
             self.assertIn("[Private Cognition]", trace_payload)
+
+    def test_model_idle_tick_records_valid_model_cognition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            backend = JsonThoughtBackend()
+            runtime = build_test_runtime(
+                data_dir=base / "data",
+                log_dir=base / "logs",
+                backend=backend,
+            )
+
+            runtime.start(session_id="model-idle")
+            runtime.start_idle(max_ticks=1, evaluation_mode=True)
+            tick = runtime.model_idle_tick()
+
+            self.assertEqual(backend.generate_calls, 1)
+            self.assertTrue(tick.model_cognition["valid"])
+            self.assertIn("thought", tick.model_cognition)
+            self.assertEqual(tick.stop_reason, "budget_exhausted")
+            self.assertFalse(tick.internal_goal_initiative_proposal["creates_initiative"])
+
+    def test_model_idle_tick_does_not_call_model_while_paused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            backend = JsonThoughtBackend()
+            runtime = build_test_runtime(
+                data_dir=base / "data",
+                log_dir=base / "logs",
+                backend=backend,
+            )
+
+            runtime.start(session_id="model-idle-paused")
+            runtime.start_idle(max_ticks=1, evaluation_mode=True)
+            runtime.pause_idle(reason="test_pause")
+            tick = runtime.model_idle_tick()
+
+            self.assertEqual(backend.generate_calls, 0)
+            self.assertFalse(tick.model_cognition)
+            self.assertEqual(tick.stop_reason, "lifecycle_not_active:paused")
 
     def test_backend_check_runs_generation_without_persisting_turns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

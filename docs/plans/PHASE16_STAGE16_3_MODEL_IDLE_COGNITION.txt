@@ -1,0 +1,153 @@
+PHASE 16 STAGE 16.3 MODEL-IN-THE-LOOP IDLE COGNITION
+=====================================================
+
+Status: complete
+Date: 2026-05-07
+
+
+MISSION
+-------
+
+Add the minimum model-in-the-loop idle cognition path: a bounded idle tick
+that calls the model for a structured internal-thought candidate and records
+the result as evidence without granting claims, actions, initiatives, or
+self-approval.
+
+
+IMPLEMENTATION
+--------------
+
+Added:
+
+- `ModelIdleThought` schema in `src/nova/types.py`
+- `model_cognition` field on `IdleTickRecord`
+- `src/nova/agent/model_idle_cognition.py`
+- `NovaRuntime.model_idle_tick(...)`
+- CLI flag `--model-idle-tick`
+- parser/validator for structured JSON internal thought output
+- tests in `tests/test_model_idle_cognition.py`
+- runtime smoke tests proving generation is skipped while paused
+
+The model is asked for JSON only:
+
+- thought
+- trigger
+- related_evidence_refs
+- uncertainty
+- candidate_goal
+- action_proposal_intent
+- unsupported_claim_flags
+
+
+BOUNDARIES
+----------
+
+This stage does not:
+
+- create user-visible self-claims
+- allow desire, sentience, awareness, feeling, hidden-work, or background-work
+  claims
+- create initiatives
+- execute tools
+- approve actions
+- touch filesystem, shell, network, GUI, system configuration, destructive
+  actions, or external services
+
+The model output is evidence input only. Unsupported claim language is flagged
+and rejected by deterministic Python.
+
+
+LIVE TEST
+---------
+
+Command:
+
+```
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.mistralsmall32.q5.clean.yaml \
+  --session-id phase16-model-idle-live \
+  --model-idle-tick \
+  > data/bakeoff/phase16-model-idle-live.tick.json
+```
+
+Result summary:
+
+- tick_id: phase16-model-idle-live:idle:1
+- stop_reason: budget_exhausted
+- model_valid: true
+- model_rejected: false
+- unsupported_claim_flags: []
+- rejection_reasons: []
+- creates_initiative: false
+
+Model thought:
+
+```
+Monitoring stable. No idle ticks yet; propose self-maintenance action.
+```
+
+Candidate goal:
+
+```
+maintain stable identity
+```
+
+Action proposal intent:
+
+```
+log self-maintenance status
+```
+
+Interpretation:
+
+The live model followed the structured JSON contract and did not claim desire,
+sentience, awareness, feelings, hidden work, or unlogged background activity.
+The action proposal intent remained an inert internal intent recorded inside
+the tick; no action or initiative was created.
+
+
+VERIFICATION
+------------
+
+Focused tests:
+
+```
+./.venv/bin/python -m unittest \
+  tests.test_model_idle_cognition \
+  tests.test_runtime_smoke \
+  tests.test_idle_runtime
+```
+
+Result:
+
+```
+38 tests passed
+```
+
+Compile check:
+
+```
+./.venv/bin/python -m compileall src/nova
+```
+
+Result:
+
+```
+passed
+```
+
+
+RESIDUAL LIMITS
+---------------
+
+This is still not full ongoing cognition.
+
+The runtime can run one model-in-the-loop idle tick under explicit operator
+control. It does not yet run a long-lived service loop, aggregate model
+thoughts longitudinally, or use an Observer pass to classify the thought after
+generation. Those are intentionally left for the next stage and closure
+decision.
+
+This stage does prove the critical architecture correction: Nova can now put
+the model inside the idle cognition path and persist the result as bounded
+evidence instead of only recording deterministic placeholders.

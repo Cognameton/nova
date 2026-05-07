@@ -384,6 +384,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the Phase 16.2 cognition prompt set against the configured live model.",
     )
     parser.add_argument(
+        "--model-idle-tick",
+        action="store_true",
+        help="Run one Phase 16.3 model-in-the-loop idle cognition tick.",
+    )
+    parser.add_argument(
         "--model-cognition-bakeoff-session-id",
         default="phase16-model-cognition-bakeoff",
         help="Session id used by --model-cognition-bakeoff-live.",
@@ -1046,6 +1051,18 @@ def main() -> int:
             )
             print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
             return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.model_idle_tick:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.session_id
+        try:
+            runtime.start(session_id=session_id)
+            runtime.start_idle(max_ticks=1, evaluation_mode=True)
+            tick = runtime.model_idle_tick()
+            print(json.dumps(tick.to_dict(), indent=2, sort_keys=True))
+            return 0 if tick.model_cognition.get("valid") else 1
         finally:
             runtime.close()
 

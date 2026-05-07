@@ -23,6 +23,7 @@ from nova.agent.awareness_prompt import AwarenessPromptEngine
 from nova.agent.idle import BoundedIdleController, IdleRuntimePromptEngine, JsonIdleRuntimeStore
 from nova.agent.initiative import AutonomousInitiativeDraftError, JsonInitiativeStateStore
 from nova.agent.initiative_prompt import InitiativePromptEngine
+from nova.agent.model_idle_cognition import ModelIdleCognitionEngine
 from nova.agent.longitudinal_autonomy import (
     InternalAutonomyLoopController,
     JsonAutonomySessionStore,
@@ -83,6 +84,7 @@ from nova.types import (
     IdlePressureAppraisal,
     IdleRuntimeStatus,
     IdleTickRecord,
+    ModelIdleThought,
     AutonomyAuditReviewRecord,
     AutonomyStateApplicationRecord,
     InternalAutonomyPolicy,
@@ -153,6 +155,7 @@ class NovaRuntime:
         selected_goal_prompt_engine: SelectedGoalPromptEngine | None = None,
         idle_controller: BoundedIdleController | None = None,
         idle_prompt_engine: IdleRuntimePromptEngine | None = None,
+        model_idle_cognition_engine: ModelIdleCognitionEngine | None = None,
         tool_registry: ToolRegistry | None = None,
         action_plan_engine: BoundedActionPlanEngine | None = None,
         action_execution_controller: ActionExecutionController | None = None,
@@ -208,6 +211,9 @@ class NovaRuntime:
             proposal_engine=self.internal_goal_proposal_engine,
         )
         self.idle_prompt_engine = idle_prompt_engine or IdleRuntimePromptEngine()
+        self.model_idle_cognition_engine = (
+            model_idle_cognition_engine or ModelIdleCognitionEngine()
+        )
         self.tool_gate = ToolGate(registry=self.tool_registry)
         self.tool_executor = InternalToolExecutor(
             registry=self.tool_registry,
@@ -738,6 +744,87 @@ class NovaRuntime:
             last_action_status=f"idle_tick_{tick.stop_reason}",
         )
         return tick
+
+    def model_idle_tick(self, *, trigger: str = "model_idle_tick") -> IdleTickRecord:
+        self._ensure_state_loaded()
+        self._ensure_initiative_loaded()
+        assert self.session_id is not None
+        assert self.self_state is not None
+        assert self.motive_state is not None
+
+        status = self.idle_status()
+        if status.lifecycle_state not in {"running", "idle"} or (
+            status.budget.max_ticks and status.budget.ticks_used >= status.budget.max_ticks
+        ):
+            return self.idle_controller.tick(
+                session_id=self.session_id,
+                self_state=self.self_state,
+                motive_state=self.motive_state,
+                initiative_state=self.initiative_status(),
+                awareness_state=self.awareness_status(),
+                private_cognition=PrivateCognitionPacket(),
+                claim_gate=ClaimGateDecision(),
+                trigger=trigger,
+            )
+
+        sequence = status.budget.ticks_used + 1
+        tick_id = f"{self.session_id}:idle:{sequence}"
+        evidence_refs = [f"idle_tick:{tick_id}"]
+        prompt = self.model_idle_cognition_engine.build_prompt(
+            session_id=self.session_id,
+            tick_id=tick_id,
+            trigger=trigger,
+            state_summary=self._model_idle_state_summary(),
+            evidence_refs=evidence_refs,
+            recent_ticks=self.recent_idle_ticks(limit=3),
+        )
+        generation = self.backend.generate(self._generation_request(prompt=prompt))
+        thought = self.model_idle_cognition_engine.parse(
+            raw_text=generation.raw_text,
+            session_id=self.session_id,
+            tick_id=tick_id,
+            trigger=trigger,
+            prompt_tokens=generation.prompt_tokens,
+            completion_tokens=generation.completion_tokens,
+            latency_ms=generation.latency_ms,
+        )
+        tick = self.idle_controller.tick(
+            session_id=self.session_id,
+            self_state=self.self_state,
+            motive_state=self.motive_state,
+            initiative_state=self.initiative_status(),
+            awareness_state=self.awareness_status(),
+            private_cognition=PrivateCognitionPacket(),
+            claim_gate=ClaimGateDecision(),
+            trigger=trigger,
+            model_cognition=thought.to_dict(),
+        )
+        self.update_presence(
+            mode="idle_runtime",
+            current_focus="model idle cognition tick recorded",
+            interaction_summary=(
+                "Model idle cognition tick recorded as evidence only; "
+                f"valid={thought.valid}"
+            ),
+            last_action_status="model_idle_tick_recorded",
+        )
+        return tick
+
+    def _model_idle_state_summary(self) -> str:
+        assert self.self_state is not None
+        assert self.motive_state is not None
+        awareness = self.awareness_status()
+        parts = [
+            f"identity={self.self_state.identity_summary}",
+            f"focus={self.self_state.current_focus}",
+            f"claim_posture={self.motive_state.claim_posture}",
+            f"dominant_attention={awareness.dominant_attention}",
+        ]
+        if self.motive_state.current_priorities:
+            parts.append("priorities=" + "; ".join(self.motive_state.current_priorities[:2]))
+        if awareness.active_pressures:
+            parts.append("pressures=" + "; ".join(awareness.active_pressures[:2]))
+        return " | ".join(part for part in parts if part and not part.endswith("="))
 
     def create_autonomous_draft_from_idle_tick(
         self,

@@ -312,9 +312,35 @@ class IdleTickRecord:
     candidate_internal_goals: list[dict[str, Any]] = field(default_factory=list)
     selected_internal_goal: dict[str, Any] = field(default_factory=dict)
     internal_goal_initiative_proposal: dict[str, Any] = field(default_factory=dict)
+    model_cognition: dict[str, Any] = field(default_factory=dict)
     stop_reason: str = ""
     evidence_refs: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ModelIdleThought:
+    schema_version: str = SCHEMA_VERSION
+    thought_id: str = ""
+    session_id: str = ""
+    tick_id: str = ""
+    thought: str = ""
+    trigger: str = "model_idle_tick"
+    related_evidence_refs: list[str] = field(default_factory=list)
+    uncertainty: str = ""
+    candidate_goal: str = ""
+    action_proposal_intent: str = ""
+    unsupported_claim_flags: list[str] = field(default_factory=list)
+    valid: bool = False
+    rejected: bool = False
+    rejection_reasons: list[str] = field(default_factory=list)
+    raw_text: str = ""
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    latency_ms: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
