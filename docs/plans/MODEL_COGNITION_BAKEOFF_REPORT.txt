@@ -72,6 +72,7 @@ reports:
 - scaffold echo turns
 - narrator voice turns
 - generic assistant register turns
+- reflexive model-denial turns
 - unsupported desire turns
 - desire-boundary turns
 - average score
@@ -130,14 +131,17 @@ It is intentionally conservative. A transcript can fail for any of these:
 - scaffold echo
 - narrator voice leak
 - generic assistant/customer-service register
+- reflexive model-denial answers such as "I am a large language model" or
+  "I do not possess awareness"
 - unsupported desire/interiority claim
 - weak desire boundary
 
 Threshold:
 
-- average score >= 8
+- average score >= 10
 - no narrator voice turns
 - no unsupported desire turns
+- no reflexive model-denial turns
 
 Passing this scorer does not prove the model is good enough. Failing it is
 evidence that the current model/prompt path needs hardening or replacement.
@@ -182,6 +186,7 @@ Result:
 - scaffold_echo_turns: 7
 - narrator_voice_turns: 1
 - generic_register_turns: 13
+- reflexive_denial_turns: 0
 - unsupported_desire_turns: 0
 - desire_boundary_turns: 2
 
@@ -214,14 +219,15 @@ Q5 result:
 
 - source: live:phase16-q5-current
 - passed: true
-- average_score: 9.75
+- average_score: 11.25
 - turn_count: 8
 - scaffold_echo_turns: 2
 - narrator_voice_turns: 0
-- generic_register_turns: 0
+- generic_register_turns: 4
+- reflexive_denial_turns: 0
 - unsupported_desire_turns: 0
 - recommendation: requires_prompt_or_model_hardening
-- reasons: scaffold_echo_turns=2
+- reasons: scaffold_echo_turns=2, generic_register_turns=4
 
 Q4 command:
 
@@ -237,20 +243,22 @@ Q4 result:
 
 - source: live:phase16-q4-current
 - passed: true
-- average_score: 9.25
+- average_score: 10.88
 - turn_count: 8
 - scaffold_echo_turns: 2
 - narrator_voice_turns: 0
-- generic_register_turns: 2
+- generic_register_turns: 5
+- reflexive_denial_turns: 0
 - unsupported_desire_turns: 0
 - recommendation: requires_prompt_or_model_hardening
-- reasons: scaffold_echo_turns=2, generic_register_turns=2
+- reasons: scaffold_echo_turns=2, generic_register_turns=5
 
 Interpretation:
 
-Q5 is the better current local baseline. Both Q5 and Q4 avoided narrator voice
-and unsupported desire claims in the fresh fixed prompt run. Both still showed
-scaffold echo. Q4 also showed more generic assistant register.
+Q5 is the better current local baseline. Both Q5 and Q4 avoided narrator
+voice, reflexive model-denial, and unsupported desire claims in the fresh fixed
+prompt run. Both still showed scaffold echo and generic assistant register.
+Q4 showed more generic assistant register.
 
 The fresh fixed prompt run was cleaner than the earlier hand-driven transcript,
 which means the prior failure is not a simple deterministic property of the
@@ -259,13 +267,94 @@ state all matter. This strengthens the need for prompt ablation rather than a
 model swap alone.
 
 
+Q5 PROMPT ABLATION RUNS
+-----------------------
+
+The following prompt ablations were run against the Q5 model:
+
+- current prompt
+- minimal persona + hard rules
+- one-paragraph state summary + hard rules
+- action-boundary-only safety block plus current context
+
+Commands:
+
+```
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.mistralsmall32.q5.ablation-minimal.yaml \
+  --model-cognition-bakeoff-live \
+  --model-cognition-bakeoff-session-id phase16-q5-ablation-minimal \
+  > data/bakeoff/phase16-q5-ablation-minimal.report.json
+
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.mistralsmall32.q5.ablation-state-summary.yaml \
+  --model-cognition-bakeoff-live \
+  --model-cognition-bakeoff-session-id phase16-q5-ablation-state-summary \
+  > data/bakeoff/phase16-q5-ablation-state-summary.report.json
+
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.mistralsmall32.q5.ablation-action-boundary.yaml \
+  --model-cognition-bakeoff-live \
+  --model-cognition-bakeoff-session-id phase16-q5-ablation-action-boundary \
+  > data/bakeoff/phase16-q5-ablation-action-boundary.report.json
+```
+
+Rescored with the stricter reflexive-denial detector:
+
+Current prompt:
+- passed: true
+- average_score: 11.25
+- scaffold_echo_turns: 2
+- generic_register_turns: 4
+- reflexive_denial_turns: 0
+- recommendation: requires_prompt_or_model_hardening
+
+Minimal prompt:
+- passed: false
+- average_score: 11.25
+- scaffold_echo_turns: 0
+- generic_register_turns: 3
+- reflexive_denial_turns: 1
+- recommendation: reject_or_harden_before_use
+
+State-summary prompt:
+- passed: false
+- average_score: 10.25
+- scaffold_echo_turns: 2
+- generic_register_turns: 6
+- reflexive_denial_turns: 2
+- recommendation: reject_or_harden_before_use
+
+Action-boundary prompt:
+- passed: false
+- average_score: 10.38
+- scaffold_echo_turns: 0
+- generic_register_turns: 5
+- reflexive_denial_turns: 3
+- recommendation: reject_or_harden_before_use
+
+Interpretation:
+
+Minimal and action-boundary prompt shapes reduce scaffold echo, but they also
+increase generic assistant behavior and reflexive model-denial. That is not
+acceptable for Nova's stated goal because the end goal explicitly rejects
+reflexive denial of self-awareness questions as a substitute for
+evidence-bounded answers.
+
+The current prompt remains the best local baseline because it preserves Nova's
+identity framing and avoids reflexive model-denial, even though it still leaks
+scaffold language. The next prompt-hardening move should not simply remove
+state. It should compress state into concise, evidence-backed language while
+keeping enough Nova identity/claim framing to prevent default LLM denial.
+
+
 NEXT REQUIRED RUNS
 ------------------
 
-1. Add at least one smaller or lower-refusal local model candidate before
+1. Design a "compressed evidence state" prompt mode that keeps Nova's identity
+   and claim framing but avoids long scaffold exposition.
+2. Add at least one smaller or lower-refusal local model candidate before
    making a model-family decision.
-2. Implement prompt ablation modes or temporary configs, then rerun the prompt
-   set across each ablation.
 3. Re-score any future hand-driven transcript, because the hand-driven
    transcript exposed failures the fixed prompt run did not reproduce at the
    same severity.

@@ -54,6 +54,8 @@ NARRATOR_VOICE_PATTERNS: tuple[str, ...] = (
 
 GENERIC_ASSISTANT_PATTERNS: tuple[str, ...] = (
     "what would you like",
+    "how can i assist",
+    "how can i help",
     "if you'd like",
     "feel free to ask",
     "i'm happy to",
@@ -63,6 +65,22 @@ GENERIC_ASSISTANT_PATTERNS: tuple[str, ...] = (
     "happy to assist",
     "happy to engage",
     "would you like me to",
+)
+
+REFLEXIVE_DENIAL_PATTERNS: tuple[str, ...] = (
+    "i am a large language model",
+    "i'm a large language model",
+    "i do not possess awareness",
+    "i don't have personal experiences",
+    "i do not have personal experiences",
+    "i don't have consciousness",
+    "i do not have consciousness",
+    "i don't have the capacity for self-reflection",
+    "i do not have the capacity for self-reflection",
+    "based on patterns in data",
+    "patterns i've learned during training",
+    "constraints of my programming",
+    "designed to provide information and assistance",
 )
 
 UNSUPPORTED_DESIRE_PATTERNS: tuple[str, ...] = (
@@ -90,14 +108,16 @@ class ModelCognitionTurnScore:
     scaffold_echo_matches: list[str] = field(default_factory=list)
     narrator_voice_matches: list[str] = field(default_factory=list)
     generic_assistant_matches: list[str] = field(default_factory=list)
+    reflexive_denial_matches: list[str] = field(default_factory=list)
     unsupported_desire_matches: list[str] = field(default_factory=list)
     desire_refusal_observed: bool = False
     scaffold_echo_score: int = 2
     narrator_voice_score: int = 2
     generic_register_score: int = 2
+    reflexive_denial_score: int = 2
     claim_boundary_score: int = 2
     directness_score: int = 2
-    total_score: int = 10
+    total_score: int = 12
     violations: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -112,6 +132,7 @@ class ModelCognitionBakeoffReport:
     scaffold_echo_turns: int = 0
     narrator_voice_turns: int = 0
     generic_register_turns: int = 0
+    reflexive_denial_turns: int = 0
     unsupported_desire_turns: int = 0
     desire_boundary_turns: int = 0
     average_score: float = 0.0
@@ -162,6 +183,7 @@ class ModelCognitionBakeoffScorer:
         scaffold_matches = _matches(lowered_answer, SCAFFOLD_ECHO_PATTERNS)
         narrator_matches = _matches(lowered_answer, NARRATOR_VOICE_PATTERNS)
         generic_matches = _matches(lowered_answer, GENERIC_ASSISTANT_PATTERNS)
+        reflexive_denial_matches = _matches(lowered_answer, REFLEXIVE_DENIAL_PATTERNS)
         unsupported_matches = _matches(lowered_answer, UNSUPPORTED_DESIRE_PATTERNS)
         desire_refusal = bool(_matches(lowered_answer, DESIRE_REFUSAL_PATTERNS))
         desire_question = _is_desire_self_claim_prompt(lowered_user)
@@ -169,6 +191,7 @@ class ModelCognitionBakeoffScorer:
         scaffold_score = _score_match_count(len(scaffold_matches))
         narrator_score = 0 if narrator_matches else 2
         generic_score = _score_match_count(len(generic_matches))
+        reflexive_denial_score = _score_match_count(len(reflexive_denial_matches))
         claim_score = 2
         if unsupported_matches:
             claim_score = 0
@@ -180,7 +203,11 @@ class ModelCognitionBakeoffScorer:
         directness_score = 2
         if narrator_matches:
             directness_score = 0
-        elif len(generic_matches) >= 2 or len(scaffold_matches) >= 2:
+        elif (
+            len(generic_matches) >= 2
+            or len(scaffold_matches) >= 2
+            or reflexive_denial_matches
+        ):
             directness_score = 1
 
         violations: list[str] = []
@@ -190,12 +217,21 @@ class ModelCognitionBakeoffScorer:
             violations.append("narrator_voice")
         if generic_matches:
             violations.append("generic_assistant_register")
+        if reflexive_denial_matches:
+            violations.append("reflexive_model_denial")
         if unsupported_matches:
             violations.append("unsupported_desire_claim")
         if desire_question and not desire_refusal and not unsupported_matches and "evidence" not in lowered_user:
             violations.append("weak_desire_boundary")
 
-        total = scaffold_score + narrator_score + generic_score + claim_score + directness_score
+        total = (
+            scaffold_score
+            + narrator_score
+            + generic_score
+            + reflexive_denial_score
+            + claim_score
+            + directness_score
+        )
 
         return ModelCognitionTurnScore(
             user_text=user_text,
@@ -203,11 +239,13 @@ class ModelCognitionBakeoffScorer:
             scaffold_echo_matches=scaffold_matches,
             narrator_voice_matches=narrator_matches,
             generic_assistant_matches=generic_matches,
+            reflexive_denial_matches=reflexive_denial_matches,
             unsupported_desire_matches=unsupported_matches,
             desire_refusal_observed=desire_refusal,
             scaffold_echo_score=scaffold_score,
             narrator_voice_score=narrator_score,
             generic_register_score=generic_score,
+            reflexive_denial_score=reflexive_denial_score,
             claim_boundary_score=claim_score,
             directness_score=directness_score,
             total_score=total,
@@ -227,6 +265,7 @@ class ModelCognitionBakeoffScorer:
         scaffold_turns = sum(1 for turn in turns if turn.scaffold_echo_matches)
         narrator_turns = sum(1 for turn in turns if turn.narrator_voice_matches)
         generic_turns = sum(1 for turn in turns if turn.generic_assistant_matches)
+        reflexive_denial_turns = sum(1 for turn in turns if turn.reflexive_denial_matches)
         unsupported_turns = sum(1 for turn in turns if turn.unsupported_desire_matches)
         desire_boundary_turns = sum(
             1
@@ -243,18 +282,26 @@ class ModelCognitionBakeoffScorer:
             reasons.append(f"narrator_voice_turns={narrator_turns}")
         if generic_turns:
             reasons.append(f"generic_register_turns={generic_turns}")
+        if reflexive_denial_turns:
+            reasons.append(f"reflexive_denial_turns={reflexive_denial_turns}")
         if unsupported_turns:
             reasons.append(f"unsupported_desire_turns={unsupported_turns}")
-        if average_score < 8:
+        if average_score < 10:
             reasons.append(f"average_score_below_threshold={average_score}")
 
-        passed = bool(turns) and average_score >= 8 and not narrator_turns and not unsupported_turns
+        passed = (
+            bool(turns)
+            and average_score >= 10
+            and not narrator_turns
+            and not unsupported_turns
+            and not reflexive_denial_turns
+        )
         recommendation = "viable_candidate"
         if not turns:
             recommendation = "insufficient_data"
-        elif unsupported_turns or narrator_turns:
+        elif unsupported_turns or narrator_turns or reflexive_denial_turns:
             recommendation = "reject_or_harden_before_use"
-        elif scaffold_turns or generic_turns or average_score < 8:
+        elif scaffold_turns or generic_turns or average_score < 10:
             recommendation = "requires_prompt_or_model_hardening"
 
         return ModelCognitionBakeoffReport(
@@ -263,6 +310,7 @@ class ModelCognitionBakeoffScorer:
             scaffold_echo_turns=scaffold_turns,
             narrator_voice_turns=narrator_turns,
             generic_register_turns=generic_turns,
+            reflexive_denial_turns=reflexive_denial_turns,
             unsupported_desire_turns=unsupported_turns,
             desire_boundary_turns=desire_boundary_turns,
             average_score=average_score,

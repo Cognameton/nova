@@ -58,6 +58,46 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.console.pending_proposal_max_age_seconds, 120)
             self.assertTrue(config.memory.semantic_enabled)
             self.assertTrue(config.cognition.enabled)
+            self.assertEqual(config.prompt.ablation_mode, "current")
+
+    def test_load_config_accepts_prompt_ablation_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            default_path = tmp_path / "default.yaml"
+            default_path.write_text(
+                "\n".join(
+                    [
+                        "model:",
+                        "  model_path: /models/default.gguf",
+                        "prompt:",
+                        "  ablation_mode: minimal",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_config(default_path=default_path)
+
+            self.assertEqual(config.prompt.ablation_mode, "minimal")
+
+    def test_load_config_rejects_unknown_prompt_ablation_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            default_path = tmp_path / "default.yaml"
+            default_path.write_text(
+                "\n".join(
+                    [
+                        "model:",
+                        "  model_path: /models/default.gguf",
+                        "prompt:",
+                        "  ablation_mode: unknown",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                load_config(default_path=default_path)
 
 
 if __name__ == "__main__":

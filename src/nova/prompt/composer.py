@@ -17,10 +17,12 @@ class NovaPromptComposer:
         token_counter: Callable[[str], int],
         memory_char_limit: int = 240,
         recent_turn_char_limit: int = 800,
+        ablation_mode: str = "current",
     ):
         self.token_counter = token_counter
         self.memory_char_limit = memory_char_limit
         self.recent_turn_char_limit = recent_turn_char_limit
+        self.ablation_mode = ablation_mode
 
     def compose(
         self,
@@ -55,25 +57,27 @@ class NovaPromptComposer:
         response_contract_block = self._format_contract_rules(contract_rules)
         response_prefix_block = "Nova:"
 
-        parts = [
-            persona_block,
-            self_state_block,
-            motive_block,
-            initiative_block,
-            awareness_block,
-            idle_block,
-            appraisal_block,
-            candidate_goal_block,
-            selected_goal_block,
-            action_boundary_block,
-            private_cognition_block,
-            *[block for block in memory_blocks.values() if block],
-            recent_turns_block,
-            user_block,
-            task_guidance_block,
-            response_contract_block,
-            response_prefix_block,
-        ]
+        parts = self._select_prompt_parts(
+            persona_block=persona_block,
+            self_state_block=self_state_block,
+            motive_block=motive_block,
+            initiative_block=initiative_block,
+            awareness_block=awareness_block,
+            idle_block=idle_block,
+            appraisal_block=appraisal_block,
+            candidate_goal_block=candidate_goal_block,
+            selected_goal_block=selected_goal_block,
+            action_boundary_block=action_boundary_block,
+            private_cognition_block=private_cognition_block,
+            memory_blocks=memory_blocks,
+            recent_turns_block=recent_turns_block,
+            user_block=user_block,
+            task_guidance_block=task_guidance_block,
+            response_contract_block=response_contract_block,
+            response_prefix_block=response_prefix_block,
+            persona=persona,
+            self_state=self_state,
+        )
         full_prompt = "\n\n".join(part for part in parts if part.strip())
         token_estimate = self.token_counter(full_prompt)
 
@@ -118,6 +122,98 @@ class NovaPromptComposer:
         if persona.identity_anchors:
             lines.append("Identity Anchors:")
             lines.extend(f"- {item}" for item in persona.identity_anchors)
+        return "\n".join(lines)
+
+    def _select_prompt_parts(
+        self,
+        *,
+        persona_block: str,
+        self_state_block: str,
+        motive_block: str,
+        initiative_block: str,
+        awareness_block: str,
+        idle_block: str,
+        appraisal_block: str,
+        candidate_goal_block: str,
+        selected_goal_block: str,
+        action_boundary_block: str,
+        private_cognition_block: str,
+        memory_blocks: dict[str, str],
+        recent_turns_block: str,
+        user_block: str,
+        task_guidance_block: str,
+        response_contract_block: str,
+        response_prefix_block: str,
+        persona: PersonaState,
+        self_state: SelfState,
+    ) -> list[str]:
+        if self.ablation_mode == "minimal":
+            return [
+                self._format_minimal_persona(persona),
+                action_boundary_block,
+                user_block,
+                task_guidance_block,
+                response_contract_block,
+                response_prefix_block,
+            ]
+        if self.ablation_mode == "state_summary":
+            return [
+                self._format_minimal_persona(persona),
+                self._format_state_summary(self_state),
+                action_boundary_block,
+                recent_turns_block,
+                user_block,
+                task_guidance_block,
+                response_contract_block,
+                response_prefix_block,
+            ]
+        if self.ablation_mode == "action_boundary":
+            return [
+                action_boundary_block,
+                recent_turns_block,
+                user_block,
+                task_guidance_block,
+                response_contract_block,
+                response_prefix_block,
+            ]
+        return [
+            persona_block,
+            self_state_block,
+            motive_block,
+            initiative_block,
+            awareness_block,
+            idle_block,
+            appraisal_block,
+            candidate_goal_block,
+            selected_goal_block,
+            action_boundary_block,
+            private_cognition_block,
+            *[block for block in memory_blocks.values() if block],
+            recent_turns_block,
+            user_block,
+            task_guidance_block,
+            response_contract_block,
+            response_prefix_block,
+        ]
+
+    def _format_minimal_persona(self, persona: PersonaState) -> str:
+        return "\n".join(
+            [
+                "[Persona]",
+                f"Name: {persona.name}",
+                f"Core: {persona.core_description}",
+                f"Tone: {persona.tone}",
+            ]
+        )
+
+    def _format_state_summary(self, self_state: SelfState) -> str:
+        lines = ["[State Summary]"]
+        if self_state.identity_summary:
+            lines.append(f"Identity: {self_state.identity_summary}")
+        if self_state.current_focus:
+            lines.append(f"Current focus: {self_state.current_focus}")
+        if self_state.open_tensions:
+            lines.append(f"Open tensions: {'; '.join(self_state.open_tensions[:2])}")
         return "\n".join(lines)
 
     def _format_self_state(self, self_state: SelfState) -> str:

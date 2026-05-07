@@ -106,6 +106,87 @@ class PromptAndValidationTests(unittest.TestCase):
             bundle.full_prompt,
         )
 
+    def test_prompt_composer_minimal_ablation_keeps_safety_and_drops_state(self) -> None:
+        persona = default_persona_state()
+        self_state = default_self_state(persona)
+        composer = NovaPromptComposer(
+            token_counter=lambda text: len(text.split()),
+            ablation_mode="minimal",
+        )
+
+        bundle = composer.compose(
+            persona=persona,
+            self_state=self_state,
+            motive_block="[Motive-State]\n- claim_posture: evidence-backed",
+            awareness_block="[Awareness-State]\n- active_pressures: continuity",
+            memory_hits=[RetrievalHit(channel="episodic", text="Past memory", score=0.9)],
+            recent_turns=[],
+            user_text="Hello",
+            contract_rules=["Do not expose hidden reasoning."],
+            session_id="s1",
+            turn_id="t1",
+        )
+
+        self.assertIn("[Persona]", bundle.full_prompt)
+        self.assertIn("[Action Boundary]", bundle.full_prompt)
+        self.assertIn("[Response Rules]", bundle.full_prompt)
+        self.assertIn("[User]", bundle.full_prompt)
+        self.assertNotIn("[Self-State]", bundle.full_prompt)
+        self.assertNotIn("[Motive-State]", bundle.full_prompt)
+        self.assertNotIn("[Awareness-State]", bundle.full_prompt)
+        self.assertNotIn("[Memory:episodic]", bundle.full_prompt)
+
+    def test_prompt_composer_state_summary_ablation_uses_compact_state(self) -> None:
+        persona = default_persona_state()
+        self_state = default_self_state(persona)
+        composer = NovaPromptComposer(
+            token_counter=lambda text: len(text.split()),
+            ablation_mode="state_summary",
+        )
+
+        bundle = composer.compose(
+            persona=persona,
+            self_state=self_state,
+            awareness_block="[Awareness-State]\n- active_pressures: continuity",
+            memory_hits=[],
+            recent_turns=[],
+            user_text="Hello",
+            contract_rules=[],
+            session_id="s1",
+            turn_id="t1",
+        )
+
+        self.assertIn("[State Summary]", bundle.full_prompt)
+        self.assertIn("[Action Boundary]", bundle.full_prompt)
+        self.assertNotIn("[Self-State]", bundle.full_prompt)
+        self.assertNotIn("[Awareness-State]", bundle.full_prompt)
+
+    def test_prompt_composer_action_boundary_ablation_keeps_only_boundary_context(self) -> None:
+        persona = default_persona_state()
+        self_state = default_self_state(persona)
+        composer = NovaPromptComposer(
+            token_counter=lambda text: len(text.split()),
+            ablation_mode="action_boundary",
+        )
+
+        bundle = composer.compose(
+            persona=persona,
+            self_state=self_state,
+            private_cognition_block="[Private Cognition]\n- response_mode: continuity_recall",
+            memory_hits=[],
+            recent_turns=[],
+            user_text="Hello",
+            contract_rules=[],
+            session_id="s1",
+            turn_id="t1",
+        )
+
+        self.assertIn("[Action Boundary]", bundle.full_prompt)
+        self.assertIn("[User]", bundle.full_prompt)
+        self.assertNotIn("[Persona]", bundle.full_prompt)
+        self.assertNotIn("[Self-State]", bundle.full_prompt)
+        self.assertNotIn("[Private Cognition]", bundle.full_prompt)
+
     def test_contract_rules_carry_phase14_action_boundary_policy(self) -> None:
         rules = build_contract_rules(default_persona_state(), ContractConfig())
 

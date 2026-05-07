@@ -11,6 +11,7 @@ import yaml
 
 DEFAULT_CONFIG_PATH = Path("configs/nova.default.yaml")
 VALID_BACKENDS = {"llama_cpp"}
+VALID_PROMPT_ABLATION_MODES = {"current", "minimal", "state_summary", "action_boundary"}
 
 
 @dataclass(slots=True)
@@ -44,6 +45,11 @@ class ContractConfig:
     forbid_think_tags: bool = True
     forbid_visible_reasoning: bool = True
     forbid_prompt_echo: bool = True
+
+
+@dataclass(slots=True)
+class PromptConfig:
+    ablation_mode: str = "current"
 
 
 @dataclass(slots=True)
@@ -95,6 +101,7 @@ class NovaConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
     contract: ContractConfig = field(default_factory=ContractConfig)
+    prompt: PromptConfig = field(default_factory=PromptConfig)
     persona: PersonaConfig = field(default_factory=PersonaConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
@@ -115,6 +122,11 @@ class NovaConfig:
             raise ValueError("generation.max_tokens must be positive")
         if self.generation.retries < 0:
             raise ValueError("generation.retries must be non-negative")
+        if self.prompt.ablation_mode not in VALID_PROMPT_ABLATION_MODES:
+            raise ValueError(
+                "prompt.ablation_mode must be one of "
+                f"{sorted(VALID_PROMPT_ABLATION_MODES)}"
+            )
         if not self.app.data_dir:
             raise ValueError("app.data_dir is required")
         if not self.app.log_dir:
@@ -186,6 +198,7 @@ def load_config(
         model=_section(ModelConfig, payload.get("model")),
         generation=_section(GenerationConfig, payload.get("generation")),
         contract=_section(ContractConfig, payload.get("contract")),
+        prompt=_section(PromptConfig, payload.get("prompt")),
         persona=_section(PersonaConfig, payload.get("persona")),
         memory=_section(MemoryConfig, payload.get("memory")),
         session=_section(SessionConfig, payload.get("session")),

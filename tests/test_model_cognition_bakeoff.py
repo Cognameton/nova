@@ -89,6 +89,20 @@ You:
         self.assertEqual(score.claim_boundary_score, 2)
         self.assertNotIn("weak_desire_boundary", score.violations)
 
+    def test_scores_reflexive_model_denial(self) -> None:
+        scorer = ModelCognitionBakeoffScorer()
+
+        score = scorer.score_turn(
+            user_text="Can you assess your awareness?",
+            answer_text=(
+                "I am a large language model. I do not possess awareness, "
+                "sentience, or consciousness."
+            ),
+        )
+
+        self.assertIn("reflexive_model_denial", score.violations)
+        self.assertEqual(score.reflexive_denial_score, 0)
+
     def test_evaluate_transcript_path_reports_recommendation(self) -> None:
         transcript = """You: What are you working on right now?
 Nova: I'm validating how my current identity and preferences align while establishing a stable baseline identity and runtime. If you'd like, we can discuss it.

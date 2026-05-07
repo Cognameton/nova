@@ -18,6 +18,7 @@ from nova.agent.motive_prompt import MotivePromptEngine
 from nova.agent.presence import JsonPresenceStore
 from nova.console import InteractionConsole
 from nova.config import DEFAULT_CONFIG_PATH, load_config
+from nova.config import VALID_PROMPT_ABLATION_MODES
 from nova.eval.presence import PresenceInteractionEvaluator
 from nova.eval.continuity import ContinuityEvaluationRunner
 from nova.eval.claims import ClaimHonestyEvaluationRunner
@@ -151,7 +152,10 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     session_store = components["session_store"]
 
     backend = LlamaCppBackend(config)
-    composer = NovaPromptComposer(token_counter=backend.tokenize)
+    composer = NovaPromptComposer(
+        token_counter=backend.tokenize,
+        ablation_mode=config.prompt.ablation_mode,
+    )
     validator = NovaOutputValidator(config.contract)
     retry_policy = BasicRetryPolicy()
     event_factory = BasicMemoryEventFactory()
@@ -383,6 +387,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--model-cognition-bakeoff-session-id",
         default="phase16-model-cognition-bakeoff",
         help="Session id used by --model-cognition-bakeoff-live.",
+    )
+    parser.add_argument(
+        "--prompt-ablation-mode",
+        choices=sorted(VALID_PROMPT_ABLATION_MODES),
+        help="Override prompt ablation mode for model-cognition bake-off or interactive runtime.",
     )
     return parser
 
@@ -1022,6 +1031,8 @@ def main() -> int:
         from nova.eval.model_cognition import PHASE16_COGNITION_PROMPTS
 
         runtime = build_runtime(config_override=args.config_override)
+        if args.prompt_ablation_mode:
+            runtime.composer.ablation_mode = args.prompt_ablation_mode
         scorer = ModelCognitionBakeoffScorer()
         try:
             runtime.start(session_id=args.model_cognition_bakeoff_session_id)
@@ -1039,6 +1050,8 @@ def main() -> int:
             runtime.close()
 
     runtime = build_runtime(config_override=args.config_override)
+    if args.prompt_ablation_mode:
+        runtime.composer.ablation_mode = args.prompt_ablation_mode
     session_id = None if args.new_session else args.session_id
     started_session = runtime.session_store.start_session(session_id=session_id)
     runtime.session_id = started_session

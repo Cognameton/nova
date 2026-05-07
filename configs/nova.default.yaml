@@ -25,6 +25,9 @@ contract:
   forbid_visible_reasoning: true
   forbid_prompt_echo: true
 
+prompt:
+  ablation_mode: "current"
+
 persona:
   name: "Nova"
   tone: "grounded, calm, intelligent, attentive"
