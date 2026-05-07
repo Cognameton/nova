@@ -125,12 +125,19 @@ Phase 15: Longitudinal Autonomy and Desire-Like Evaluation
 Phase 15 reassessment:
 - Phase 15 is complete.
 - The full non-voice roadmap should not close yet.
-- A narrowly scoped Phase 16 is justified by concrete operational gaps:
-  supervised timed/service autonomy, real approved action surfaces, and an
-  enforced local execution boundary.
-- No Phase 17 or later is planned now.
-- Phase 17 or later should exist only if Phase 16 proves a concrete missing
-  capability, safety defect, or evaluation failure.
+- A narrowly scoped operational Phase 16 was initially justified by concrete
+  operational gaps: supervised timed/service autonomy, real approved action
+  surfaces, and an enforced local execution boundary.
+- The post-Phase-15 live inference transcript changed the next-step priority.
+  Nova is still mostly a stock instruct model being shaped by prompt
+  scaffolding and runtime gates. More operational plumbing would not by itself
+  make the model participate in persistent cognition.
+- The active Phase 16 is therefore a cognition-engine reframe:
+  model/prompt bake-off, OpenClaw substrate decision, model-in-the-loop idle
+  cognition, and Actor/Observer/Governor contract.
+- No Phase 17 or later is planned now. Phase 17 or later should exist only if
+  the Phase 16 reframe proves a concrete next capability, safety defect, or
+  evaluation failure.
 
 
 Next four phases
@@ -147,10 +154,11 @@ Current position:
 - Phase 13 is complete.
 - Phase 14 is complete.
 - Phase 15 is complete.
-- The next planning step is Phase 16 only: Operational Supervised Autonomy
-  Runtime. Do not plan more phases unless Phase 16 evidence justifies them.
-- next block plan: `docs/plans/ROADMAP_PHASE16_BLOCK.txt`
-- formal Phase 16 plan: `docs/plans/PHASE16_PLAN.txt`
+- The next planning step is Phase 16 only: Cognition Engine Reframe. Do not
+  plan more phases unless Phase 16 evidence justifies them.
+- superseded operational block plan: `docs/plans/ROADMAP_PHASE16_BLOCK.txt`
+- superseded operational Phase 16 plan: `docs/plans/PHASE16_PLAN.txt`
+- active Phase 16 plan: `docs/plans/PHASE16_REFRAME_PLAN.txt`
 
 
 Phase 12: Interruptible Idle Runtime Lifecycle

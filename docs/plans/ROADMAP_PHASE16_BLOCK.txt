@@ -1,7 +1,14 @@
 NOVA 2.0 NEXT PLANNING BLOCK AFTER PHASE 15
 ============================================
 
-Status: planned
+Status: superseded by `docs/plans/PHASE16_REFRAME_PLAN.txt`
+
+This planning block is preserved for reference. It identified the operational
+gap after Phase 15, but it assumed the next necessary step was to
+operationalize the existing autonomy scaffold. The post-Phase-15 live
+inference transcript and third-party review showed that the deeper next step
+is a cognition-engine reframe: model fit, prompt ablation, model-in-the-loop
+idle cognition, and an OpenClaw substrate decision.
 
 Purpose
 -------
@@ -46,9 +53,14 @@ an enforced local execution boundary.
 Next Block Decision
 -------------------
 
-The next planning block contains one phase:
+The original next planning block contained one phase:
 
 Phase 16: Operational Supervised Autonomy Runtime
+
+This is now deferred. The active Phase 16 plan is:
+
+Phase 16: Cognition Engine Reframe
+- formal plan: `docs/plans/PHASE16_REFRAME_PLAN.txt`
 
 No Phase 17 is planned now.
 No Phase 18 is planned now.

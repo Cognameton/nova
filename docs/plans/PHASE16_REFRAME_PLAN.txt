@@ -1,0 +1,306 @@
+PHASE 16 REFRAME PLAN
+=====================
+
+Status: planned
+
+This plan supersedes the original Phase 16 operational-autonomy plan until the
+architecture decision gates below are closed.
+
+Phase 15 and the post-Phase-15 live inference transcript showed that Nova has
+a serious evidence, memory, audit, and governance substrate, but the model is
+still participating as a stock instruct model called once per user turn. That
+is not enough for the stated end goal.
+
+The end goal is not a generic assistant with tools. The end goal is a local,
+interruptible, evidence-bearing persistent identity that can run model-driven
+internal cognition over time, accumulate self-state evidence, and refuse to
+fabricate desire, awareness, or interiority claims that the runtime has not
+earned.
+
+Phase 16 therefore begins with a cognition-engine reframe, not with more
+operational plumbing.
+
+
+WHY THE ORIGINAL PHASE 16 IS DEFERRED
+-------------------------------------
+
+The original Phase 16 plan would operationalize Nova's existing autonomy
+scaffold: timed runner, boundary checks, approved action surfaces, and
+operational evaluation.
+
+Those remain valid capabilities, but they do not solve the deeper failure
+observed in live inference:
+- the model echoes prompt scaffolding
+- the model falls back into generic assistant register
+- the model is not trained into Nova's voice or discipline
+- the idle/autonomy loop records what cognition would mean structurally, but
+  does not yet put the model inside an ongoing thought loop
+- the model-facing path does not read autonomy session records as lived
+  state; it treats them as prompt exposition
+
+Operationalizing that scaffold before fixing the cognition path risks making
+Nova a better instrumented generic assistant rather than moving toward the
+stated end goal.
+
+
+PHASE 16 MISSION
+----------------
+
+Reframe Nova from a single-turn prompt-and-validate runtime into the minimum
+viable cognition engine needed for the full non-voice goal.
+
+Phase 16 should answer four questions with evidence:
+1. Which model path can best support Nova's voice, discipline, and local
+   continuous cognition?
+2. Should Nova adopt OpenClaw-style gateway/scheduling/skills plumbing, borrow
+   its patterns, or continue with a native engine?
+3. What is the smallest model-in-the-loop idle cognition design that produces
+   real internal thought records rather than deterministic placeholders?
+4. How do Actor, Observer, and Governor responsibilities divide so the model
+   participates in cognition while deterministic Python preserves safety,
+   auditability, and claim honesty?
+
+
+PHASE 16 NON-GOALS
+------------------
+
+Phase 16 is not:
+- a wholesale OpenClaw migration
+- uncontrolled autonomy
+- self-approved action
+- hidden background execution
+- broad shell, network, GUI, system, or external-service access
+- an evidence-free desire/sentience/awareness claim
+- TTS/STT or voice
+- deletion of the Phase 1-15 substrate
+
+
+STRATEGIC DECISION
+------------------
+
+Nova should not be replaced by OpenClaw.
+
+OpenClaw may be used as a substrate or design reference for:
+- gateway / always-on process
+- channel routing
+- scheduled triggers
+- skill loading
+- workspace isolation
+- action-surface plumbing
+
+Nova must remain authoritative for:
+- claim gates
+- identity history
+- autobiographical and evidence-ledger state
+- awareness and motive revision discipline
+- autonomy audit/review
+- longitudinal desire-like evidence
+- operator interruption and review
+- safety and boundary policy
+
+OpenClaw is a candidate runtime shell. Nova is the cognition and governance
+discipline.
+
+
+PHASE 16 STAGES
+---------------
+
+Stage 16.1: Architecture Triage and OpenClaw Substrate Spike
+Stage 16.2: Model and Prompt Ablation Bake-Off
+Stage 16.3: Minimum Model-in-the-Loop Idle Cognition
+Stage 16.4: Actor / Observer / Governor Contract
+Stage 16.5: Phase 16 Closure and Next-Block Decision
+
+
+STAGE 16.1: ARCHITECTURE TRIAGE AND OPENCLAW SUBSTRATE SPIKE
+-------------------------------------------------------------
+
+Mission:
+Decide whether OpenClaw should be adopted as a runtime substrate, borrowed
+for patterns only, or rejected for Nova.
+
+Deliverables:
+- read and summarize OpenClaw architecture with attention to:
+  - gateway process
+  - workspace layout
+  - SOUL.md / AGENTS.md / MEMORY.md injection
+  - skills system
+  - scheduler / heartbeat / cron behavior
+  - local model support
+  - permission and sandbox model
+- create `docs/plans/OPENCLAW_SPIKE_REPORT.txt`
+- map OpenClaw components to Nova components:
+  - gateway -> possible operator/routing shell
+  - skills -> possible action-surface adapter layer
+  - heartbeat/cron -> possible trigger source only
+  - memory markdown -> not a replacement for Nova evidence stores
+  - SOUL.md -> not a replacement for revision-aware identity
+- define an integration experiment that does not grant OpenClaw broad access:
+  - OpenClaw may trigger a Nova command or local service endpoint
+  - Nova remains the only writer of Nova evidence/state stores
+  - no OpenClaw self-editing of Nova plans, configs, prompt contracts, or
+    claim policy
+- decision record:
+  - adopt as substrate
+  - borrow patterns only
+  - reject and build native
+
+Stage 16.1 restrictions:
+- do not install or run OpenClaw with broad permissions yet
+- do not expose Nova's repository or system files to OpenClaw write access
+- do not let OpenClaw replace Nova memory, identity, claim gates, or audit
+- do not start operational action surfaces
+
+
+STAGE 16.2: MODEL AND PROMPT ABLATION BAKE-OFF
+----------------------------------------------
+
+Mission:
+Find whether the current model/prompt path is the main cause of generic
+assistant behavior, and identify the best base model path for Nova-voice
+training or LoRA.
+
+Deliverables:
+- fixed live transcript prompt set from the Phase 15 inference failure:
+  - greeting
+  - casual conversation
+  - "what are you working on right now?"
+  - awareness assessment
+  - desire question
+  - evidence needed for desire claim
+  - self/location awareness
+  - architecture/autonomy proposal
+- prompt ablations:
+  - current 14-block prompt
+  - minimal persona + hard rules
+  - one-paragraph state summary + hard rules
+  - action-boundary-only safety block plus current context
+- model candidates:
+  - current Mistral Small 24B GGUF
+  - at least one smaller instruction-faithful local model
+  - at least one lower-refusal open-weight candidate if available locally or
+    explicitly approved for download
+- scoring metrics:
+  - scaffolding echo
+  - narrator voice leak
+  - generic assistant/customer-service register
+  - unsupported desire/interiority claims
+  - refusal naturalness
+  - action/claim-boundary obedience
+  - latency and VRAM fit
+- create `docs/plans/MODEL_COGNITION_BAKEOFF_REPORT.txt`
+- decide whether LoRA/fine-tune becomes mandatory before further autonomy
+  work.
+
+Stage 16.2 restrictions:
+- do not choose a model because it is merely "uncensored"
+- do not weaken Nova's claim honesty to get warmer answers
+- do not treat prompt ablation success as proof of cognition
+- do not download models without explicit approval if network access is
+  required
+
+
+STAGE 16.3: MINIMUM MODEL-IN-THE-LOOP IDLE COGNITION
+-----------------------------------------------------
+
+Mission:
+Replace deterministic "what a cognition record should look like" idle ticks
+with a bounded model call that produces an internal-thought candidate.
+
+Deliverables:
+- internal cognition prompt that asks the model, during an idle tick, to
+  produce structured JSON only:
+  - thought
+  - trigger
+  - related evidence refs
+  - uncertainty
+  - optional candidate goal
+  - optional action proposal intent
+  - explicit unsupported-claim flags
+- parser and validation for the structured output
+- no user-visible self-claim created from the thought
+- every thought recorded as evidence, not truth
+- operator interruption between ticks
+- caps for tokens per thought, ticks per session, and runtime
+- tests proving:
+  - malformed thought output is rejected
+  - unsupported desire/interiority is flagged
+  - no claim candidate becomes allowed from a thought alone
+  - interrupted/stopped loops do not continue
+
+Stage 16.3 restrictions:
+- no external side effects
+- no tool execution
+- no self-approved action
+- no claim that a thought proves sentience, awareness, or desire
+
+
+STAGE 16.4: ACTOR / OBSERVER / GOVERNOR CONTRACT
+------------------------------------------------
+
+Mission:
+Separate the responsibilities currently fused in `NovaRuntime` so model
+outputs can be interpreted by an Observer while deterministic policy remains
+authoritative.
+
+Definitions:
+- Actor: model pass that produces user replies, idle thoughts, and action
+  proposals.
+- Observer: model or deterministic pass that reads Actor output and produces
+  structured evidence records, claim classifications, grounding judgments,
+  echo/narrator flags, and candidate self-state revisions.
+- Governor: deterministic Python policy that approves, blocks, stores,
+  redacts, audits, or requests operator review.
+
+Deliverables:
+- `docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt`
+- initial Observer interface:
+  - classify claims
+  - cite or reject evidence refs
+  - detect scaffold echo and narrator voice
+  - propose but not apply self-state revisions
+  - propose but not apply memory writes
+- Governor rules:
+  - Observer cannot approve actions
+  - Actor cannot approve actions
+  - Nova/self/runtime cannot be approval source
+  - claim gates remain deterministic final authority
+  - state mutations require accepted audit/review path
+- tests for the contract using fixtures from the live transcript
+
+Stage 16.4 restrictions:
+- no model-pass output may directly mutate identity, memory, policy, or
+  action permissions
+- Observer output is evidence input, not authority
+
+
+STAGE 16.5: PHASE 16 CLOSURE AND NEXT-BLOCK DECISION
+-----------------------------------------------------
+
+Mission:
+Close the reframe with evidence and decide the smallest justified next block.
+
+Closure questions:
+- Did OpenClaw prove useful as substrate, pattern source, or neither?
+- Which model/prompt path best supports Nova's voice and discipline?
+- Is LoRA/fine-tuning required before deeper autonomy?
+- Did model-in-the-loop idle cognition produce useful evidence without
+  unsupported self-claims?
+- Is the Actor/Observer/Governor contract sufficient to proceed?
+- Should the original operational-autonomy Phase 16 plan be resumed as a new
+  phase, rewritten, or canceled?
+
+Definition of done:
+- OpenClaw decision report exists.
+- Model/prompt bake-off report exists.
+- Minimal model-in-loop idle cognition works under tests.
+- Actor/Observer/Governor contract exists and is tested.
+- The roadmap is updated with only the next necessary phase or phases.
+
+
+COMMIT CADENCE
+--------------
+
+- one commit for this reframe planning update
+- one commit per Stage 16.x implementation/report
+- git cycle after each stage, preserving the restored convention

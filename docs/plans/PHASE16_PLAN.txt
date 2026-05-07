@@ -1,7 +1,16 @@
 PHASE 16 PLAN
 =============
 
-Status: planned
+Status: superseded by `docs/plans/PHASE16_REFRAME_PLAN.txt`
+
+This original Phase 16 plan is preserved for reference. It should not be
+implemented as-is until the Phase 16 reframe closes its architecture decision
+gates.
+
+The original plan remains useful if Nova resumes native operational autonomy
+implementation, but the post-Phase-15 live inference transcript showed a
+deeper priority: Nova needs a model-in-the-loop cognition engine and a
+model/prompt architecture decision before more operational plumbing.
 
 Phase 16 begins after Phase 15 closed the longitudinal internal autonomy
 layer and reassessed the roadmap.
