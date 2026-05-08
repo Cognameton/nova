@@ -35,12 +35,15 @@ class LlamaCppBackend:
         if tensor_split is not None and len(tensor_split) == 0:
             tensor_split = None
 
+        chat_format = (self.config.model.chat_format or "").strip() or None
+
         self._llm = Llama(
             model_path=str(model_path),
             n_ctx=self.config.model.n_ctx,
             n_gpu_layers=self.config.model.n_gpu_layers,
             tensor_split=tensor_split,
             main_gpu=self.config.model.main_gpu,
+            chat_format=chat_format,
             verbose=False,
         )
 
@@ -56,6 +59,7 @@ class LlamaCppBackend:
             "n_gpu_layers": self.config.model.n_gpu_layers,
             "tensor_split": list(self.config.model.tensor_split),
             "main_gpu": self.config.model.main_gpu,
+            "chat_format": self.config.model.chat_format or "",
         }
 
     def tokenize(self, text: str) -> int:
@@ -70,28 +74,46 @@ class LlamaCppBackend:
         assert self._llm is not None
 
         started_at = time.perf_counter()
-        response = self._llm(
-            request.prompt,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            top_p=request.top_p,
-            stop=request.stop,
-        )
+        if request.messages:
+            response = self._llm.create_chat_completion(
+                messages=request.messages,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                top_p=request.top_p,
+                stop=request.stop,
+            )
+            mode = "chat_completion"
+        else:
+            response = self._llm(
+                request.prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                top_p=request.top_p,
+                stop=request.stop,
+            )
+            mode = "completion"
         latency_ms = int((time.perf_counter() - started_at) * 1000)
 
         choices = response.get("choices", [])
         first_choice = choices[0] if choices else {}
         usage = response.get("usage", {})
 
+        if mode == "chat_completion":
+            message = first_choice.get("message", {}) or {}
+            raw_text = str(message.get("content", "") or "").strip()
+        else:
+            raw_text = str(first_choice.get("text", "") or "").strip()
+
         return GenerationResult(
             model_id=request.model_id,
-            raw_text=str(first_choice.get("text", "") or "").strip(),
+            raw_text=raw_text,
             finish_reason=first_choice.get("finish_reason"),
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
             latency_ms=latency_ms,
             metadata={
                 "backend": "llama_cpp",
+                "mode": mode,
                 "response_id": response.get("id"),
                 "object": response.get("object"),
             },

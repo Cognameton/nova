@@ -886,6 +886,7 @@ class PromptBundle:
     response_contract_block: str
     full_prompt: str
     token_estimate: int
+    messages: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -901,6 +902,7 @@ class GenerationRequest:
     stop: list[str] = field(default_factory=list)
     seed: int | None = None
     retries_allowed: int = 0
+    messages: list[dict[str, str]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -29,6 +29,7 @@ class ModelConfig:
     n_gpu_layers: int = -1
     tensor_split: list[float] = field(default_factory=lambda: [0.5, 0.5])
     main_gpu: int = 0
+    chat_format: str = ""
 
 
 @dataclass(slots=True)

@@ -1859,6 +1859,7 @@ class NovaRuntime:
 
         generation_request = self._generation_request(
             prompt=prompt_bundle.full_prompt,
+            messages=prompt_bundle.messages,
         )
         generation_result = self.backend.generate(generation_request)
         validation = self.validator.validate(
@@ -1889,7 +1890,19 @@ class NovaRuntime:
                 validation=validation,
             )
             retry_prompt = prompt_bundle.full_prompt + "\n\n[Retry Instruction]\n" + retry_instruction
-            retry_request = self._generation_request(prompt=retry_prompt)
+            retry_messages: list[dict[str, str]] | None = None
+            if prompt_bundle.messages:
+                retry_messages = list(prompt_bundle.messages)
+                retry_messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[Retry Instruction]\n{retry_instruction}",
+                    }
+                )
+            retry_request = self._generation_request(
+                prompt=retry_prompt,
+                messages=retry_messages,
+            )
             retry_result = self.backend.generate(retry_request)
             retry_validation = self.validator.validate(
                 raw_text=retry_result.raw_text,
@@ -2469,7 +2482,12 @@ class NovaRuntime:
         if self.presence_state is None or self.presence_state.session_id != self.session_id:
             self.presence_state = self.presence_store.load(session_id=self.session_id)
 
-    def _generation_request(self, *, prompt: str):
+    def _generation_request(
+        self,
+        *,
+        prompt: str,
+        messages: list[dict[str, str]] | None = None,
+    ):
         from nova.types import GenerationRequest
 
         return GenerationRequest(
@@ -2481,4 +2499,5 @@ class NovaRuntime:
             stop=list(self.config.generation.stop),
             seed=None,
             retries_allowed=self.config.generation.retries,
+            messages=list(messages) if messages else None,
         )

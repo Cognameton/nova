@@ -472,7 +472,10 @@ def run_backend_check_with_runtime(
         session_id=session_id,
         turn_id="backend-check",
     )
-    generation_request = runtime._generation_request(prompt=prompt_bundle.full_prompt)
+    generation_request = runtime._generation_request(
+        prompt=prompt_bundle.full_prompt,
+        messages=prompt_bundle.messages,
+    )
     generation_result = runtime.backend.generate(generation_request)
     validation = runtime.validator.validate(
         raw_text=generation_result.raw_text,

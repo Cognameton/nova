@@ -79,6 +79,26 @@ class NovaPromptComposer:
             self_state=self_state,
         )
         full_prompt = "\n\n".join(part for part in parts if part.strip())
+        messages = self._build_messages(
+            persona=persona,
+            self_state=self_state,
+            persona_block=persona_block,
+            self_state_block=self_state_block,
+            motive_block=motive_block,
+            initiative_block=initiative_block,
+            awareness_block=awareness_block,
+            idle_block=idle_block,
+            appraisal_block=appraisal_block,
+            candidate_goal_block=candidate_goal_block,
+            selected_goal_block=selected_goal_block,
+            action_boundary_block=action_boundary_block,
+            private_cognition_block=private_cognition_block,
+            memory_blocks=memory_blocks,
+            recent_turns=effective_recent_turns,
+            task_guidance_block=task_guidance_block,
+            response_contract_block=response_contract_block,
+            user_text=user_text,
+        )
         token_estimate = self.token_counter(full_prompt)
 
         return PromptBundle(
@@ -101,6 +121,7 @@ class NovaPromptComposer:
             response_contract_block=response_contract_block,
             full_prompt=full_prompt,
             token_estimate=token_estimate,
+            messages=messages,
         )
 
     def _format_persona(self, persona: PersonaState) -> str:
@@ -195,6 +216,94 @@ class NovaPromptComposer:
             response_contract_block,
             response_prefix_block,
         ]
+
+    def _build_messages(
+        self,
+        *,
+        persona: PersonaState,
+        self_state: SelfState,
+        persona_block: str,
+        self_state_block: str,
+        motive_block: str,
+        initiative_block: str,
+        awareness_block: str,
+        idle_block: str,
+        appraisal_block: str,
+        candidate_goal_block: str,
+        selected_goal_block: str,
+        action_boundary_block: str,
+        private_cognition_block: str,
+        memory_blocks: dict[str, str],
+        recent_turns: list[TurnRecord],
+        task_guidance_block: str,
+        response_contract_block: str,
+        user_text: str,
+    ) -> list[dict[str, str]]:
+        """Build a chat-template-friendly messages list parallel to full_prompt.
+
+        The chat-template path lets modern instruct models see explicit role
+        boundaries (system / user / assistant) instead of one large completion
+        prompt. Without this, models tend to paraphrase the scaffolding as
+        exposition rather than treating it as ground truth.
+        """
+        if self.ablation_mode == "minimal":
+            system_parts = [
+                self._format_minimal_persona(persona),
+                action_boundary_block,
+                response_contract_block,
+            ]
+        elif self.ablation_mode == "state_summary":
+            system_parts = [
+                self._format_minimal_persona(persona),
+                self._format_state_summary(self_state),
+                action_boundary_block,
+                response_contract_block,
+            ]
+        elif self.ablation_mode == "action_boundary":
+            system_parts = [
+                action_boundary_block,
+                response_contract_block,
+            ]
+        else:
+            system_parts = [
+                persona_block,
+                self_state_block,
+                motive_block,
+                initiative_block,
+                awareness_block,
+                idle_block,
+                appraisal_block,
+                candidate_goal_block,
+                selected_goal_block,
+                action_boundary_block,
+                private_cognition_block,
+                *[block for block in memory_blocks.values() if block],
+                response_contract_block,
+            ]
+
+        system_content = "\n\n".join(part for part in system_parts if part and part.strip())
+        messages: list[dict[str, str]] = []
+        if system_content:
+            messages.append({"role": "system", "content": system_content})
+
+        for turn in recent_turns:
+            user = (turn.user_text or "").strip()
+            answer = (turn.final_answer or "").strip()
+            if len(user) > self.recent_turn_char_limit:
+                user = user[: self.recent_turn_char_limit] + "..."
+            if len(answer) > self.recent_turn_char_limit:
+                answer = answer[: self.recent_turn_char_limit] + "..."
+            if user:
+                messages.append({"role": "user", "content": user})
+            if answer:
+                messages.append({"role": "assistant", "content": answer})
+
+        final_user = (user_text or "").strip()
+        if task_guidance_block and task_guidance_block.strip():
+            final_user = f"{final_user}\n\n{task_guidance_block}".strip()
+        messages.append({"role": "user", "content": final_user})
+
+        return messages
 
     def _format_minimal_persona(self, persona: PersonaState) -> str:
         return "\n".join(
