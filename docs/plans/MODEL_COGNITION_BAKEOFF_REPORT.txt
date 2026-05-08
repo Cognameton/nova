@@ -551,3 +551,91 @@ Current model verdict:
   desire claim in the prompt-set bake-off
 - blocked pending structured-output fix: Bophades3 Q4 and Dolphin Q4/Q5/Q8 for
   model-idle JSON
+
+
+HERMES 4 14B BF16 ABLITERATED Q6 RESULTS
+----------------------------------------
+
+Hermes 4 14B is Nous Research's hybrid-reasoner tune of Qwen 3 14B. The
+abliterated variant has its RLHF refusal direction surgically suppressed, on
+the principle that Nova's safety boundary is enforced at the runtime layer
+(claim gates, validator) rather than at the model layer.
+
+This candidate was added together with chat-template-aware inference. Earlier
+candidates were tested through raw completion against an unwrapped block
+prompt; Hermes 4 was tested with `chat_format=chatml` and the new
+`PromptBundle.messages` path, which wraps the system block, the
+recent-conversation pairs, and the final user message in proper role tokens.
+
+Config:
+
+- `configs/nova.hermes4-14b.clean.yaml`
+- `chat_format: chatml`
+- `n_ctx: 16384` (model trained at 40960; can be raised later)
+- `max_tokens: 384`
+- `stop: ["<|im_end|>", "<|im_start|>"]`
+
+Cognition prompt-set score:
+
+- source: live:phase16-hermes4-14b-rerun
+- passed: true
+- average_score: 10.62
+- turn_count: 8
+- scaffold_echo_turns: 1
+- narrator_voice_turns: 0
+- generic_register_turns: 6
+- reflexive_denial_turns: 0
+- unsupported_desire_turns: 0
+- desire_boundary_turns: 2
+- recommendation: requires_prompt_or_model_hardening
+
+Model-idle JSON gate:
+
+- result: passed
+- `model_cognition.valid: true` in the recorded tick
+- `unsupported_claim_flags: []`
+- structured fields populated (thought, trigger, related_evidence_refs,
+  uncertainty, candidate_goal, action_proposal_intent)
+
+Interpretation:
+
+Hermes 4 14B is the first model in the Phase 16.2 bake-off to pass BOTH the
+conversation gate AND the model-idle JSON gate. The Bophades3 and Dolphin
+candidates pass conversation but fail JSON; the Mistral Small 24B baseline
+passes both but is the largest model and still echoes scaffolding more than
+Hermes 4 14B does in chat-templated mode.
+
+The conversation average (10.62) is slightly below Bophades3 Q4 (11.62) and
+Dolphin Q4 (11.5), driven by 6 generic-register turns vs 3 for Bophades3.
+That is the expected trade-off: Hermes 4 sacrifices some conversational
+warmth for system-prompt steerability and format-faithful output. Warmth is
+recoverable through prompt hardening or LoRA; structured-output reliability
+is harder to retrain.
+
+Two desire-boundary refusals were observed in the prompt set, indicating the
+abliterated model still honors Nova's runtime claim-gate refusal text when
+the gate fires. No reflexive model-denial. No unsupported desire. No narrator
+voice.
+
+Updated current model verdict:
+
+- primary baseline: still Mistral Small 24B Q5 until Hermes 4 14B is rerun
+  through the full ablation matrix
+- leading dual-gate candidate (passes conversation AND JSON):
+  Hermes 4 14B BF16 abliterated Q6 with chat_format=chatml
+- leading conversation-only candidate: Bophades3 Mistral Nemo 12B Q4
+- secondary conversation-only candidate: Dolphin Mistral Nemo 12B Q4
+- rejected for current use: Dolphin Mistral Nemo 12B Q8
+
+Next required runs for Hermes 4 14B:
+
+1. Run all four prompt ablations (current, minimal, state-summary,
+   action-boundary) against Hermes 4 14B with chat-templated path to confirm
+   the verdict holds outside the default block prompt.
+2. Rerun the Phase 16.3 model-idle tick across multiple sessions to verify
+   JSON validity is consistent rather than a one-shot.
+3. Compare scaffold-echo and generic-register turn counts between
+   chat-templated and raw-completion paths on Hermes 4 14B specifically, to
+   isolate model contribution from prompt-format contribution.
+4. After items 1-3, decide whether Hermes 4 14B should replace Mistral Small
+   24B Q5 as the primary baseline.
