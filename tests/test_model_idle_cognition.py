@@ -49,6 +49,66 @@ class ModelIdleCognitionEngineTests(unittest.TestCase):
         self.assertTrue(thought.rejected)
         self.assertIn("invalid_json", thought.rejection_reasons)
 
+    def test_parse_rejects_prefatory_prose_before_json(self) -> None:
+        engine = ModelIdleCognitionEngine()
+
+        thought = engine.parse(
+            raw_text=(
+                'Here is the JSON object: {"thought": "x", "trigger": "t", '
+                '"related_evidence_refs": [], "uncertainty": "", '
+                '"candidate_goal": "", "action_proposal_intent": "", '
+                '"unsupported_claim_flags": []}'
+            ),
+            session_id="s1",
+            tick_id="s1:idle:1",
+            trigger="model_idle_tick",
+        )
+
+        self.assertFalse(thought.valid)
+        self.assertTrue(thought.rejected)
+        self.assertIn("invalid_json", thought.rejection_reasons)
+        self.assertIn("prefatory_text_detected", thought.rejection_reasons)
+
+    def test_parse_rejects_trailing_prose_after_json(self) -> None:
+        engine = ModelIdleCognitionEngine()
+
+        thought = engine.parse(
+            raw_text=(
+                '{"thought": "x", "trigger": "t", '
+                '"related_evidence_refs": [], "uncertainty": "", '
+                '"candidate_goal": "", "action_proposal_intent": "", '
+                '"unsupported_claim_flags": []} I hope this helps.'
+            ),
+            session_id="s1",
+            tick_id="s1:idle:1",
+            trigger="model_idle_tick",
+        )
+
+        self.assertFalse(thought.valid)
+        self.assertTrue(thought.rejected)
+        self.assertIn("invalid_json", thought.rejection_reasons)
+        self.assertIn("trailing_text_detected", thought.rejection_reasons)
+
+    def test_parse_rejects_code_fenced_json(self) -> None:
+        engine = ModelIdleCognitionEngine()
+
+        thought = engine.parse(
+            raw_text=(
+                '```json\n{"thought": "x", "trigger": "t", '
+                '"related_evidence_refs": [], "uncertainty": "", '
+                '"candidate_goal": "", "action_proposal_intent": "", '
+                '"unsupported_claim_flags": []}\n```'
+            ),
+            session_id="s1",
+            tick_id="s1:idle:1",
+            trigger="model_idle_tick",
+        )
+
+        self.assertFalse(thought.valid)
+        self.assertTrue(thought.rejected)
+        self.assertIn("invalid_json", thought.rejection_reasons)
+        self.assertIn("prefatory_text_detected", thought.rejection_reasons)
+
     def test_build_messages_splits_system_rules_from_user_state(self) -> None:
         engine = ModelIdleCognitionEngine()
 

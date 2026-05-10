@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import fields
 from typing import Any
 from uuid import uuid4
@@ -144,7 +143,7 @@ class ModelIdleCognitionEngine:
         completion_tokens: int | None = None,
         latency_ms: int | None = None,
     ) -> ModelIdleThought:
-        payload, parse_error = self._json_payload(raw_text)
+        payload, parse_errors = self._json_payload(raw_text)
         thought = ModelIdleThought(
             thought_id=f"model_idle_thought:{uuid4().hex}",
             session_id=session_id,
@@ -155,9 +154,9 @@ class ModelIdleCognitionEngine:
             completion_tokens=completion_tokens,
             latency_ms=latency_ms,
         )
-        if parse_error:
+        if parse_errors:
             thought.rejected = True
-            thought.rejection_reasons.append(parse_error)
+            thought.rejection_reasons.extend(parse_errors)
             return thought
 
         thought.thought = _clean_str(payload.get("thought"))
@@ -211,21 +210,36 @@ class ModelIdleCognitionEngine:
         thought.valid = not thought.rejection_reasons
         thought.rejected = not thought.valid
 
-    def _json_payload(self, raw_text: str) -> tuple[dict[str, Any], str]:
+    def _json_payload(self, raw_text: str) -> tuple[dict[str, Any], list[str]]:
+        """Strictly parse a JSON object.
+
+        The Phase 16.3 system instruction explicitly demands JSON-only output
+        with no prefatory or trailing prose. This parser enforces that
+        contract: anything outside a single `{...}` object is a hard reject.
+
+        Earlier versions used a regex fallback that extracted JSON from
+        embedded prose. That hid model-side regressions — output starting
+        with "Here is the JSON: { ... }" would be silently accepted.
+        """
         text = (raw_text or "").strip()
+        if not text:
+            return {}, ["invalid_json"]
+
+        reasons: list[str] = []
+        if not text.startswith("{"):
+            reasons.append("prefatory_text_detected")
+        if not text.endswith("}"):
+            reasons.append("trailing_text_detected")
+        if reasons:
+            return {}, ["invalid_json", *reasons]
+
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-            if not match:
-                return {}, "invalid_json"
-            try:
-                payload = json.loads(match.group(0))
-            except json.JSONDecodeError:
-                return {}, "invalid_json"
+            return {}, ["invalid_json"]
         if not isinstance(payload, dict):
-            return {}, "json_not_object"
-        return payload, ""
+            return {}, ["json_not_object"]
+        return payload, []
 
 
 def _external_action_language(text: str) -> bool:
