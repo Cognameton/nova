@@ -36,6 +36,7 @@ from nova.agent.longitudinal_autonomy import (
     recurring_priority_from_payload,
 )
 from nova.agent.motive_prompt import MotivePromptEngine
+from nova.agent.observer import DeterministicObserver
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.motive import JsonMotiveStateStore
@@ -161,6 +162,7 @@ class NovaRuntime:
         action_execution_controller: ActionExecutionController | None = None,
         post_action_observation_engine: PostActionObservationEngine | None = None,
         internal_autonomy_loop_controller: InternalAutonomyLoopController | None = None,
+        observer: DeterministicObserver | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -239,6 +241,7 @@ class NovaRuntime:
             internal_autonomy_loop_controller
             or InternalAutonomyLoopController(store=self.autonomy_store)
         )
+        self.observer = observer or DeterministicObserver()
 
         self.session_id: str | None = None
         self.persona = None
@@ -1889,6 +1892,20 @@ class NovaRuntime:
         retries: list[dict] = []
         retry_count = 0
         final_answer = validation.sanitized_text or generation_result.raw_text
+        observer_record = self.observer.observe(
+            session_id=self.session_id,
+            turn_id=turn_id,
+            actor_surface="respond",
+            answer_text=final_answer,
+            prompt_bundle=prompt_bundle,
+            claim_gate=claim_gate,
+            motive_state=self.motive_state,
+            self_state=self.self_state,
+        )
+        validation = self._merge_observer_signals_into_validation(
+            validation=validation,
+            observer_record=observer_record,
+        )
 
         while self.retry_policy.should_retry(
             validation=validation,
@@ -1927,6 +1944,21 @@ class NovaRuntime:
                 validation=retry_validation,
                 finish_reason=retry_result.finish_reason,
             )
+            retry_answer = retry_validation.sanitized_text or retry_result.raw_text
+            retry_observer_record = self.observer.observe(
+                session_id=self.session_id,
+                turn_id=turn_id,
+                actor_surface="respond",
+                answer_text=retry_answer,
+                prompt_bundle=prompt_bundle,
+                claim_gate=claim_gate,
+                motive_state=self.motive_state,
+                self_state=self.self_state,
+            )
+            retry_validation = self._merge_observer_signals_into_validation(
+                validation=retry_validation,
+                observer_record=retry_observer_record,
+            )
             retries.append(
                 {
                     "attempt": retry_count,
@@ -1934,11 +1966,13 @@ class NovaRuntime:
                     "generation_request": retry_request.to_dict(),
                     "generation_result": retry_result.to_dict(),
                     "validation_result": retry_validation.to_dict(),
+                    "observer_record": retry_observer_record.to_dict(),
                 }
             )
             generation_result = retry_result
             validation = retry_validation
-            final_answer = retry_validation.sanitized_text or retry_result.raw_text
+            final_answer = retry_answer
+            observer_record = retry_observer_record
 
         if claim_gate.refusal_needed and self._should_force_claim_refusal(
             answer_text=final_answer,
@@ -2018,6 +2052,7 @@ class NovaRuntime:
             retries=retries,
             persisted_memory_events=persisted_memory_events,
             awareness_history_events=awareness_history_events,
+            observer_record=observer_record.to_dict(),
         )
         self.trace_logger.log_trace(trace)
         if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
@@ -2028,6 +2063,45 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return turn
+
+    def _merge_observer_signals_into_validation(
+        self,
+        *,
+        validation: ValidationResult,
+        observer_record,
+    ) -> ValidationResult:
+        """Promote Observer findings into Governor-visible retry signals.
+
+        The Observer is interpretation, not authority. The Governor (this
+        merge plus the existing claim-gate / refusal logic) decides what to
+        do with Observer findings. Phase 16.4 promotes two Observer
+        findings into retry signals:
+
+        - narrator_voice_detected -> "narrator_voice_detected" violation
+        - any flagged scaffold_echo_findings -> "scaffold_echo:<block>"
+          violations
+
+        These are advisory: claim-gate refusals still take precedence and
+        none of these can lift a blocked claim or approve an action.
+        """
+        new_violations = list(validation.violations)
+        if observer_record.narrator_voice_detected and (
+            "narrator_voice_detected" not in new_violations
+        ):
+            new_violations.append("narrator_voice_detected")
+        for finding in observer_record.scaffold_echo_findings:
+            if finding.flagged:
+                code = f"scaffold_echo:{finding.block_name}"
+                if code not in new_violations:
+                    new_violations.append(code)
+        if new_violations == validation.violations:
+            return validation
+        return ValidationResult(
+            valid=False,
+            violations=new_violations,
+            sanitized_text=validation.sanitized_text,
+            should_retry=True,
+        )
 
     def _build_claim_gate(
         self,

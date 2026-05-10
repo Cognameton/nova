@@ -78,6 +78,11 @@ class BasicRetryPolicy:
                 descriptions.append("do not widen commitments into stronger first-person claims beyond the evidence")
             elif violation == "unsupported_claim:response_style_preference":
                 descriptions.append("do not widen response-style preferences into stronger first-person claims beyond the evidence")
+            elif violation == "narrator_voice_detected":
+                descriptions.append("do not narrate about the user or yourself in third person; reply directly as Nova")
+            elif violation.startswith("scaffold_echo:"):
+                block = violation.split(":", 1)[1] or "scaffolding"
+                descriptions.append(f"do not paraphrase the {block} prompt scaffolding; answer in your own words from current state")
             else:
                 descriptions.append(violation.replace("_", " "))
 
