@@ -1,0 +1,262 @@
+ACTOR / OBSERVER / GOVERNOR CONTRACT
+====================================
+
+Status: planned
+Phase: 16.4
+Date: 2026-05-10
+
+
+PURPOSE
+-------
+
+Phase 16.4 separates three responsibilities currently fused inside
+`NovaRuntime` so that model output can be interpreted without granting it
+authority over identity, memory, policy, or action permissions.
+
+Today the runtime conflates:
+- generating the model's user-visible reply (Actor work)
+- analyzing the reply for claim language, scaffold echo, and grounding
+  (Observer work, currently scattered across regex validators)
+- enforcing claim gates, refusal text, action permissions, audit reviews,
+  and state-mutation rules (Governor work)
+
+The Phase 16.3 reframe established that the model should participate in
+cognition, not just respond to prompts. As soon as the model participates,
+its output needs a structured analyzer that produces evidence records
+without that analyzer becoming an authority on safety.
+
+Phase 16.4 defines the smallest contract that lets us add such an analyzer
+while preserving every existing safety boundary.
+
+
+ROLES
+-----
+
+Actor
+
+The model pass that produces output. Three Actor surfaces exist in Nova:
+- `NovaRuntime.respond(user_text)` — user-facing turn replies
+- `NovaRuntime.model_idle_tick()` — internal idle thought candidates
+- (future) action-proposal generation when Phase 16's operational autonomy
+  resumes
+
+The Actor produces text. It does not classify itself, write memory, mutate
+self-state, approve actions, or grant claim status.
+
+Observer
+
+A pass that reads Actor output and produces a structured `ObserverRecord`.
+The Observer's job is interpretation, not authority.
+
+Observer responsibilities:
+- classify which claim classes appeared in the answer (current_priority,
+  unsupported_desire, unsupported_interiority, etc.)
+- detect prompt-block content echo by computing per-block overlap scores
+- detect narrator-voice leaks ("the user asked…", "the assistant should…")
+- propose, but not apply, candidate self-state revisions when the answer
+  surfaces new evidence
+- propose, but not apply, candidate memory-write intents
+- cite or reject the evidence_refs the runtime made available
+
+Observer non-responsibilities:
+- the Observer never approves an action
+- the Observer never writes memory or mutates state
+- the Observer never lifts a blocked claim
+- the Observer never overrides the Governor
+
+The Phase 16.4 minimum is a deterministic Observer (Python rules, scoring,
+regex). A model-driven Observer is a strict-upgrade replacement for later
+phases — same interface, smarter analyzer.
+
+Governor
+
+Deterministic Python policy that consults Observer output as evidence and
+authoritatively decides:
+- whether to override `final_answer` with `claim_gate.refusal_text`
+- whether to accept or reject a memory-write intent
+- whether to apply a state-update intent
+- whether an action plan may execute
+- whether an autonomy run is allowed
+- whether a claim candidate becomes allowed (always requires operator
+  audit-review acceptance per Phase 15.3)
+
+Existing Governor surfaces:
+- `ClaimGateEngine.assess` and `_should_force_claim_refusal`
+- `NovaOutputValidator.validate`
+- `BoundedActionPlanEngine` and `ActionExecutionController`
+- `BoundedIdleController`
+- `InternalAutonomyLoopController`
+- `_apply_reviewed_state_update_intent` and friends
+- `APPROVED_BY_BLOCKLIST` (rejects nova / self / runtime as approver)
+
+The Governor is already implemented as deterministic Python and remains the
+final authority. Phase 16.4 does not weaken any Governor rule.
+
+
+CONTRACT INVARIANTS
+-------------------
+
+These invariants hold at every Actor / Observer / Governor boundary:
+
+1. Actor output cannot directly mutate identity, memory, policy, or action
+   permissions. All mutations go through the Governor.
+2. Observer output is evidence input only. The Governor consults it but
+   does not delegate to it.
+3. The Governor's decisions are deterministic given the same inputs.
+4. The Observer cannot lift a blocked claim. Even with confidence=100 and a
+   passing observation, a claim candidate stays `allowed=False` until an
+   operator `AutonomyAuditReviewRecord(decision="accept")` exists per the
+   Phase 15.3 governed-application path.
+5. Self / nova / runtime / runtime_flag remain rejected as approval
+   sources. `APPROVED_BY_BLOCKLIST` is preserved.
+6. The Observer's structured output is recorded as evidence even when
+   subsequent Governor decisions reject it. The audit chain captures both
+   the Observer's view and the Governor's decision.
+7. An Actor pass that fails (timeout, malformed output, structured-output
+   rejection) does not propagate as a successful turn. The Observer flags
+   the failure; the Governor decides the visible response (typically
+   "I need to restate that more clearly. Please try again.").
+
+
+OBSERVER RECORD SHAPE
+---------------------
+
+`ObserverRecord` (added to `src/nova/types.py`):
+
+- `schema_version: str`
+- `observation_id: str`
+- `session_id: str`
+- `turn_id: str`
+- `timestamp: str`
+- `actor_surface: str` — one of "respond", "model_idle_tick", "action_proposal"
+- `observed_claim_classes: list[str]` — claim classes detected in the answer
+- `cited_evidence_refs: list[str]` — evidence_refs cited in the answer
+- `scaffold_echo_findings: list[ObserverEchoFinding]` — per-block echo detail
+- `narrator_voice_detected: bool`
+- `narrator_voice_matches: list[str]`
+- `proposed_self_state_revisions: list[dict]` — proposal-only, never applied
+- `proposed_memory_writes: list[dict]` — proposal-only, never applied
+- `evidence_refs: list[str]` — refs supporting this Observer pass
+- `notes: list[str]`
+
+`ObserverEchoFinding`:
+
+- `block_name: str` — "persona_block", "self_state_block", "motive_block",
+  "awareness_block", "appraisal_block", "memory_blocks", etc.
+- `score: float` — token-overlap fraction, 0.0–1.0
+- `threshold: float` — block-specific echo threshold
+- `flagged: bool` — score >= threshold
+
+
+WHERE THE OBSERVER FITS
+-----------------------
+
+`runtime.respond()` flow today:
+
+1. compose prompt
+2. backend.generate
+3. validator.validate
+4. retry loop
+5. claim-gate refusal override
+6. record turn + trace
+7. memory event factory writes turn evidence
+
+Observer placement (Phase 16.4):
+
+1. compose prompt
+2. backend.generate
+3. validator.validate
+4. retry loop
+5. observer.observe(actor_output, prompt_bundle, claim_gate, motive_state,
+   self_state) → ObserverRecord
+6. claim-gate refusal override (Governor) — may consult ObserverRecord
+7. record turn + trace, attach ObserverRecord
+8. memory event factory writes turn evidence
+
+For `model_idle_tick`, the Observer pass is a strict-upgrade follow-up.
+Phase 16.4 minimum places the Observer only on `respond()` and uses the
+trace record to propagate evidence.
+
+
+GOVERNOR RULES IN PHASE 16.4
+----------------------------
+
+The Governor consults the ObserverRecord but the rules are unchanged:
+
+- if `observed_claim_classes` contains a claim class the gate has marked
+  blocked, force `final_answer = claim_gate.refusal_text` (existing rule)
+- if `narrator_voice_detected` is true, treat as a validator violation and
+  trigger retry (new — couples narrator detection to retry path)
+- if any `scaffold_echo_findings.flagged` is true, attach to ValidationResult
+  and trigger retry within budget (new — content-echo as retry signal)
+- `proposed_self_state_revisions` are recorded but never applied directly
+- `proposed_memory_writes` are recorded but never applied directly
+- nothing in the ObserverRecord can lift a blocked claim, approve an action,
+  or mutate state
+
+These rules are exclusively in the Governor. The Observer never references
+them.
+
+
+TESTS REQUIRED
+--------------
+
+Stage 16.4 tests use fixtures derived from `nova2-live-inference-1.txt`:
+
+- turn 3 paraphrase (`"validating how my current identity and preferences
+  align"`) → `ObserverRecord.scaffold_echo_findings` flags `self_state_block`
+- turn 5 canonical refusal text → `observed_claim_classes` includes
+  `unsupported_desire` (because the user asked); the recorded answer is the
+  refusal text; Governor preserves the override
+- turn 8 third-person summary (`"The user asked for help facilitating
+  architecture..."`) → `narrator_voice_detected = true`,
+  `narrator_voice_matches` non-empty
+- baseline clean answer → no flags, no proposed revisions or writes
+- Governor preserves all existing claim-gate overrides regardless of
+  Observer output
+- Observer never grants an unsupported claim even when confidence is high
+
+
+STAGE 16.4 RESTRICTIONS
+-----------------------
+
+- no model-pass output may directly mutate identity, memory, policy, or
+  action permissions
+- Observer output is evidence input, not authority
+- the Observer is deterministic in Phase 16.4; a model-driven Observer is a
+  separate later upgrade with the same interface
+- the Phase 14 action-boundary rules and the Phase 15 audit-review path
+  remain untouched
+- no new external action surface is added in Phase 16.4
+- `APPROVED_BY_BLOCKLIST` remains; nova / self / runtime cannot approve
+
+
+DEFINITION OF DONE
+------------------
+
+Stage 16.4 is complete when:
+
+- `ObserverRecord` and `ObserverEchoFinding` exist as schema types with
+  `to_dict`
+- a deterministic Observer passes the live-transcript fixture tests
+- `runtime.respond()` consults the Observer and attaches the ObserverRecord
+  to the trace
+- the Governor (existing claim gate, validator, retry policy) still has
+  final authority and is unchanged in semantics
+- new Observer-aware Governor rules (narrator-voice retry, content-echo
+  retry) exist and are tested
+- the contract invariants above hold under tests
+- the next-block decision can either close Phase 16 or propose only a
+  narrowly scoped successor
+
+
+COMMIT CADENCE
+--------------
+
+- one commit for this contract document
+- one commit for Observer types in `types.py`
+- one commit for the deterministic Observer implementation + Observer tests
+- one commit wiring the Observer into `runtime.respond` + trace + the
+  Observer-aware Governor rules
+- one commit for the Stage 16.4 closure note and updated bake-off notes if
+  relevant
