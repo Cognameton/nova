@@ -151,11 +151,18 @@ class DeterministicObserver:
         *,
         echo_thresholds: dict[str, float] | None = None,
         narrator_voice_patterns: Iterable[str] | None = None,
+        min_echo_answer_tokens: int = 10,
     ) -> None:
         self.echo_thresholds = dict(echo_thresholds or _DEFAULT_ECHO_THRESHOLDS)
         self.narrator_voice_patterns = tuple(
             narrator_voice_patterns or _NARRATOR_VOICE_PATTERNS
         )
+        # Echo flagging requires a minimum answer length. Short answers
+        # ("My name is Nova", "Backend check OK") naturally share a few
+        # tokens with the persona/self-state blocks; flagging them as echo
+        # is noise. The paraphrase failure mode the Observer is designed to
+        # catch (turn 3 of the live transcript) is always >>10 tokens.
+        self.min_echo_answer_tokens = min_echo_answer_tokens
 
     def observe(
         self,
@@ -224,6 +231,10 @@ class DeterministicObserver:
             return []
         answer_tokens = _tokens(answer)
         if not answer_tokens:
+            return []
+        # Skip echo flagging entirely for short answers; the few token
+        # overlaps will inflate the ratio and produce false positives.
+        if len(answer_tokens) < self.min_echo_answer_tokens:
             return []
 
         findings: list[ObserverEchoFinding] = []
