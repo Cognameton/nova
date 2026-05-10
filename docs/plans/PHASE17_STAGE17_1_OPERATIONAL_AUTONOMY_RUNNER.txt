@@ -1,0 +1,167 @@
+PHASE 17, STAGE 17.1: OPERATIONAL AUTONOMY RUNNER AND CONTROL SURFACE
+======================================================================
+
+Status: complete
+
+
+MISSION
+-------
+
+Add the supervised timed/service runner skeleton and operator controls
+before any real action surface is connected. Stage 17.1 establishes the
+lifecycle / budget / tick-recording skeleton that Stages 17.2-17.4 will
+extend.
+
+
+COMPLETED CAPABILITIES
+----------------------
+
+Schema (commit pending):
+
+- `OperationalAutonomyBudget` — runtime/tick/action/tool/file/token caps,
+  `allow_destructive` (always False at 17.1)
+- `OperationalAutonomyPolicy` — enabled, tick_interval_seconds,
+  idle_window_required, allowed/blocked surfaces, allow_self_approval and
+  allow_destructive (both forced False by coercion at 17.1),
+  require_logging, require_observer
+- `OperationalTickRecord` — tick_id, runner_id, session_id, sequence,
+  started_at, completed_at, lifecycle_state, status, trigger,
+  block_reason, action_attempted/executed/blocked, observer_record,
+  budget_snapshot, boundary_snapshot, evidence_refs, notes
+- `OperationalAutonomyRunnerState` — runner_id, session_id, status,
+  timestamps for started/paused/resumed/interrupted/stopped/
+  emergency_stopped, last_tick metadata, budget, policy, ticks list,
+  evidence_refs, notes
+
+Implementation:
+
+- `JsonOperationalAutonomyStore` — per-session JSON state persistence at
+  `<data_dir>/operational_autonomy/<session_id>.operational.json`
+- `OperationalAutonomyController` — start, pause, resume, interrupt,
+  stop, emergency_stop, status, append_tick
+- `default_operational_autonomy_policy()` factory with
+  internal-activity-only allowed lanes and surfaces, all external-effect
+  surfaces in blocked list, self-approval and destructive forced False
+- `default_operational_runner_state(session_id)` factory
+- `step_block_reason(state)` — single decision point for whether a step
+  should proceed or be recorded as blocked
+- payload-coercion helpers preserve the "self-approval and destructive
+  cannot be enabled at 17.1" invariant under round-trip
+
+Runtime wiring:
+
+- `NovaRuntime.operational_autonomy_status()`
+- `NovaRuntime.start_operational_autonomy(policy, budget, max_ticks,
+  max_runtime_seconds, max_actions)`
+- `NovaRuntime.pause_operational_autonomy(reason)`
+- `NovaRuntime.resume_operational_autonomy()`
+- `NovaRuntime.interrupt_operational_autonomy(reason)`
+- `NovaRuntime.stop_operational_autonomy(reason)`
+- `NovaRuntime.emergency_stop_operational_autonomy(reason)`
+- `NovaRuntime.step_operational_autonomy(trigger)` — records a
+  completed-or-blocked tick and writes it through the trace logger;
+  Stage 17.1 invariant: action_attempted=False, action_executed=False
+- `JsonlTraceLogger.log_operational_tick` — appends to
+  `<log_dir>/traces/<session_id>.operational.jsonl`
+- presence updates fire on every lifecycle transition and tick
+
+Tests:
+
+- 20 new tests in `tests/test_operational_autonomy.py`:
+  - lifecycle: start/pause/resume/interrupt/stop/emergency_stop
+  - resume from running raises; pause from stopped raises
+  - emergency stop is final until restart; restart clears flags
+  - step_block_reason for each lifecycle state
+  - tick budget exhaustion blocks further steps
+  - action budget exhaustion blocks further steps
+  - policy.enabled=False blocks step
+  - policy coercion forces allow_self_approval and allow_destructive to
+    False under all input
+  - tick recording advances counters and evidence_refs
+  - state round-trips through payload
+  - runtime.step_operational_autonomy never attempts a real action at
+    17.1 (`action_attempted=False`, `action_executed=False`,
+    `"no_real_action_surface_invoked"` in notes)
+  - runtime resume after pause allows steps again
+  - runtime writes operational tick trace to disk
+- full suite: 346 tests passed (was 326 before Stage 17.1)
+
+
+CONTRACT INVARIANTS HELD
+------------------------
+
+- The runner is step-driven. No thread, asyncio task, or background
+  scheduler runs at this stage. The "timed/service loop policy" exists
+  as configuration (`tick_interval_seconds`) but no internal mechanism
+  reads it yet. Stage 17.4 evaluation work or a future stage will wire
+  the actual scheduler.
+- `step_operational_autonomy` records a tick but invokes no real action
+  surface. action_attempted/action_executed/action_blocked are all False
+  for non-blocked completed ticks. The notes field carries
+  `no_real_action_surface_invoked` to make this explicit in audit.
+- `policy.allow_self_approval` and `policy.allow_destructive` are forced
+  to False by the coercion layer regardless of input.
+- Pause is reversible (pause -> resume -> running). Interrupt, stop, and
+  emergency_stop all require an explicit `start()` call to proceed.
+- Emergency stop preserves the runner_id and tick history for audit but
+  resets budget counters on restart.
+- Every lifecycle transition is timestamped; the runner state JSON is
+  authoritative for "what happened, when."
+- The Phase 16 Observer/Governor split is preserved. The runner state is
+  authoritative; the model has no path to mutate runner state without a
+  controller method.
+- `APPROVED_BY_BLOCKLIST` (nova/self/runtime) is not relaxed. Real
+  surface adoption in Stage 17.3 will continue to honor it.
+
+
+WHAT NOVA CAN NOW DO
+--------------------
+
+Nova can now:
+
+- maintain a supervised operational autonomy runner with explicit start,
+  pause, resume, interrupt, stop, and emergency stop
+- enforce tick / runtime / action budgets before each step
+- record an audit-traced tick per step with a deterministic block-reason
+  taxonomy (runner_not_running:<status>, runner_<final_state>,
+  policy_disabled, tick_budget_exhausted, runtime_budget_exhausted,
+  action_budget_exhausted)
+- persist runner state across process restarts as JSON
+- expose runner status to the operator surface (existing
+  `update_presence` chain plus the runner state itself)
+
+
+WHAT NOVA STILL CANNOT DO
+-------------------------
+
+Nova still cannot:
+
+- run a real timed/service scheduler (Stage 17.1 deliberately keeps the
+  runner step-driven; a scheduler is added later)
+- enforce a Nova-owned local execution boundary at runtime contract level
+  (Stage 17.2)
+- execute any real approved action surface (Stage 17.3)
+- evaluate operational autonomy end-to-end (Stage 17.4)
+- claim that a successful tick implies any external work happened
+
+
+VERIFICATION
+------------
+
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 346 tests passed
+
+
+NEXT STAGE
+----------
+
+Stage 17.2: Enforced Local Execution Boundary
+
+Operationalize Nova-owned local boundary checks before any real action
+surface is connected. Add runtime boundary checks for expected OS user,
+active OS user, Nova-owned paths, allowed surfaces, and blocked surfaces.
+Fail-closed when the expected boundary is not active. Tests prove
+boundary failures block operational action before side effects.
+
+The Stage 17.1 runner state already has a `boundary_snapshot` field on
+each tick record; Stage 17.2 will populate it.

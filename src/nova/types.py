@@ -347,6 +347,105 @@ class ModelIdleThought:
 
 
 @dataclass(slots=True)
+class OperationalAutonomyBudget:
+    schema_version: str = SCHEMA_VERSION
+    max_runtime_seconds: int = 0
+    runtime_seconds_used: int = 0
+    max_ticks: int = 0
+    ticks_used: int = 0
+    max_actions: int = 0
+    actions_used: int = 0
+    max_tool_calls: int = 0
+    tool_calls_used: int = 0
+    max_files_touched: int = 0
+    files_touched: int = 0
+    max_tokens: int = 0
+    tokens_used: int = 0
+    allow_destructive: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class OperationalAutonomyPolicy:
+    schema_version: str = SCHEMA_VERSION
+    policy_id: str = ""
+    enabled: bool = True
+    tick_interval_seconds: int = 0
+    idle_window_required: bool = True
+    require_logging: bool = True
+    require_observer: bool = True
+    allowed_execution_lanes: list[str] = field(default_factory=list)
+    allowed_surfaces: list[str] = field(default_factory=list)
+    blocked_surfaces: list[str] = field(default_factory=list)
+    allow_self_approval: bool = False
+    allow_destructive: bool = False
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class OperationalTickRecord:
+    schema_version: str = SCHEMA_VERSION
+    tick_id: str = ""
+    runner_id: str = ""
+    autonomy_session_id: str = ""
+    session_id: str = ""
+    sequence: int = 0
+    started_at: str = ""
+    completed_at: str = ""
+    lifecycle_state: str = "running"
+    status: str = "planned"
+    trigger: str = "operational_tick"
+    block_reason: str = ""
+    action_attempted: bool = False
+    action_executed: bool = False
+    action_blocked: bool = False
+    observer_record: dict[str, Any] = field(default_factory=dict)
+    budget_snapshot: dict[str, Any] = field(default_factory=dict)
+    boundary_snapshot: dict[str, Any] = field(default_factory=dict)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class OperationalAutonomyRunnerState:
+    schema_version: str = SCHEMA_VERSION
+    runner_id: str = ""
+    session_id: str = ""
+    status: str = "planned"
+    started_at: str = ""
+    updated_at: str = ""
+    paused_at: str = ""
+    resumed_at: str = ""
+    interrupted_at: str = ""
+    stopped_at: str = ""
+    emergency_stopped_at: str = ""
+    last_tick_id: str = ""
+    last_tick_at: str = ""
+    last_stop_reason: str = ""
+    tick_count: int = 0
+    actions_executed: int = 0
+    actions_blocked: int = 0
+    interrupted: bool = False
+    emergency_stopped: bool = False
+    budget: OperationalAutonomyBudget = field(default_factory=OperationalAutonomyBudget)
+    policy: OperationalAutonomyPolicy = field(default_factory=OperationalAutonomyPolicy)
+    ticks: list[OperationalTickRecord] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class AutonomousActionBudget:
     schema_version: str = SCHEMA_VERSION
     max_steps: int = 0

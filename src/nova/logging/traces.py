@@ -154,6 +154,21 @@ class JsonlTraceLogger:
         with review_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
+    def log_operational_tick(
+        self,
+        *,
+        session_id: str,
+        tick: dict,
+    ) -> None:
+        tick_path = self.trace_dir / f"{session_id}.operational.jsonl"
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "tick": tick,
+        }
+        with tick_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
     def log_identity_history(
         self,
         *,

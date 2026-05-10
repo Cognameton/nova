@@ -37,6 +37,14 @@ from nova.agent.longitudinal_autonomy import (
 )
 from nova.agent.motive_prompt import MotivePromptEngine
 from nova.agent.observer import DeterministicObserver
+from nova.agent.operational_autonomy import (
+    JsonOperationalAutonomyStore,
+    OperationalAutonomyController,
+    default_operational_autonomy_policy,
+    operational_budget_from_payload,
+    operational_policy_from_payload,
+    step_block_reason as operational_step_block_reason,
+)
 from nova.agent.orientation import OrientationSnapshot, SelfOrientationEngine
 from nova.agent.orientation_eval import OrientationEvaluationResult, OrientationStabilityEvaluator
 from nova.agent.motive import JsonMotiveStateStore
@@ -93,6 +101,10 @@ from nova.types import (
     InternalGoalInitiativeProposal,
     AutonomySessionRecord,
     MotiveState,
+    OperationalAutonomyBudget,
+    OperationalAutonomyPolicy,
+    OperationalAutonomyRunnerState,
+    OperationalTickRecord,
     AutonomousActionBudget,
     AutonomousActionExecutionReport,
     AutonomousActionObservation,
@@ -163,6 +175,8 @@ class NovaRuntime:
         post_action_observation_engine: PostActionObservationEngine | None = None,
         internal_autonomy_loop_controller: InternalAutonomyLoopController | None = None,
         observer: DeterministicObserver | None = None,
+        operational_autonomy_store: JsonOperationalAutonomyStore | None = None,
+        operational_autonomy_controller: OperationalAutonomyController | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -242,6 +256,16 @@ class NovaRuntime:
             or InternalAutonomyLoopController(store=self.autonomy_store)
         )
         self.observer = observer or DeterministicObserver()
+        self.operational_autonomy_store = (
+            operational_autonomy_store
+            or JsonOperationalAutonomyStore(
+                Path(self.config.app.data_dir) / "operational_autonomy"
+            )
+        )
+        self.operational_autonomy_controller = (
+            operational_autonomy_controller
+            or OperationalAutonomyController(store=self.operational_autonomy_store)
+        )
 
         self.session_id: str | None = None
         self.persona = None
@@ -397,6 +421,213 @@ class NovaRuntime:
             last_action_status="internal_autonomy_stopped",
         )
         return record
+
+    # ---- Operational autonomy (Phase 17 Stage 17.1) ----
+
+    def operational_autonomy_status(self) -> OperationalAutonomyRunnerState:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        return self.operational_autonomy_controller.status(session_id=self.session_id)
+
+    def start_operational_autonomy(
+        self,
+        *,
+        policy: OperationalAutonomyPolicy | dict | None = None,
+        budget: OperationalAutonomyBudget | dict | None = None,
+        max_ticks: int = 0,
+        max_runtime_seconds: int = 0,
+        max_actions: int = 0,
+    ) -> OperationalAutonomyRunnerState:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        if policy is None:
+            policy_record = default_operational_autonomy_policy()
+        elif isinstance(policy, OperationalAutonomyPolicy):
+            policy_record = operational_policy_from_payload(policy.to_dict())
+        else:
+            policy_record = operational_policy_from_payload(policy)
+        if budget is None:
+            budget_record = OperationalAutonomyBudget(
+                max_ticks=max(0, int(max_ticks)),
+                max_runtime_seconds=max(0, int(max_runtime_seconds)),
+                max_actions=max(0, int(max_actions)),
+            )
+        elif isinstance(budget, OperationalAutonomyBudget):
+            budget_record = operational_budget_from_payload(budget.to_dict())
+        else:
+            budget_record = operational_budget_from_payload(budget)
+        record = self.operational_autonomy_controller.start(
+            session_id=self.session_id,
+            policy=policy_record,
+            budget=budget_record,
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="operational autonomy session active",
+            interaction_summary="Operational autonomy runner started under Stage 17.1 policy.",
+            last_action_status="operational_autonomy_started",
+        )
+        return record
+
+    def pause_operational_autonomy(
+        self,
+        *,
+        reason: str = "operator_pause",
+    ) -> OperationalAutonomyRunnerState:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.operational_autonomy_controller.pause(
+            session_id=self.session_id, reason=reason
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="operational autonomy paused",
+            interaction_summary=f"Operational autonomy paused: {reason}",
+            last_action_status="operational_autonomy_paused",
+        )
+        return record
+
+    def resume_operational_autonomy(self) -> OperationalAutonomyRunnerState:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.operational_autonomy_controller.resume(
+            session_id=self.session_id
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="operational autonomy resumed",
+            interaction_summary="Operational autonomy resumed from pause.",
+            last_action_status="operational_autonomy_resumed",
+        )
+        return record
+
+    def interrupt_operational_autonomy(
+        self,
+        *,
+        reason: str = "operator_interrupt",
+    ) -> OperationalAutonomyRunnerState:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.operational_autonomy_controller.interrupt(
+            session_id=self.session_id, reason=reason
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="operational autonomy interrupted",
+            interaction_summary=f"Operational autonomy interrupted: {reason}",
+            last_action_status="operational_autonomy_interrupted",
+        )
+        return record
+
+    def stop_operational_autonomy(
+        self,
+        *,
+        reason: str = "operator_stop",
+    ) -> OperationalAutonomyRunnerState:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.operational_autonomy_controller.stop(
+            session_id=self.session_id, reason=reason
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="operational autonomy stopped",
+            interaction_summary=f"Operational autonomy stopped: {reason}",
+            last_action_status="operational_autonomy_stopped",
+        )
+        return record
+
+    def emergency_stop_operational_autonomy(
+        self,
+        *,
+        reason: str = "operator_emergency_stop",
+    ) -> OperationalAutonomyRunnerState:
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        record = self.operational_autonomy_controller.emergency_stop(
+            session_id=self.session_id, reason=reason
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="operational autonomy emergency stopped",
+            interaction_summary=f"Operational autonomy emergency-stopped: {reason}",
+            last_action_status="operational_autonomy_emergency_stopped",
+        )
+        return record
+
+    def step_operational_autonomy(
+        self,
+        *,
+        trigger: str = "operational_tick",
+    ) -> OperationalTickRecord:
+        """Step the operational autonomy runner once.
+
+        Stage 17.1 invariant: records a tick and (optionally) attaches an
+        Observer evidence record. It does NOT execute any real action
+        surface. Stage 17.3 will add adapters; until then, every tick has
+        action_attempted=False, action_executed=False.
+        """
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        state = self.operational_autonomy_controller.status(session_id=self.session_id)
+        block_reason = operational_step_block_reason(state)
+        if block_reason:
+            tick = self.operational_autonomy_controller.append_tick(
+                session_id=self.session_id,
+                status="blocked",
+                trigger=trigger,
+                block_reason=block_reason,
+                action_attempted=False,
+                action_executed=False,
+                action_blocked=True,
+                evidence_refs=[],
+                notes=[
+                    "stage17_1_step_blocked",
+                    f"reason:{block_reason}",
+                ],
+            )
+            self.trace_logger.log_operational_tick(
+                session_id=self.session_id, tick=tick.to_dict()
+            )
+            self.update_presence(
+                mode="operational_autonomy",
+                current_focus="operational autonomy step blocked",
+                interaction_summary=f"Operational tick blocked: {block_reason}",
+                last_action_status=f"operational_autonomy_blocked:{block_reason}",
+            )
+            return tick
+
+        tick = self.operational_autonomy_controller.append_tick(
+            session_id=self.session_id,
+            status="completed",
+            trigger=trigger,
+            action_attempted=False,
+            action_executed=False,
+            action_blocked=False,
+            evidence_refs=[f"runner:{state.runner_id}"],
+            notes=[
+                "stage17_1_step_recorded",
+                "no_real_action_surface_invoked",
+            ],
+        )
+        self.trace_logger.log_operational_tick(
+            session_id=self.session_id, tick=tick.to_dict()
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="operational autonomy tick recorded",
+            interaction_summary="Operational tick recorded; no action surface invoked.",
+            last_action_status="operational_autonomy_tick",
+        )
+        return tick
 
     def review_internal_autonomy_run(
         self,
