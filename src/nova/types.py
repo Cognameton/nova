@@ -1026,6 +1026,42 @@ class TraceRecord:
     persisted_memory_events: list[dict[str, Any]] = field(default_factory=list)
     identity_history_events: list[dict[str, Any]] = field(default_factory=list)
     awareness_history_events: list[dict[str, Any]] = field(default_factory=list)
+    observer_record: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ObserverEchoFinding:
+    schema_version: str = SCHEMA_VERSION
+    block_name: str = ""
+    score: float = 0.0
+    threshold: float = 0.0
+    flagged: bool = False
+    overlap_terms: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ObserverRecord:
+    schema_version: str = SCHEMA_VERSION
+    observation_id: str = ""
+    session_id: str = ""
+    turn_id: str = ""
+    timestamp: str = ""
+    actor_surface: str = "respond"
+    observed_claim_classes: list[str] = field(default_factory=list)
+    cited_evidence_refs: list[str] = field(default_factory=list)
+    scaffold_echo_findings: list[ObserverEchoFinding] = field(default_factory=list)
+    narrator_voice_detected: bool = False
+    narrator_voice_matches: list[str] = field(default_factory=list)
+    proposed_self_state_revisions: list[dict[str, Any]] = field(default_factory=list)
+    proposed_memory_writes: list[dict[str, Any]] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
