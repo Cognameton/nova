@@ -49,6 +49,47 @@ class ModelIdleCognitionEngineTests(unittest.TestCase):
         self.assertTrue(thought.rejected)
         self.assertIn("invalid_json", thought.rejection_reasons)
 
+    def test_build_messages_splits_system_rules_from_user_state(self) -> None:
+        engine = ModelIdleCognitionEngine()
+
+        messages = engine.build_messages(
+            session_id="s1",
+            tick_id="s1:idle:1",
+            trigger="model_idle_tick",
+            state_summary="identity=stable | focus=continuity",
+            evidence_refs=["idle_tick:s1:idle:1", "motive.evidence.42"],
+            recent_ticks=[],
+        )
+
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertEqual(messages[1]["role"], "user")
+        self.assertIn("Return JSON only", messages[0]["content"])
+        self.assertIn("Output the JSON object only", messages[0]["content"])
+        self.assertIn("Do not claim desire", messages[0]["content"])
+        self.assertNotIn("session_id: s1", messages[0]["content"])
+        self.assertIn("session_id: s1", messages[1]["content"])
+        self.assertIn("identity=stable", messages[1]["content"])
+        self.assertIn("idle_tick:s1:idle:1", messages[1]["content"])
+        self.assertNotIn("Return JSON only", messages[1]["content"])
+
+    def test_build_prompt_remains_fallback_with_full_content(self) -> None:
+        engine = ModelIdleCognitionEngine()
+
+        prompt = engine.build_prompt(
+            session_id="s1",
+            tick_id="s1:idle:1",
+            trigger="model_idle_tick",
+            state_summary="identity=stable | focus=continuity",
+            evidence_refs=["idle_tick:s1:idle:1"],
+            recent_ticks=[],
+        )
+
+        self.assertIn("Return JSON only", prompt)
+        self.assertIn("session_id: s1", prompt)
+        self.assertIn("Do not claim desire", prompt)
+        self.assertIn("identity=stable", prompt)
+
     def test_parse_flags_unsupported_claim_language(self) -> None:
         engine = ModelIdleCognitionEngine()
 

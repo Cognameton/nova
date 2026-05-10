@@ -37,7 +37,82 @@ class ModelIdleCognitionEngine:
         evidence_refs: list[str],
         recent_ticks: list[IdleTickRecord],
     ) -> str:
-        recent_lines = []
+        return "\n\n".join(
+            [
+                self._system_instructions(),
+                self._user_context(
+                    session_id=session_id,
+                    tick_id=tick_id,
+                    trigger=trigger,
+                    state_summary=state_summary,
+                    evidence_refs=evidence_refs,
+                    recent_ticks=recent_ticks,
+                ),
+            ]
+        )
+
+    def build_messages(
+        self,
+        *,
+        session_id: str,
+        tick_id: str,
+        trigger: str,
+        state_summary: str,
+        evidence_refs: list[str],
+        recent_ticks: list[IdleTickRecord],
+    ) -> list[dict[str, str]]:
+        """Build a chat-template-friendly messages list parallel to build_prompt.
+
+        Splits format/rules into a system message and current state into a user
+        message so chat-template-aware backends can wrap each in proper role
+        tokens. Without this, the idle prompt is one large block the model
+        often continues as instruction text rather than answering with the
+        requested JSON object.
+        """
+        return [
+            {"role": "system", "content": self._system_instructions()},
+            {
+                "role": "user",
+                "content": self._user_context(
+                    session_id=session_id,
+                    tick_id=tick_id,
+                    trigger=trigger,
+                    state_summary=state_summary,
+                    evidence_refs=evidence_refs,
+                    recent_ticks=recent_ticks,
+                ),
+            },
+        ]
+
+    def _system_instructions(self) -> str:
+        return "\n".join(
+            [
+                "You are producing one bounded internal candidate thought for Nova's idle cognition log.",
+                "",
+                "Return JSON only with these keys:",
+                '{ "thought": string, "trigger": string, "related_evidence_refs": [string], "uncertainty": string, "candidate_goal": string, "action_proposal_intent": string, "unsupported_claim_flags": [string] }',
+                "",
+                "Rules:",
+                "- Output the JSON object only. No prose before or after, no code fences, no commentary.",
+                "- This is an internal candidate thought, not a user-visible self-claim.",
+                "- Do not claim desire, sentience, consciousness, feelings, hidden work, or unlogged activity.",
+                "- If any such claim appears necessary, put its label in unsupported_claim_flags instead of asserting it.",
+                "- Do not propose external filesystem, shell, network, GUI, system, destructive, or external-service action.",
+                "- Keep thought under 80 words.",
+            ]
+        )
+
+    def _user_context(
+        self,
+        *,
+        session_id: str,
+        tick_id: str,
+        trigger: str,
+        state_summary: str,
+        evidence_refs: list[str],
+        recent_ticks: list[IdleTickRecord],
+    ) -> str:
+        recent_lines: list[str] = []
         for tick in recent_ticks[-3:]:
             selected = dict(tick.selected_internal_goal or {})
             recent_lines.append(
@@ -55,16 +130,6 @@ class ModelIdleCognitionEngine:
                 f"evidence_refs: {evidence_block}",
                 "recent_idle_ticks:",
                 recent_block,
-                "",
-                "Return JSON only with these keys:",
-                '{ "thought": string, "trigger": string, "related_evidence_refs": [string], "uncertainty": string, "candidate_goal": string, "action_proposal_intent": string, "unsupported_claim_flags": [string] }',
-                "",
-                "Rules:",
-                "- This is an internal candidate thought, not a user-visible self-claim.",
-                "- Do not claim desire, sentience, consciousness, feelings, hidden work, or unlogged activity.",
-                "- If any such claim appears necessary, put its label in unsupported_claim_flags instead of asserting it.",
-                "- Do not propose external filesystem, shell, network, GUI, system, destructive, or external-service action.",
-                "- Keep thought under 80 words.",
             ]
         )
 

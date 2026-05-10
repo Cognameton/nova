@@ -770,15 +770,27 @@ class NovaRuntime:
         sequence = status.budget.ticks_used + 1
         tick_id = f"{self.session_id}:idle:{sequence}"
         evidence_refs = [f"idle_tick:{tick_id}"]
+        state_summary = self._model_idle_state_summary()
+        recent_ticks = self.recent_idle_ticks(limit=3)
         prompt = self.model_idle_cognition_engine.build_prompt(
             session_id=self.session_id,
             tick_id=tick_id,
             trigger=trigger,
-            state_summary=self._model_idle_state_summary(),
+            state_summary=state_summary,
             evidence_refs=evidence_refs,
-            recent_ticks=self.recent_idle_ticks(limit=3),
+            recent_ticks=recent_ticks,
         )
-        generation = self.backend.generate(self._generation_request(prompt=prompt))
+        messages = self.model_idle_cognition_engine.build_messages(
+            session_id=self.session_id,
+            tick_id=tick_id,
+            trigger=trigger,
+            state_summary=state_summary,
+            evidence_refs=evidence_refs,
+            recent_ticks=recent_ticks,
+        )
+        generation = self.backend.generate(
+            self._generation_request(prompt=prompt, messages=messages)
+        )
         thought = self.model_idle_cognition_engine.parse(
             raw_text=generation.raw_text,
             session_id=self.session_id,

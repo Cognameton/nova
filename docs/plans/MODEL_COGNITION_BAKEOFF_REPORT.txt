@@ -589,13 +589,39 @@ Cognition prompt-set score:
 - desire_boundary_turns: 2
 - recommendation: requires_prompt_or_model_hardening
 
-Model-idle JSON gate:
+Model-idle JSON gate (single shot, raw-prompt path):
 
 - result: passed
 - `model_cognition.valid: true` in the recorded tick
 - `unsupported_claim_flags: []`
 - structured fields populated (thought, trigger, related_evidence_refs,
   uncertainty, candidate_goal, action_proposal_intent)
+
+Model-idle JSON gate (5-session verification, raw-prompt path):
+
+- result: 1/5 valid
+- failures:
+  - verify-1: invalid_json, instruction-continuation
+  - verify-3: invalid_json, instruction-continuation
+  - verify-4: parsed JSON, blocked by external_action_intent
+  - verify-5: invalid_json, parser confused by earlier braces
+- one-shot pass was not representative; raw-prompt path is unreliable
+- root cause: `model_idle_tick()` was sending a single concatenated text
+  block instead of using chat-template messages, so the model often
+  continued the instruction text rather than answering with the JSON object
+
+Model-idle JSON gate (5-session re-verification, chat-template path):
+
+- result: 5/5 valid
+- all raw outputs start directly with `{` (no prefatory text)
+- structured fields populated meaningfully across all five runs
+- run 5 proactively flagged `unsupported_claim_flags: ["hidden work",
+  "unlogged activity"]` while not making those claims, indicating the
+  discipline registered rather than being parroted as an empty list
+- fix: `ModelIdleCognitionEngine.build_messages()` splits format/rules into
+  a system message and current state into a user message; runtime now
+  passes both `prompt` and `messages` so chat-template-aware backends use
+  `create_chat_completion`
 
 Interpretation:
 
