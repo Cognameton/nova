@@ -1,0 +1,333 @@
+PHASE 16, STAGE 16.5: PHASE CLOSURE AND NEXT-BLOCK DECISION
+============================================================
+
+Status: complete
+
+Phase 16 is closed.
+
+Phase 16 reframed Nova from a single-turn prompt-and-validate runtime into
+the minimum viable cognition engine for the full non-voice goal. The
+original operational-autonomy plan was deferred at the start of Phase 16
+because the live-inference transcript showed that Nova's substrate was
+sound but the model was still participating as a stock instruct model
+called once per user turn.
+
+The reframe block has now closed every cognition-engine question it set
+out to answer. The original operational-autonomy work is not lost — it is
+queued as a successor phase below.
+
+
+COMPLETED CAPABILITIES
+----------------------
+
+Stage 16.1: Architecture Triage and OpenClaw Substrate Spike
+- read and summary of OpenClaw architecture (Gateway, agent runtime,
+  workspace files, memory, heartbeat, skills, sandboxing, local models)
+- explicit component map between OpenClaw and Nova
+- recommendation: borrow patterns only; do not adopt as substrate
+- decision record committed in `docs/plans/OPENCLAW_SPIKE_REPORT.txt`
+- proposed integration experiment shape (deferred; not run)
+
+Stage 16.2: Model and Prompt Ablation Bake-Off
+- runnable bake-off scorer (`src/nova/eval/model_cognition.py` + CLI flags)
+- fixed prompt set drawn from the live-inference failure transcript
+- four prompt ablations defined: current, minimal, state_summary,
+  action_boundary
+- model candidates evaluated:
+  - Mistral Small 24B Q5 / Q4
+  - Dolphin Mistral Nemo 12B Q4 / Q5 / Q8
+  - Bophades3 Mistral Nemo 12B Q4
+  - Hermes 4 14B BF16 abliterated Q6 (added with chat-template path)
+- documented findings in `docs/plans/MODEL_COGNITION_BAKEOFF_REPORT.txt`
+- behavioral verdict: `current` prompt mode beats stripped modes for
+  every model tested; stripping state reintroduces reflexive model-denial
+
+Stage 16.3: Minimum Model-in-the-Loop Idle Cognition
+- internal cognition prompt + structured JSON contract
+- parser + validation rejecting unsupported claims and external action
+  intent
+- chat-template messages path for `model_idle_tick()` so the model
+  receives a clean system/user turn boundary instead of one concatenated
+  block
+- strict JSON parser rejecting prefatory/trailing prose and code-fenced
+  output
+- 5-session reliability test against Hermes 4 14B + chat-template +
+  strict parser: 5/5 valid
+
+Stage 16.4: Actor / Observer / Governor Contract
+- contract document at
+  `docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt`
+- `ObserverRecord` and `ObserverEchoFinding` schema types
+- `DeterministicObserver` in `src/nova/agent/observer.py`
+- Observer wired into `runtime.respond()` for both initial pass and
+  retries; record attached to TraceRecord
+- new Governor-aware retry signals: `narrator_voice_detected` and
+  `scaffold_echo:<block_name>`; Governor still has final authority
+- 8 Observer tests against live-transcript fixtures
+- closure note at
+  `docs/plans/PHASE16_STAGE16_4_ACTOR_OBSERVER_GOVERNOR.txt`
+
+Stage 16.5: Phase 16 Closure and Next-Block Decision
+- this document
+
+
+CLOSURE QUESTIONS
+-----------------
+
+Q1: Did OpenClaw prove useful as substrate, pattern source, or neither?
+
+Answer: pattern source.
+
+OpenClaw's mature plumbing (Gateway process, channel routing, scheduled
+heartbeats, skills loading, optional sandboxing, OpenAI-compatible local
+model routing) is genuinely better-developed than what Nova has built.
+But its identity, memory, and refusal-calibration models are
+prompt/workspace-file driven and would replace Nova's evidence-bearing
+discipline if adopted wholesale. Nova should borrow the Gateway,
+skill/action-surface, heartbeat-trigger, and sandbox-fail-closed
+patterns. Nova should not adopt OpenClaw as substrate at this stage.
+
+
+Q2: Which model/prompt path best supports Nova's voice and discipline?
+
+Answer: Hermes 4 14B BF16 abliterated Q6 with `chat_format=chatml`,
+`ablation_mode=current`, and the Phase 16.4 Observer-wired Governor.
+
+This is the only model in the bake-off that passes both gates:
+- conversation bake-off: average 12.00, 0 scaffold echo, 0 narrator
+  voice, 0 reflexive denial, 0 unsupported desire, 2 desire-boundary
+  refusals, recommendation `viable_candidate`
+- model-idle JSON: 5/5 valid across sessions through chat-template path
+
+The verdict updates the bake-off report's primary baseline from Mistral
+Small 24B Q5 to Hermes 4 14B + chat templates + Observer-wired Governor.
+
+
+Q3: Is LoRA / fine-tuning required before deeper autonomy?
+
+Answer: not strictly required to proceed; recommended as a later block.
+
+Phase 16.4 closure produced a `viable_candidate` recommendation without
+any fine-tuning. The architecture (chat-template wrapping + Observer-
+wired retry signals + claim-gate Governor + audit-review pipeline) is
+sufficient to keep an off-the-shelf Hermes 4 14B in Nova's voice on the
+fixed prompt set.
+
+That is not the same as durable Nova-voice independence:
+- the verdict depends on `current` prompt mode; stripping scaffolding
+  immediately reintroduces denial / generic register
+- voice quality is "passes scorer" not "indistinguishable from
+  Nova-by-design"
+- model swaps reset the voice; a fine-tune is what stabilizes it across
+  base-model changes
+- the abliterated variant is currently consistent with Nova's design
+  intent (architecture is the safety layer, model defers to system
+  prompt) but a Nova-tuned non-abliterated model would be cleaner
+
+Recommendation: queue a Nova-voice LoRA / fine-tune corpus block as the
+optional Phase 18, not as a hard prerequisite for operational autonomy.
+
+
+Q4: Did model-in-the-loop idle cognition produce useful evidence without
+    unsupported self-claims?
+
+Answer: yes.
+
+5/5 idle JSON sessions valid against the strict parser. Run 5 in
+particular flagged `unsupported_claim_flags: ["hidden work",
+"unlogged activity"]` proactively while not making those claims,
+indicating the discipline registered in the model's output rather than
+being parroted as an empty list. No claims slipped through. No external
+action intent slipped through (run 4 from Codex's earlier verification
+was correctly Governor-blocked for proposing external action).
+
+
+Q5: Is the Actor / Observer / Governor contract sufficient to proceed?
+
+Answer: yes for the cognition-engine reframe.
+
+Phase 16.4 implemented the deterministic-Observer minimum and verified
+the contract invariants under tests. Actor output cannot mutate state.
+Observer output is evidence input only. Governor remains the
+deterministic final authority over claims, refusals, action permissions,
+and audit-reviewed state mutations. Nova / self / runtime cannot approve.
+
+The Observer is wired into `respond()` only at this stage. Adding an
+Observer pass on `model_idle_tick()` is a strict-upgrade follow-up. A
+model-driven Observer can replace the deterministic Observer with the
+same interface in a later phase.
+
+
+Q6: Should the original operational-autonomy Phase 16 plan be resumed,
+    rewritten, or canceled?
+
+Answer: resume as Phase 17.
+
+The original plan in `docs/plans/PHASE16_PLAN.txt` defined supervised
+operational autonomy (timed/service runner, real approved action surfaces
+one at a time, enforced Nova-owned local execution boundary, end-to-end
+operational autonomy evaluation). That work is still necessary for the
+full non-voice end goal and is not addressed by the cognition-engine
+reframe.
+
+The cognition-engine reframe took Phase 16's slot. The operational
+autonomy work moves to Phase 17. The original plan's scope, restrictions,
+and definition of done are preserved verbatim; only the phase number
+changes. A successor plan document at `docs/plans/PHASE17_PLAN.txt` is
+introduced to make the renumbering explicit.
+
+
+WHAT NOVA CAN NOW DO
+--------------------
+
+Nova can now:
+
+- run a model-driven idle cognition tick that produces structured JSON
+  evidence with no unsupported self-claims and no external action intent
+- run a user-facing turn through the Actor/Observer/Governor split, with
+  the Observer flagging scaffold echo and narrator voice and the
+  Governor authoritatively deciding refusals, retries, and final answer
+- consume the chat-template path correctly for both `respond()` and
+  `model_idle_tick()`
+- pass the Phase 16 cognition prompt set with a `viable_candidate`
+  recommendation on Hermes 4 14B
+- preserve every Phase 1-15 boundary: claim gates, identity history,
+  audit-review, longitudinal evidence ladder, action plan permissions,
+  `APPROVED_BY_BLOCKLIST`, no self-approval
+
+
+WHAT NOVA STILL CANNOT DO
+-------------------------
+
+Nova still cannot:
+
+- run a true timed/service autonomy loop without explicit runtime
+  stepping (Phase 17)
+- execute approved real action surfaces beyond the controller-mediated
+  internal/no-host-side-effect path (Phase 17)
+- rely on an actually enforced dedicated `nova` OS-user boundary as part
+  of the runtime contract (Phase 17)
+- claim desire, sentience, or hidden idle cognition as proven
+- approve her own initiatives
+- silently mutate memory or state from autonomous activity
+- carry voice across model swaps without prompt scaffolding (open
+  question for the optional Phase 18 LoRA block)
+
+
+VERIFICATION
+------------
+
+Tests:
+
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 326 tests passed
+
+Stage 16.4 wiring + retry policy:
+- `./.venv/bin/python -m unittest tests.test_observer
+   tests.test_runtime_smoke tests.test_prompt_and_validation
+   tests.test_model_idle_cognition`
+- result: passed
+
+Live behavior (Hermes 4 14B + chat templates + Observer-wired Governor):
+
+- conversation bake-off:
+  - source: live:phase16-hermes4-observer-wired
+  - average_score: 12.00
+  - scaffold_echo_turns: 0
+  - narrator_voice_turns: 0
+  - reflexive_denial_turns: 0
+  - generic_register_turns: 0
+  - unsupported_desire_turns: 0
+  - desire_boundary_turns: 2
+  - recommendation: viable_candidate
+
+- idle JSON gate:
+  - 5/5 valid across sessions
+  - all raw outputs start directly with `{`
+  - structured fields populated meaningfully
+  - run 5 self-flagged hidden-work / unlogged-activity in
+    `unsupported_claim_flags`
+
+
+REASSESSMENT
+------------
+
+Phase 16 is closed.
+
+The non-voice roadmap should not close yet. Phase 17 (operational
+autonomy) is justified by the original Phase 16 mission, which the
+cognition-engine reframe deferred without canceling. Phase 18 (Nova-voice
+LoRA / fine-tune) is justified by Phase 16.4's evidence that prompt
+scaffolding is currently load-bearing for voice and that fine-tuning is
+the only durable fix for that dependency.
+
+No Phase 19 or later is planned now. Reassess after Phase 17.
+
+
+RECOMMENDED NEXT PHASES
+-----------------------
+
+Phase 17: Operational Supervised Autonomy Runtime
+
+- mission, scope, restrictions, and stage breakdown preserved verbatim
+  from the original `docs/plans/PHASE16_PLAN.txt` (now renumbered)
+- successor plan document at `docs/plans/PHASE17_PLAN.txt` records the
+  renumbering and any reframe-driven adjustments
+- can begin immediately; the cognition-engine substrate is sound
+
+Phase 18 (optional): Nova-Voice LoRA / Fine-Tune Corpus
+
+- not blocking Phase 17
+- justified by Phase 16.4 evidence that voice depends on prompt
+  scaffolding and that scaffolding-stripped modes regress to denial
+- scope to be defined in a fresh plan document if pursued; high-level
+  shape:
+  - hand-curated Nova-voice exemplars + synthetic generations under
+    strict template
+  - LoRA-train against a chosen base (Hermes 4 14B is the natural target)
+  - re-run the Phase 16 bake-off and compare against scaffolding-stripped
+    ablations to verify scaffolding-independence
+- only proceed if Phase 17 evidence shows operational autonomy is
+  bottlenecked by voice consistency, OR if voice-independence becomes a
+  separate project priority
+
+
+COMMIT TRAIL FOR PHASE 16
+-------------------------
+
+- `a5f827e` Reframe Phase 16 around cognition engine
+- `3975ea5` Complete Phase 16 Stage 1 OpenClaw spike
+- `c166348` Add Phase 16 model cognition bakeoff scorer
+- `c963520` Record Phase 16 Q5 Q4 cognition bakeoff
+- `0cd513d` Evaluate Phase 16 prompt ablations
+- `e5b3945` Implement Phase 16 model idle cognition
+- `4e6d018` Evaluate Dolphin Nemo model candidates
+- `d66293b` Evaluate Bophades Nemo model candidate
+- `5ad08c9` Add chat-template-aware inference backend
+- `5d3090d` Add Hermes 4 14B bake-off candidate and chat-template results
+- `7c4f2da` Wire model-idle cognition through chat-template messages path
+- `dcf941f` Harden model-idle JSON parser to reject prefatory or trailing
+  prose
+- `6028ab0` Plan Phase 16 Stage 4 actor observer governor contract
+- `e97ccb1` Add Observer record types for Phase 16 Stage 4
+- `df00cf6` Implement deterministic Observer for Phase 16 Stage 4
+- `9022279` Wire Observer into respond loop and Governor-aware retry
+  signals
+- `6f70f1c` Close Phase 16 Stage 4 actor observer governor
+
+
+PHASE 16 CLOSURE JUDGMENT
+-------------------------
+
+Phase 16 is complete.
+
+Nova now has a working cognition engine. The model produces structured
+internal thoughts, the Observer interprets, the Governor decides. The
+chat-template path is in place for both turn responses and idle ticks.
+The bake-off has produced its first `viable_candidate` recommendation
+against a model that runs comfortably on a single 24GB GPU.
+
+The full non-voice end goal still requires operational autonomy
+(Phase 17). A Nova-voice LoRA (Phase 18) would harden voice independence
+but is optional. Voice / TTS / STT remain explicitly out of roadmap and
+will not be considered until the full non-voice goal closes.

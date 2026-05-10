@@ -135,9 +135,23 @@ Phase 15 reassessment:
 - The active Phase 16 is therefore a cognition-engine reframe:
   model/prompt bake-off, OpenClaw substrate decision, model-in-the-loop idle
   cognition, and Actor/Observer/Governor contract.
-- No Phase 17 or later is planned now. Phase 17 or later should exist only if
-  the Phase 16 reframe proves a concrete next capability, safety defect, or
-  evaluation failure.
+
+Phase 16 reassessment (post-closure):
+- Phase 16 is complete (closure note at
+  `docs/plans/PHASE16_STAGE16_5_PHASE_CLOSURE_AND_NEXT_BLOCK.txt`).
+- Stages 16.1-16.5 closed. Hermes 4 14B BF16 abliterated Q6 with
+  chat-template messaging and the Observer-wired Governor passes both
+  the conversation bake-off (`viable_candidate`) and the model-idle JSON
+  gate (5/5 valid).
+- The original operational autonomy work is preserved as Phase 17 (formal
+  plan: `docs/plans/PHASE17_PLAN.txt`). Scope, restrictions, and
+  definition of done are unchanged from the superseded
+  `docs/plans/PHASE16_PLAN.txt`; only the phase number changes.
+- An optional Phase 18 (Nova-voice LoRA / fine-tune corpus) is queued but
+  not blocking. It becomes load-bearing only if Phase 17 evidence shows
+  voice consistency is bottlenecking operational autonomy, or if the
+  project explicitly prioritizes scaffolding-independent voice.
+- No Phase 19 or later is planned now. Reassess after Phase 17.
 
 
 Next four phases
@@ -154,11 +168,16 @@ Current position:
 - Phase 13 is complete.
 - Phase 14 is complete.
 - Phase 15 is complete.
-- The next planning step is Phase 16 only: Cognition Engine Reframe. Do not
-  plan more phases unless Phase 16 evidence justifies them.
+- Phase 16 is complete (cognition-engine reframe).
+- The next planning step is Phase 17: Operational Supervised Autonomy
+  Runtime (formal plan: `docs/plans/PHASE17_PLAN.txt`). Optional Phase 18
+  (Nova-voice LoRA / fine-tune) is queued but not blocking.
 - superseded operational block plan: `docs/plans/ROADMAP_PHASE16_BLOCK.txt`
 - superseded operational Phase 16 plan: `docs/plans/PHASE16_PLAN.txt`
-- active Phase 16 plan: `docs/plans/PHASE16_REFRAME_PLAN.txt`
+- closed Phase 16 reframe plan: `docs/plans/PHASE16_REFRAME_PLAN.txt`
+- closed Phase 16 closure note:
+  `docs/plans/PHASE16_STAGE16_5_PHASE_CLOSURE_AND_NEXT_BLOCK.txt`
+- active Phase 17 plan: `docs/plans/PHASE17_PLAN.txt`
 
 
 Phase 12: Interruptible Idle Runtime Lifecycle
