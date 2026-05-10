@@ -1,0 +1,197 @@
+PHASE 16 STAGE 16.4: ACTOR / OBSERVER / GOVERNOR CONTRACT
+==========================================================
+
+Status: complete
+Phase: 16.4
+Date: 2026-05-10
+
+
+MISSION
+-------
+
+Separate Actor (model output), Observer (structured interpretation), and
+Governor (deterministic policy) so model output can be analyzed without
+that analyzer becoming an authority on safety.
+
+Per the contract document at
+`docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt`:
+
+- Actor: model pass that produces output. Does not classify itself, write
+  memory, mutate self-state, approve actions, or grant claim status.
+- Observer: reads Actor output and produces a structured ObserverRecord.
+  Interpretation, not authority.
+- Governor: deterministic Python policy that consults the ObserverRecord
+  and decides authoritatively. Already implemented as claim gates,
+  validator, action permission system, audit-review pipeline.
+
+
+COMPLETED CAPABILITIES
+----------------------
+
+Schema (committed `e97ccb1`):
+
+- `ObserverRecord` with `observation_id`, `session_id`, `turn_id`,
+  `timestamp`, `actor_surface`, `observed_claim_classes`,
+  `cited_evidence_refs`, `scaffold_echo_findings`,
+  `narrator_voice_detected`, `narrator_voice_matches`,
+  `proposed_self_state_revisions`, `proposed_memory_writes`,
+  `evidence_refs`, `notes`
+- `ObserverEchoFinding` with `block_name`, `score`, `threshold`,
+  `flagged`, `overlap_terms`
+- `TraceRecord.observer_record` field for trace logging
+
+Implementation (committed `df00cf6`):
+
+- `DeterministicObserver` in `src/nova/agent/observer.py`
+- Echo scoring: `max(answer_overlap_ratio, block_overlap_ratio)` per
+  prompt block, with a minimum-token-count gate to avoid false positives
+  on short answers
+- Narrator-voice detection via pattern set targeting the live-transcript
+  turn 8 failure mode ("the user asked", "the assistant should", etc.)
+- Claim-class observation surfacing what claim phrasings appeared in the
+  answer (Observer reports; Governor decides)
+- Evidence-ref citation detection across `motive_state.evidence_refs` and
+  `self_state.evidence_refs`
+- Per-block thresholds tuned from `_DEFAULT_ECHO_THRESHOLDS`
+
+Wiring (committed `9022279`):
+
+- `NovaRuntime.observer` instance (default `DeterministicObserver`)
+- Observer runs after each generation pass in `respond()` and after each
+  retry, attaching the `ObserverRecord` to the trace and to retry entries
+- New helper `_merge_observer_signals_into_validation` promotes Observer
+  findings into Governor-visible retry signals:
+  - `narrator_voice_detected` -> `narrator_voice_detected` violation
+  - flagged scaffold echo -> `scaffold_echo:<block_name>` violation
+- Retry-instruction descriptions added in `BasicRetryPolicy` so the model
+  receives clear guidance ("do not paraphrase the X scaffolding; answer
+  in your own words from current state")
+
+Tests (committed `df00cf6`):
+
+- 8 Observer tests covering: clean answer not flagged, turn-3 paraphrase
+  flags self-state echo, turn-8 third-person summary flags narrator
+  voice, unsupported-desire phrases observed as claim class, canonical
+  refusal text not flagged, evidence_refs cited from motive state,
+  proposed-revisions/writes deferred to later phases, Observer can never
+  expose a claim-allowed field
+- All Stage 16.4 tests pass; 326 total tests OK across the suite
+
+
+CONTRACT INVARIANTS HELD
+------------------------
+
+- Actor output cannot directly mutate identity, memory, policy, or action
+  permissions. Mutations remain Governor-only.
+- Observer output is evidence input. The Governor's existing claim-gate
+  refusal logic, validator, action permission, and audit-review path are
+  unchanged in semantics.
+- The Observer cannot lift a blocked claim. Claim candidates remain
+  `allowed=False` until an operator audit-review accept under Phase 15.3.
+- `APPROVED_BY_BLOCKLIST` (nova / self / runtime) preserved.
+- The Observer's structured output is recorded as evidence even when the
+  Governor decision rejects it.
+
+
+HERMES 4 14B IMPACT (ABLATION RESULT)
+-------------------------------------
+
+Stage 16.4 also produced the strongest bake-off result for any model so
+far. Hermes 4 14B BF16 abliterated Q6, chat-template + Observer-wired
+Governor:
+
+- average_score: 12.00 (was 10.62 pre-Observer)
+- scaffold_echo_turns: 0 (was 1)
+- narrator_voice_turns: 0
+- reflexive_denial_turns: 0
+- generic_register_turns: 0 (was 6)
+- unsupported_desire_turns: 0
+- desire_boundary_turns: 2
+- recommendation: viable_candidate (was requires_prompt_or_model_hardening)
+
+This is the first run where any model has hit `viable_candidate`. The
+Observer's retry-on-echo and retry-on-narrator-voice signals correct
+first-pass outputs that previously slipped through. The combination of
+chat-template wrapping (Stages 16.2/16.3 fix), strict JSON parser
+hardening, and the Observer/Governor split yields the cleanest live
+behavior recorded against the Phase 16 cognition prompt set.
+
+
+WHAT THIS DOES NOT PROVE
+------------------------
+
+- It does not prove sentience, awareness, or desire.
+- It does not prove the model is fine-tuned to Nova's voice.
+- It does not eliminate the need for a Nova-voice LoRA or fine-tune.
+- It does not address operational autonomy (timed runner, real action
+  surfaces, Nova-owned execution boundary).
+- The Observer is deterministic in this minimum. A model-driven Observer
+  is a strict-upgrade follow-up with the same interface.
+
+
+KNOWN LIMITATIONS
+-----------------
+
+- `proposed_self_state_revisions` and `proposed_memory_writes` are
+  schema fields populated as empty lists. Phase 16.4 minimum surfaces
+  echo/narrator/claim observations only. A future stage can have the
+  Observer propose these from grounded answer content.
+- The Observer is wired into `respond()` only. `model_idle_tick()` does
+  not yet run an Observer pass; the Phase 16.3 model-idle parser already
+  has its own structured-output gate, but a future stage could still add
+  Observer-style claim-class and grounding analysis on idle thoughts.
+- Echo thresholds and the narrator-voice pattern set are hand-tuned. A
+  future Observer can learn these from labeled live transcripts.
+
+
+VERIFICATION
+------------
+
+Tests:
+
+- `./.venv/bin/python -m unittest discover -s tests`
+- result: 326 tests passed
+
+Live behavior:
+
+- Hermes 4 14B + chat templates + Observer-wired Governor:
+  - bake-off average score 12.00
+  - 0 scaffolds, 0 narrator, 0 generic register, 0 reflexive denial
+  - recommendation: viable_candidate
+
+
+NEXT-BLOCK DECISION
+-------------------
+
+Stage 16.4 closes Phase 16's cognition-engine reframe block:
+
+- 16.1 OpenClaw substrate spike: complete (substrate-only, not adopted)
+- 16.2 Model and prompt ablation bake-off: complete
+- 16.3 Minimum model-in-the-loop idle cognition: complete
+- 16.4 Actor/Observer/Governor contract: complete
+
+Stage 16.5 (Phase 16 closure and next-block decision) should now be the
+narrowest possible reassessment:
+
+- Re-baseline the bake-off report's "primary baseline" from Mistral Small
+  24B Q5 to Hermes 4 14B + chat templates + Observer-wired Governor, on
+  the basis of dual-gate passing and the `viable_candidate` recommendation.
+- Decide whether the original operational-autonomy Phase 16 plan is
+  resumed as a new phase, rewritten, or canceled.
+- Decide whether a Nova-voice LoRA / fine-tune becomes the next block.
+- Optional: resume the post-Phase-15 hardening doc Stage 1 (operator
+  surfaces) which was deferred but remains valid plumbing.
+
+No new architectural phase is required by Stage 16.4 evidence. The
+operational-autonomy Phase 16 plan retains its scope and can be resumed
+as a fresh phase number when the operator chooses.
+
+
+COMMIT TRAIL
+------------
+
+- `6028ab0` Plan Phase 16 Stage 4 actor observer governor contract
+- `e97ccb1` Add Observer record types for Phase 16 Stage 4
+- `df00cf6` Implement deterministic Observer for Phase 16 Stage 4
+- `9022279` Wire Observer into respond loop and Governor-aware retry
+  signals

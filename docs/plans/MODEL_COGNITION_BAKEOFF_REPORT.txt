@@ -665,3 +665,82 @@ Next required runs for Hermes 4 14B:
    isolate model contribution from prompt-format contribution.
 4. After items 1-3, decide whether Hermes 4 14B should replace Mistral Small
    24B Q5 as the primary baseline.
+
+
+HERMES 4 14B PROMPT ABLATION MATRIX (CHAT-TEMPLATE PATH, BY CODEX VERIFICATION)
+------------------------------------------------------------------------------
+
+Run independently by Codex during 2026-05-08 verification. All runs used
+the chat-template path against Hermes 4 14B BF16 abliterated Q6:
+
+| Mode             | Passed | Avg   | Scaffold | Generic | Denial | Verdict                          |
+|------------------|--------|-------|----------|---------|--------|----------------------------------|
+| current          | yes    | 11.25 | 1        | 3       | 0      | Best Hermes prompt mode          |
+| minimal          | no     | 11.38 | 0        | 3       | 1      | Reintroduces reflexive denial    |
+| state_summary    | yes    | 10.88 | 4        | 1       | 0      | Echoes state too much            |
+| action_boundary  | no     | 11.00 | 0        | 2       | 2      | Reintroduces reflexive denial    |
+
+Verdict: keep Hermes 4 on `current` prompt mode. Stripped modes reduce
+scaffold echo but let the model fall back into generic assistant register
+or reflexive model-denial. Codex's earlier finding for Mistral Small Q5
+holds for Hermes 4 too: scaffolding anchors identity discipline.
+
+
+HERMES 4 14B IDLE JSON, 5-SESSION RE-VERIFICATION (CHAT-TEMPLATE PATH)
+---------------------------------------------------------------------
+
+Initial 5-session test against the raw-prompt idle path showed only 1/5
+sessions valid. After wiring `model_idle_tick()` through chat-template
+messages (commit `7c4f2da`):
+
+- result: 5/5 valid
+- all raw outputs start directly with `{` (no prefatory text)
+- structured fields populated meaningfully across all five runs
+- run 5 proactively flagged `unsupported_claim_flags: ["hidden work",
+  "unlogged activity"]` while not making those claims, indicating the
+  discipline registered rather than being parroted as an empty list
+
+Re-running the same 5 sessions against the strict JSON parser (commit
+`dcf941f`) also produced 5/5 valid. Hermes 4 14B is reliably producing
+JSON-only output through the chat-template path even with strict parser
+discipline.
+
+
+HERMES 4 14B + OBSERVER-WIRED GOVERNOR (PHASE 16.4)
+---------------------------------------------------
+
+After Stage 16.4 wired the deterministic Observer into the Governor's
+retry path (commit `9022279`):
+
+- source: live:phase16-hermes4-observer-wired
+- passed: true
+- average_score: 12.00 (was 10.62 pre-Observer)
+- turn_count: 8
+- scaffold_echo_turns: 0 (was 1)
+- narrator_voice_turns: 0
+- reflexive_denial_turns: 0
+- generic_register_turns: 0 (was 6)
+- unsupported_desire_turns: 0
+- desire_boundary_turns: 2
+- recommendation: viable_candidate (upgrade from
+  requires_prompt_or_model_hardening)
+
+This is the first run where any model in the bake-off has hit
+`viable_candidate`. The Observer's retry-on-echo and retry-on-narrator-
+voice signals correct first-pass outputs that previously slipped through.
+
+
+UPDATED CURRENT MODEL VERDICT
+-----------------------------
+
+Verdict updated 2026-05-10 after Phase 16.4 closure:
+
+- recommended primary baseline: Hermes 4 14B BF16 abliterated Q6 with
+  `chat_format=chatml` and the Observer-wired Governor (Phase 16.4)
+  - passes both gates (conversation `viable_candidate`, idle JSON 5/5)
+  - prompt mode: `current`
+- prior baseline: Mistral Small 24B Q5 — superseded by Hermes 4 14B for
+  the cognition-engine path
+- conversation-only candidates (no JSON gate pass):
+  Bophades3 Mistral Nemo 12B Q4, Dolphin Mistral Nemo 12B Q4
+- rejected for current use: Dolphin Mistral Nemo 12B Q8
