@@ -260,6 +260,7 @@ class OperationalAutonomyController:
         action_attempted: bool = False,
         action_executed: bool = False,
         action_blocked: bool = False,
+        boundary_snapshot: dict[str, Any] | None = None,
         observer_record: dict[str, Any] | None = None,
         evidence_refs: list[str] | None = None,
         notes: list[str] | None = None,
@@ -284,6 +285,7 @@ class OperationalAutonomyController:
             action_blocked=bool(action_blocked),
             observer_record=dict(observer_record or {}),
             budget_snapshot=state.budget.to_dict(),
+            boundary_snapshot=dict(boundary_snapshot or {}),
             evidence_refs=list(evidence_refs or []),
             notes=list(notes or []),
         )

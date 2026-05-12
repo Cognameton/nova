@@ -67,6 +67,7 @@ from nova.agent.action_plan import (
     action_observation_from_payload,
     default_nova_owned_execution_boundary,
 )
+from nova.agent.boundary import check_operational_boundary
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
 from nova.agent.tool_registry import ToolRegistry, default_tool_registry
@@ -101,6 +102,7 @@ from nova.types import (
     InternalGoalInitiativeProposal,
     AutonomySessionRecord,
     MotiveState,
+    NovaOwnedExecutionBoundary,
     OperationalAutonomyBudget,
     OperationalAutonomyPolicy,
     OperationalAutonomyRunnerState,
@@ -177,6 +179,7 @@ class NovaRuntime:
         observer: DeterministicObserver | None = None,
         operational_autonomy_store: JsonOperationalAutonomyStore | None = None,
         operational_autonomy_controller: OperationalAutonomyController | None = None,
+        operational_boundary: NovaOwnedExecutionBoundary | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -265,6 +268,17 @@ class NovaRuntime:
         self.operational_autonomy_controller = (
             operational_autonomy_controller
             or OperationalAutonomyController(store=self.operational_autonomy_store)
+        )
+        # Default boundary: dedicated_user_required=False so dev/test environments
+        # without a dedicated nova OS user still operate. Production deployments
+        # should pass dedicated_user_required=True with a real nova OS user; see
+        # docs/plans/NOVA_OS_USER_BOUNDARY.md.
+        self.operational_boundary: NovaOwnedExecutionBoundary = (
+            operational_boundary
+            or default_nova_owned_execution_boundary(
+                nova_owned_paths=[Path(self.config.app.data_dir)],
+                dedicated_user_required=False,
+            )
         )
 
         self.session_id: str | None = None
@@ -569,16 +583,25 @@ class NovaRuntime:
     ) -> OperationalTickRecord:
         """Step the operational autonomy runner once.
 
-        Stage 17.1 invariant: records a tick and (optionally) attaches an
-        Observer evidence record. It does NOT execute any real action
-        surface. Stage 17.3 will add adapters; until then, every tick has
-        action_attempted=False, action_executed=False.
+        Stage 17.2: checks lifecycle/budget first, then enforces the local
+        execution boundary before the tick proceeds. The boundary snapshot
+        is recorded on every tick — blocked or completed — for auditability.
+        No real action surface is invoked; Stage 17.3 wires those.
         """
         if self.session_id is None:
             self.session_id = self.session_store.start_session()
         assert self.session_id is not None
         state = self.operational_autonomy_controller.status(session_id=self.session_id)
+
+        # Lifecycle and budget checks take priority — always first.
         block_reason = operational_step_block_reason(state)
+
+        # Compute the boundary snapshot regardless of lifecycle state so every
+        # tick carries a diagnostic record.
+        boundary_result = check_operational_boundary(
+            self.operational_boundary, state.policy
+        )
+
         if block_reason:
             tick = self.operational_autonomy_controller.append_tick(
                 session_id=self.session_id,
@@ -588,9 +611,10 @@ class NovaRuntime:
                 action_attempted=False,
                 action_executed=False,
                 action_blocked=True,
+                boundary_snapshot=boundary_result.snapshot,
                 evidence_refs=[],
                 notes=[
-                    "stage17_1_step_blocked",
+                    "stage17_2_step_blocked",
                     f"reason:{block_reason}",
                 ],
             )
@@ -605,6 +629,35 @@ class NovaRuntime:
             )
             return tick
 
+        # Boundary check: fail-closed before any action surface could be reached.
+        if not boundary_result.satisfied:
+            boundary_block = "local_execution_boundary_failed"
+            tick = self.operational_autonomy_controller.append_tick(
+                session_id=self.session_id,
+                status="blocked",
+                trigger=trigger,
+                block_reason=boundary_block,
+                action_attempted=False,
+                action_executed=False,
+                action_blocked=True,
+                boundary_snapshot=boundary_result.snapshot,
+                evidence_refs=[],
+                notes=[
+                    "stage17_2_boundary_failed",
+                    *[f"violation:{v}" for v in boundary_result.violations],
+                ],
+            )
+            self.trace_logger.log_operational_tick(
+                session_id=self.session_id, tick=tick.to_dict()
+            )
+            self.update_presence(
+                mode="operational_autonomy",
+                current_focus="operational autonomy boundary blocked",
+                interaction_summary=f"Operational tick blocked: {boundary_block}",
+                last_action_status=f"operational_autonomy_blocked:{boundary_block}",
+            )
+            return tick
+
         tick = self.operational_autonomy_controller.append_tick(
             session_id=self.session_id,
             status="completed",
@@ -612,9 +665,10 @@ class NovaRuntime:
             action_attempted=False,
             action_executed=False,
             action_blocked=False,
+            boundary_snapshot=boundary_result.snapshot,
             evidence_refs=[f"runner:{state.runner_id}"],
             notes=[
-                "stage17_1_step_recorded",
+                "stage17_2_boundary_satisfied",
                 "no_real_action_surface_invoked",
             ],
         )
@@ -624,7 +678,7 @@ class NovaRuntime:
         self.update_presence(
             mode="operational_autonomy",
             current_focus="operational autonomy tick recorded",
-            interaction_summary="Operational tick recorded; no action surface invoked.",
+            interaction_summary="Operational tick recorded; boundary satisfied, no action surface invoked.",
             last_action_status="operational_autonomy_tick",
         )
         return tick
