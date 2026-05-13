@@ -407,6 +407,7 @@ class OperationalTickRecord:
     observer_record: dict[str, Any] = field(default_factory=dict)
     budget_snapshot: dict[str, Any] = field(default_factory=dict)
     boundary_snapshot: dict[str, Any] = field(default_factory=dict)
+    adapter_audit: dict[str, Any] = field(default_factory=dict)
     evidence_refs: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 

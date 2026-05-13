@@ -1,4 +1,4 @@
-"""Operational supervised autonomy runner for Phase 17 Stage 17.1.
+"""Operational supervised autonomy runner for Phase 17 Stages 17.1–17.3.
 
 This module implements the lifecycle controller and state store for Nova's
 supervised operational autonomy runtime. It is intentionally minimal at
@@ -261,6 +261,7 @@ class OperationalAutonomyController:
         action_executed: bool = False,
         action_blocked: bool = False,
         boundary_snapshot: dict[str, Any] | None = None,
+        adapter_audit: dict[str, Any] | None = None,
         observer_record: dict[str, Any] | None = None,
         evidence_refs: list[str] | None = None,
         notes: list[str] | None = None,
@@ -286,6 +287,7 @@ class OperationalAutonomyController:
             observer_record=dict(observer_record or {}),
             budget_snapshot=state.budget.to_dict(),
             boundary_snapshot=dict(boundary_snapshot or {}),
+            adapter_audit=dict(adapter_audit or {}),
             evidence_refs=list(evidence_refs or []),
             notes=list(notes or []),
         )
@@ -327,6 +329,39 @@ def default_operational_autonomy_policy() -> OperationalAutonomyPolicy:
             "stage17_1_minimum_policy",
             "no_real_action_surface_yet",
             "no_hidden_background_execution",
+        ],
+    )
+
+
+def default_nova_owned_operational_policy() -> OperationalAutonomyPolicy:
+    """Operational policy that permits nova_owned_environment surface actions.
+
+    Extends the Stage 17.1 minimum policy to also allow nova_scratchpad and
+    nova_logs. Required when step_operational_autonomy is called with an
+    action_plan targeting those surfaces.
+    """
+    return OperationalAutonomyPolicy(
+        schema_version=SCHEMA_VERSION,
+        policy_id=uuid4().hex,
+        enabled=True,
+        tick_interval_seconds=0,
+        idle_window_required=False,
+        require_logging=True,
+        require_observer=True,
+        allowed_execution_lanes=["internal_activity", "nova_owned_environment"],
+        allowed_surfaces=[
+            "internal_state", "self_prompt", "motive_appraisal",
+            "nova_scratchpad", "nova_logs",
+        ],
+        blocked_surfaces=[
+            "filesystem", "shell", "network", "gui", "system_config",
+            "external_service",
+        ],
+        allow_self_approval=False,
+        allow_destructive=False,
+        notes=[
+            "stage17_3_nova_owned_policy",
+            "permits_nova_scratchpad_and_nova_logs",
         ],
     )
 
@@ -446,6 +481,7 @@ def operational_tick_from_payload(payload: Any) -> OperationalTickRecord:
     merged["observer_record"] = _dict_value(merged.get("observer_record"))
     merged["budget_snapshot"] = _dict_value(merged.get("budget_snapshot"))
     merged["boundary_snapshot"] = _dict_value(merged.get("boundary_snapshot"))
+    merged["adapter_audit"] = _dict_value(merged.get("adapter_audit"))
     merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
     merged["notes"] = _string_list(merged.get("notes"))
     return OperationalTickRecord(**merged)

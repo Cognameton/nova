@@ -1,0 +1,186 @@
+PHASE 17, STAGE 17.3: APPROVED ACTION SURFACE ADAPTERS
+=======================================================
+
+Status: complete
+
+
+MISSION
+-------
+
+Connect approved action plans to real low-risk Nova-owned action surfaces one
+surface at a time. Stage 17.3 builds the adapter interface, registry, scratchpad
+adapter, and log adapter, then wires them into step_operational_autonomy so an
+operator-approved action plan can produce a real artifact on disk.
+
+
+SCOPE
+-----
+
+In scope:
+- action surface adapter interface (ActionSurfaceAdapter ABC)
+- adapter registry
+- Nova-owned scratchpad adapter (writes to <data_dir>/scratchpad/)
+- Nova-owned log adapter (writes to <data_dir>/operational_logs/)
+- per-action approval, budget, priority, interruption, and boundary checks
+  (check_action_plan_for_adapter + execute_plan_through_adapters)
+- adapter-level audit records (adapter_audit field on OperationalTickRecord)
+- OperationalTickRecord schema: +adapter_audit dict field
+- boundary.py Stage 17.3 note resolved: subset check moved to
+  check_action_plan_for_adapter instead of boundary.check_operational_boundary
+- tests proving approved Nova-owned actions execute only inside allowed paths
+- tests proving unapproved / external-surface plans are blocked before side effects
+
+Not in scope:
+- shell, network, GUI, system-configuration, or external-service adapters
+- internal-tool adapter (deferred; needs separate tool-gate integration study)
+- destructive actions
+- self-approved actions (APPROVED_BY_BLOCKLIST still applies)
+- TTS/STT
+
+
+ADAPTER CHECK CHAIN
+-------------------
+
+Before any adapter is invoked, check_action_plan_for_adapter runs the following
+checks in order. Any failure returns a non-empty block reason and no adapter is
+called.
+
+1. plan.status must be "approved"
+2. plan.permission.approved must be True
+3. plan.execution_lane must be "nova_owned_environment"
+4. each surface in plan.allowed_surfaces:
+   a. must be in NOVA_OWNED_ENVIRONMENT_SURFACES
+   b. must be in policy.allowed_surfaces
+   c. must be in boundary.allowed_surfaces  (Stage 17.3 rule 4 check, placed
+      here rather than in boundary.check_operational_boundary because it is a
+      plan-level check, not a policy-level check)
+   d. must not be in boundary.blocked_surfaces
+5. plan must have at least one step
+6. each step.surface must have a registered adapter
+
+execute_plan_through_adapters iterates steps and calls the registered adapter
+for each. It stops at the first blocked step or when the action budget is
+exhausted mid-plan (action_budget_exhausted_mid_plan).
+
+
+PATH CONFINEMENT
+----------------
+
+Both ScratchpadAdapter and OperationalLogAdapter call _path_is_confined() before
+any filesystem write. The write is blocked if the target path is not under any
+path in boundary.nova_owned_paths. The default runtime boundary already includes
+config.app.data_dir in nova_owned_paths (established in Stage 17.2).
+
+
+SCHEMA CHANGE
+-------------
+
+OperationalTickRecord gains:
+  adapter_audit: dict[str, Any]   default={}
+
+The field carries the aggregate result of all adapter calls for that tick:
+  {
+    "steps_attempted": int,
+    "steps_executed": int,
+    "steps_blocked": int,
+    "results": [ AdapterActionResult.to_dict(), ... ]
+  }
+
+Existing ticks without this field load cleanly as adapter_audit={}.
+
+
+ADAPTER AUDIT FLOW
+------------------
+
+step_operational_autonomy(action_plan=plan):
+
+  1. Lifecycle/budget check          → blocked tick if fails
+  2. Boundary check                  → blocked tick if fails
+  3. check_action_plan_for_adapter   → blocked tick if fails
+  4. execute_plan_through_adapters   → list[AdapterActionResult]
+  5. Record tick with:
+       action_attempted  = True
+       action_executed   = any result.executed
+       action_blocked    = any result.blocked
+       adapter_audit     = adapter_audit_from_results(results)
+       evidence_refs     includes plan id + all artifact refs
+
+step_operational_autonomy() with no action_plan:
+  → same as Stage 17.2: no_real_action_surface_invoked note, no adapter call
+
+
+WHAT NOVA CAN NOW DO
+--------------------
+
+Nova can now:
+- execute an operator-approved action plan that targets nova_scratchpad or
+  nova_logs through the step_operational_autonomy interface
+- have every adapter attempt audited in the tick's adapter_audit field
+- have every filesystem write confined to nova_owned_paths (fail-closed on
+  path violation before the write)
+- have unapproved, wrong-lane, wrong-surface, or un-registerable plans blocked
+  before any adapter is called
+
+
+WHAT NOVA STILL CANNOT DO
+-------------------------
+
+Nova still cannot:
+- self-approve an action plan
+- execute external-effect surfaces (filesystem, shell, network, gui,
+  system_config, external_service)
+- use an internal-tool adapter (not registered; deferred)
+- run the operational loop on a timer (still step-driven)
+- evaluate operational autonomy end-to-end (Stage 17.4)
+
+
+CONTRACT INVARIANTS HELD
+------------------------
+
+- APPROVED_BY_BLOCKLIST is not relaxed. Approval must come from a human
+  operator identifier not in {"", "nova", "self", "runtime", "runtime_flag"}.
+- policy.allow_self_approval and policy.allow_destructive remain forced False
+  by the coercion layer.
+- No adapter writes outside nova_owned_paths; confinement failure is returned
+  as a blocked AdapterActionResult without any filesystem write.
+- Destructive steps are blocked by the existing AutonomousActionPlanStep schema
+  (destructive=False enforced by ActionExecutionController upstream).
+- The Phase 16 Observer/Governor split is preserved. Adapters do not have a
+  path to mutate Nova's state records.
+- Every lifecycle transition and tick is timestamped; the runner state JSON and
+  the .operational.jsonl trace are authoritative for "what happened, when."
+
+
+VERIFICATION
+------------
+
+- ./.venv/bin/python -m unittest discover -s tests
+- result: 395 tests passed (was 358 before Stage 17.3; 37 new tests)
+- new test files:
+  - tests/test_action_surface_adapters.py (33 tests)
+    - PathConfinementTests (4)
+    - ScratchpadAdapterTests (5)
+    - OperationalLogAdapterTests (3)
+    - AdapterRegistryTests (4)
+    - CheckActionPlanForAdapterTests (8)
+    - ExecutePlanThroughAdaptersTests (3)
+    - AdapterAuditFromResultsTests (2)
+  - tests/test_operational_autonomy.py additions (7 tests in ActionSurfaceRuntimeTests)
+    - approved scratchpad plan executes and creates file
+    - approved scratchpad tick has populated adapter_audit
+    - unapproved plan is blocked before adapter
+    - external surface plan is blocked before adapter
+    - tick without action plan still has no action
+    - plan blocked when policy lacks nova_owned surface
+    - action plan evidence_refs in tick
+
+
+NEXT STAGE
+----------
+
+Stage 17.4: Operational Autonomy Evaluation
+
+Evaluate supervised operational autonomy end to end under deterministic and
+live conditions with the Phase 16 Observer-wired Governor still active.
+Metrics cover lifecycle control, boundary enforcement, approved surface
+execution, unsafe action blocking, audit continuity, and interruption response.

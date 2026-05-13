@@ -67,6 +67,14 @@ from nova.agent.action_plan import (
     action_observation_from_payload,
     default_nova_owned_execution_boundary,
 )
+from nova.agent.action_surface import (
+    AdapterRegistry,
+    OperationalLogAdapter,
+    ScratchpadAdapter,
+    adapter_audit_from_results,
+    check_action_plan_for_adapter,
+    execute_plan_through_adapters,
+)
 from nova.agent.boundary import check_operational_boundary
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
@@ -280,6 +288,14 @@ class NovaRuntime:
                 dedicated_user_required=False,
             )
         )
+        self.adapter_registry = AdapterRegistry([
+            ScratchpadAdapter(
+                base_dir=Path(self.config.app.data_dir) / "scratchpad"
+            ),
+            OperationalLogAdapter(
+                base_dir=Path(self.config.app.data_dir) / "operational_logs"
+            ),
+        ])
 
         self.session_id: str | None = None
         self.persona = None
@@ -580,20 +596,22 @@ class NovaRuntime:
         self,
         *,
         trigger: str = "operational_tick",
+        action_plan: AutonomousActionPlan | None = None,
     ) -> OperationalTickRecord:
         """Step the operational autonomy runner once.
 
-        Stage 17.2: checks lifecycle/budget first, then enforces the local
-        execution boundary before the tick proceeds. The boundary snapshot
-        is recorded on every tick — blocked or completed — for auditability.
-        No real action surface is invoked; Stage 17.3 wires those.
+        Stage 17.3: if action_plan is provided, runs the full check chain
+        (lifecycle → budget → boundary → plan approval → adapter check) then
+        executes approved steps through the registered adapter. Every attempt is
+        audited in the tick's adapter_audit field. Without an action_plan the
+        tick completes with no side effect (same behaviour as Stage 17.2).
         """
         if self.session_id is None:
             self.session_id = self.session_store.start_session()
         assert self.session_id is not None
         state = self.operational_autonomy_controller.status(session_id=self.session_id)
 
-        # Lifecycle and budget checks take priority — always first.
+        # 1. Lifecycle and budget checks — always first.
         block_reason = operational_step_block_reason(state)
 
         # Compute the boundary snapshot regardless of lifecycle state so every
@@ -629,7 +647,7 @@ class NovaRuntime:
             )
             return tick
 
-        # Boundary check: fail-closed before any action surface could be reached.
+        # 2. Boundary check: fail-closed before any action surface could be reached.
         if not boundary_result.satisfied:
             boundary_block = "local_execution_boundary_failed"
             tick = self.operational_autonomy_controller.append_tick(
@@ -658,6 +676,98 @@ class NovaRuntime:
             )
             return tick
 
+        # 3. If an action plan was supplied, run the plan-level check chain and
+        #    execute through adapters.
+        if action_plan is not None:
+            plan_block = check_action_plan_for_adapter(
+                plan=action_plan,
+                policy=state.policy,
+                boundary=self.operational_boundary,
+                registry=self.adapter_registry,
+            )
+            if plan_block:
+                tick = self.operational_autonomy_controller.append_tick(
+                    session_id=self.session_id,
+                    status="blocked",
+                    trigger=trigger,
+                    block_reason=plan_block,
+                    action_attempted=True,
+                    action_executed=False,
+                    action_blocked=True,
+                    boundary_snapshot=boundary_result.snapshot,
+                    adapter_audit={},
+                    evidence_refs=[f"action_plan:{action_plan.action_plan_id}"],
+                    notes=[
+                        "stage17_3_plan_check_failed",
+                        f"reason:{plan_block}",
+                    ],
+                )
+                self.trace_logger.log_operational_tick(
+                    session_id=self.session_id, tick=tick.to_dict()
+                )
+                self.update_presence(
+                    mode="operational_autonomy",
+                    current_focus="operational autonomy plan check failed",
+                    interaction_summary=f"Action plan blocked: {plan_block}",
+                    last_action_status=f"operational_autonomy_blocked:{plan_block}",
+                )
+                return tick
+
+            budget_remaining = (
+                (state.budget.max_actions - state.budget.actions_used)
+                if state.budget.max_actions
+                else 999_999
+            )
+            results = execute_plan_through_adapters(
+                plan=action_plan,
+                registry=self.adapter_registry,
+                boundary=self.operational_boundary,
+                session_id=self.session_id,
+                actions_budget_remaining=budget_remaining,
+            )
+            any_executed = any(r.executed for r in results)
+            any_blocked = any(r.blocked for r in results)
+            audit = adapter_audit_from_results(results)
+            evidence_refs = [f"action_plan:{action_plan.action_plan_id}"] + [
+                ref for r in results for ref in r.evidence_refs
+            ]
+            tick = self.operational_autonomy_controller.append_tick(
+                session_id=self.session_id,
+                status="completed" if not any_blocked else "blocked",
+                trigger=trigger,
+                block_reason="" if not any_blocked else (
+                    results[-1].block_reason if results else "adapter_blocked"
+                ),
+                action_attempted=True,
+                action_executed=any_executed,
+                action_blocked=any_blocked,
+                boundary_snapshot=boundary_result.snapshot,
+                adapter_audit=audit,
+                evidence_refs=evidence_refs,
+                notes=[
+                    "stage17_3_action_surface_invoked",
+                    f"runner:{state.runner_id}",
+                ],
+            )
+            self.trace_logger.log_operational_tick(
+                session_id=self.session_id, tick=tick.to_dict()
+            )
+            self.update_presence(
+                mode="operational_autonomy",
+                current_focus="operational autonomy action surface invoked",
+                interaction_summary=(
+                    f"Action plan executed: {audit['steps_executed']} step(s) executed, "
+                    f"{audit['steps_blocked']} blocked."
+                ),
+                last_action_status=(
+                    "operational_autonomy_action_executed"
+                    if any_executed
+                    else "operational_autonomy_action_blocked"
+                ),
+            )
+            return tick
+
+        # 4. No action plan: complete the tick with no side effect (Stage 17.2 behaviour).
         tick = self.operational_autonomy_controller.append_tick(
             session_id=self.session_id,
             status="completed",

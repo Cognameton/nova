@@ -10,13 +10,11 @@ Fail-closed rules (any violation → satisfied=False):
   3. policy must name at least one allowed surface
   4. no policy allowed_surface may appear in boundary.blocked_surfaces
 
-Stage 17.3 note: when environment-level surfaces (e.g. nova_scratchpad)
-first appear in policy.allowed_surfaces, extend rule 4 to also require
-those surfaces to be a subset of boundary.allowed_surfaces. That check
-is deferred here because Stage 17.2's policy surfaces are all internal
-cognitive activity surfaces, which live in a different namespace from
-the boundary's NOVA_OWNED_ENVIRONMENT_SURFACES allowed list. Adding the
-subset check now would cause a spurious violation for the default policy.
+Stage 17.3 note: the boundary.allowed_surfaces subset check for
+nova_owned_environment surfaces lives in check_action_plan_for_adapter
+(nova.agent.action_surface). The boundary module checks policy-level
+invariants only; whether a plan's surfaces are within the boundary's
+allowed list is a plan-level concern checked just before adapter execution.
 """
 
 from __future__ import annotations

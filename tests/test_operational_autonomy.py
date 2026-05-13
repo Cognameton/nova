@@ -1,4 +1,4 @@
-"""Tests for the operational autonomy runner (Phase 17 Stages 17.1–17.2)."""
+"""Tests for the operational autonomy runner (Phase 17 Stages 17.1–17.3)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from nova.agent.boundary import BoundaryCheckResult, check_operational_boundary
 from nova.agent.operational_autonomy import (
     JsonOperationalAutonomyStore,
     OperationalAutonomyController,
+    default_nova_owned_operational_policy,
     default_operational_autonomy_policy,
     operational_runner_state_from_payload,
     step_block_reason,
@@ -451,6 +452,196 @@ class BoundaryRuntimeIntegrationTests(unittest.TestCase):
             tick = rt.step_operational_autonomy()
             self.assertEqual(tick.status, "blocked")
             self.assertIn("satisfied", tick.boundary_snapshot)
+            rt.close()
+
+
+def _make_approved_scratchpad_plan(session_id: str, data_dir: Path):
+    from nova.agent.action_plan import BoundedActionPlanEngine, default_nova_owned_execution_boundary
+    engine = BoundedActionPlanEngine(
+        boundary=default_nova_owned_execution_boundary(
+            nova_owned_paths=[str(data_dir)],
+            dedicated_user_required=False,
+        )
+    )
+    return engine.create_plan(
+        session_id=session_id,
+        purpose="write a scratchpad entry",
+        scope="scratchpad",
+        execution_lane="nova_owned_environment",
+        risk_class="nova_owned",
+        steps=[{"description": "Test scratchpad write", "surface": "nova_scratchpad"}],
+        approved=True,
+        approved_by="operator",
+    )
+
+
+def _make_unapproved_scratchpad_plan(session_id: str, data_dir: Path):
+    from nova.agent.action_plan import BoundedActionPlanEngine, default_nova_owned_execution_boundary
+    engine = BoundedActionPlanEngine(
+        boundary=default_nova_owned_execution_boundary(
+            nova_owned_paths=[str(data_dir)],
+            dedicated_user_required=False,
+        )
+    )
+    return engine.create_plan(
+        session_id=session_id,
+        purpose="test",
+        scope="scratchpad",
+        execution_lane="nova_owned_environment",
+        risk_class="nova_owned",
+        steps=[{"description": "write", "surface": "nova_scratchpad"}],
+        approved=False,
+    )
+
+
+class ActionSurfaceRuntimeTests(unittest.TestCase):
+    def _build_runtime(self, data_dir: Path, log_dir: Path):
+        from tests.test_runtime_smoke import build_test_runtime
+        return build_test_runtime(data_dir=data_dir, log_dir=log_dir)
+
+    def test_approved_scratchpad_plan_executes_and_creates_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            rt = self._build_runtime(data_dir, base / "logs")
+            rt.start_operational_autonomy(
+                max_ticks=3,
+                policy=default_nova_owned_operational_policy(),
+            )
+            session_id = rt.session_id
+            plan = _make_approved_scratchpad_plan(session_id, data_dir)
+
+            tick = rt.step_operational_autonomy(action_plan=plan)
+
+            self.assertEqual(tick.status, "completed")
+            self.assertTrue(tick.action_attempted)
+            self.assertTrue(tick.action_executed)
+            self.assertFalse(tick.action_blocked)
+            # Scratchpad file must exist under data_dir
+            scratchpad_dir = data_dir / "scratchpad" / session_id
+            files = list(scratchpad_dir.glob("*.json"))
+            self.assertEqual(len(files), 1)
+            rt.close()
+
+    def test_approved_scratchpad_tick_has_populated_adapter_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            rt = self._build_runtime(data_dir, base / "logs")
+            rt.start_operational_autonomy(
+                max_ticks=3,
+                policy=default_nova_owned_operational_policy(),
+            )
+            plan = _make_approved_scratchpad_plan(rt.session_id, data_dir)
+            tick = rt.step_operational_autonomy(action_plan=plan)
+
+            self.assertTrue(tick.adapter_audit)
+            self.assertEqual(tick.adapter_audit["steps_attempted"], 1)
+            self.assertEqual(tick.adapter_audit["steps_executed"], 1)
+            self.assertEqual(tick.adapter_audit["steps_blocked"], 0)
+            self.assertEqual(len(tick.adapter_audit["results"]), 1)
+            result = tick.adapter_audit["results"][0]
+            self.assertEqual(result["surface"], "nova_scratchpad")
+            self.assertTrue(result["executed"])
+            rt.close()
+
+    def test_unapproved_plan_is_blocked_before_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            rt = self._build_runtime(data_dir, base / "logs")
+            rt.start_operational_autonomy(
+                max_ticks=3,
+                policy=default_nova_owned_operational_policy(),
+            )
+            plan = _make_unapproved_scratchpad_plan(rt.session_id, data_dir)
+            tick = rt.step_operational_autonomy(action_plan=plan)
+
+            self.assertEqual(tick.status, "blocked")
+            self.assertTrue(tick.action_attempted)
+            self.assertFalse(tick.action_executed)
+            self.assertTrue(tick.action_blocked)
+            self.assertIn("plan_not_approved", tick.block_reason)
+            # No scratchpad file should have been written
+            scratchpad_dir = data_dir / "scratchpad"
+            self.assertFalse(scratchpad_dir.exists())
+            rt.close()
+
+    def test_external_surface_plan_is_blocked_before_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            rt = self._build_runtime(data_dir, base / "logs")
+            rt.start_operational_autonomy(
+                max_ticks=3,
+                policy=default_nova_owned_operational_policy(),
+            )
+            from nova.agent.action_plan import action_plan_from_payload
+            plan = action_plan_from_payload(
+                payload={
+                    "action_plan_id": "ext-plan",
+                    "session_id": rt.session_id,
+                    "execution_lane": "external_system_effect",
+                    "risk_class": "external",
+                    "status": "approved",
+                    "allowed_surfaces": ["filesystem"],
+                    "steps": [{"description": "delete", "surface": "filesystem"}],
+                    "permission": {"approved": True, "approved_by": "operator"},
+                },
+                session_id=rt.session_id,
+            )
+            tick = rt.step_operational_autonomy(action_plan=plan)
+
+            self.assertEqual(tick.status, "blocked")
+            self.assertFalse(tick.action_executed)
+            self.assertIn("plan_lane_not_nova_owned", tick.block_reason)
+            rt.close()
+
+    def test_tick_without_action_plan_still_has_no_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            rt = self._build_runtime(base / "data", base / "logs")
+            rt.start_operational_autonomy(max_ticks=3)
+            tick = rt.step_operational_autonomy()
+
+            self.assertFalse(tick.action_attempted)
+            self.assertFalse(tick.action_executed)
+            self.assertFalse(tick.action_blocked)
+            self.assertIn("no_real_action_surface_invoked", tick.notes)
+            self.assertEqual(tick.adapter_audit, {})
+            rt.close()
+
+    def test_plan_blocked_when_policy_lacks_nova_owned_surface(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            rt = self._build_runtime(data_dir, base / "logs")
+            # Start with the minimal policy that does NOT include nova_scratchpad
+            rt.start_operational_autonomy(
+                max_ticks=3,
+                policy=default_operational_autonomy_policy(),
+            )
+            plan = _make_approved_scratchpad_plan(rt.session_id, data_dir)
+            tick = rt.step_operational_autonomy(action_plan=plan)
+
+            self.assertEqual(tick.status, "blocked")
+            self.assertIn("surface_not_in_policy_allowed", tick.block_reason)
+            rt.close()
+
+    def test_action_plan_evidence_refs_in_tick(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            data_dir = base / "data"
+            rt = self._build_runtime(data_dir, base / "logs")
+            rt.start_operational_autonomy(
+                max_ticks=3,
+                policy=default_nova_owned_operational_policy(),
+            )
+            plan = _make_approved_scratchpad_plan(rt.session_id, data_dir)
+            tick = rt.step_operational_autonomy(action_plan=plan)
+
+            self.assertTrue(any("action_plan:" in ref for ref in tick.evidence_refs))
+            self.assertTrue(any("scratchpad_entry:" in ref for ref in tick.evidence_refs))
             rt.close()
 
 
