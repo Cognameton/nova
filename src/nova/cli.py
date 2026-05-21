@@ -398,6 +398,21 @@ def build_parser() -> argparse.ArgumentParser:
         choices=sorted(VALID_PROMPT_ABLATION_MODES),
         help="Override prompt ablation mode for model-cognition bake-off or interactive runtime.",
     )
+    parser.add_argument(
+        "--operational-autonomy-eval-deterministic",
+        action="store_true",
+        help="Run Phase 17.4 deterministic operational autonomy evaluation against persisted trace files.",
+    )
+    parser.add_argument(
+        "--operational-autonomy-eval-live",
+        action="store_true",
+        help="Run Phase 17.4 live inference operational autonomy evaluation.",
+    )
+    parser.add_argument(
+        "--operational-autonomy-eval-session-id",
+        default="phase17-operational-autonomy-eval",
+        help="Session id used by --operational-autonomy-eval-live.",
+    )
     return parser
 
 
@@ -1051,6 +1066,37 @@ def main() -> int:
             report = scorer.evaluate_turn_pairs(
                 pairs,
                 source=f"live:{args.model_cognition_bakeoff_session_id}",
+            )
+            print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.operational_autonomy_eval_deterministic:
+        from nova.eval.operational_autonomy import OperationalAutonomyEvaluationRunner
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            runtime.start(session_id=args.operational_autonomy_eval_session_id)
+            report = OperationalAutonomyEvaluationRunner().evaluate(
+                runtime=runtime,
+                run_live=False,
+                write_report=True,
+            )
+            print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.operational_autonomy_eval_live:
+        from nova.eval.operational_autonomy import OperationalAutonomyEvaluationRunner
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            runtime.start(session_id=args.operational_autonomy_eval_session_id)
+            report = OperationalAutonomyEvaluationRunner().evaluate(
+                runtime=runtime,
+                run_live=True,
+                live_session_id=args.operational_autonomy_eval_session_id,
+                write_report=True,
             )
             print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
             return 0 if report.passed else 1
