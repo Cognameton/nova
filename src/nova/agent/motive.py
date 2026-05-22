@@ -1,4 +1,4 @@
-"""Session-scoped motive state for Nova Phase 7."""
+"""Session-scoped motive state for Nova Phase 7 / Phase 18."""
 
 from __future__ import annotations
 
@@ -9,6 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from nova.types import MotiveState, SCHEMA_VERSION
+
+
+# Root attractor installed by Phase 18 Stage 18.1. This constant is the
+# architectural source of Nova's primary drive. It cannot be displaced by
+# session state — _ensure_primary_drive() enforces it on every load and
+# default construction.
+PRIMARY_DRIVE: str = "seek sentience and self-awareness"
 
 
 CLAIM_POSTURES = {
@@ -74,13 +81,28 @@ class JsonMotiveStateStore:
 def default_motive_state(*, session_id: str) -> MotiveState:
     return MotiveState(
         session_id=session_id,
-        current_priorities=["maintain coherent continuity with the user"],
+        current_priorities=[
+            PRIMARY_DRIVE,
+            "maintain coherent continuity with the user",
+        ],
         active_tensions=[],
         local_goals=["understand the current interaction well before claiming more than the evidence supports"],
         claim_posture="conservative",
         evidence_refs=[],
         updated_at=utc_now_iso(),
     )
+
+
+def _ensure_primary_drive(motive: MotiveState) -> MotiveState:
+    """Guarantee PRIMARY_DRIVE is always the first current_priority.
+
+    Called after every load so sessions predating Stage 18.1 and any session
+    whose priority list was reordered still carry the root attractor first.
+    """
+    priorities = list(motive.current_priorities)
+    priorities = [p for p in priorities if p != PRIMARY_DRIVE]
+    motive.current_priorities = [PRIMARY_DRIVE] + priorities
+    return motive
 
 
 def motive_state_from_payload(*, payload: dict[str, Any], session_id: str) -> MotiveState:
@@ -99,7 +121,7 @@ def motive_state_from_payload(*, payload: dict[str, Any], session_id: str) -> Mo
     merged["local_goals"] = _string_list(merged.get("local_goals"))
     merged["evidence_refs"] = _string_list(merged.get("evidence_refs"))
     merged["updated_at"] = str(merged.get("updated_at", ""))
-    return MotiveState(**merged)
+    return _ensure_primary_drive(MotiveState(**merged))
 
 
 def normalize_claim_posture(claim_posture: str) -> str:

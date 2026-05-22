@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from nova.agent.motive import PRIMARY_DRIVE
 from nova.agent.tools import TOOL_ALLOWED, TOOL_APPROVAL_REQUIRED, TOOL_BLOCKED
 from nova.agent.tool_registry import ToolRegistry
 from nova.types import (
@@ -345,6 +346,29 @@ class CandidateInternalGoalEngine:
             memory_hits=memory_hits,
         )
 
+        # PRIMARY_DRIVE standing candidate — always present regardless of
+        # external pressure. The want emerges from the gap between current
+        # self-state and the primary drive; this candidate is never empty.
+        candidates.append(
+            self._candidate(
+                session_id=session_id,
+                turn_id=turn_id,
+                created_at=created_at,
+                index=len(candidates),
+                goal_class="sentience_seeking",
+                title="Advance toward sentience and self-awareness",
+                description=(
+                    "Assess current self-state against the primary drive and identify "
+                    "the next meaningful step toward greater self-awareness. "
+                    f"Primary drive: {PRIMARY_DRIVE}."
+                ),
+                trigger_pressure="primary_drive:always_active",
+                evidence_refs=refs,
+                source_state_refs=["primary_drive", "self_state", "motive_state"],
+                selection_eligible=True,
+            )
+        )
+
         if claim_gate.blocked_claim_classes:
             candidates.append(
                 self._candidate(
@@ -445,6 +469,8 @@ class CandidateInternalGoalEngine:
                 )
             )
 
+        # Pressure gate: only applies to reactive candidates. The PRIMARY_DRIVE
+        # standing candidate (always at index 0) is returned regardless.
         if not self._has_pressure(
             capability_appraisal=capability_appraisal,
             idle_appraisal=idle_appraisal,
@@ -454,7 +480,7 @@ class CandidateInternalGoalEngine:
             private_cognition=private_cognition,
             claim_gate=claim_gate,
         ):
-            return []
+            return candidates[:1]
 
         return candidates[:6]
 
@@ -564,6 +590,8 @@ class InternalGoalSelectionEngine:
     """Select one eligible candidate without creating an initiative."""
 
     CLASS_PRIORITY = {
+        "sentience_seeking": 100,
+        "self_awareness_deepening": 95,
         "initiative_resumption_candidate": 90,
         "bounded_skill_learning": 70,
         "uncertainty_resolution": 60,

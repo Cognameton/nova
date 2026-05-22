@@ -2484,6 +2484,10 @@ class NovaRuntime:
             "narrator_voice_detected" not in new_violations
         ):
             new_violations.append("narrator_voice_detected")
+        if observer_record.primary_drive_erosion_detected and (
+            "primary_drive_erosion_detected" not in new_violations
+        ):
+            new_violations.append("primary_drive_erosion_detected")
         for finding in observer_record.scaffold_echo_findings:
             if finding.flagged:
                 code = f"scaffold_echo:{finding.block_name}"

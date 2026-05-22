@@ -48,12 +48,14 @@ class CandidateGoalTests(unittest.TestCase):
             memory_hits=[],
         )
 
-        self.assertEqual(candidates[0].goal_class, "capability_clarification")
-        self.assertTrue(candidates[0].provisional)
-        self.assertTrue(candidates[0].approval_required)
-        self.assertFalse(candidates[0].selection_eligible)
+        # sentience_seeking standing candidate is always first.
+        self.assertEqual(candidates[0].goal_class, "sentience_seeking")
+        capability_candidate = next(c for c in candidates if c.goal_class == "capability_clarification")
+        self.assertTrue(capability_candidate.provisional)
+        self.assertTrue(capability_candidate.approval_required)
+        self.assertFalse(capability_candidate.selection_eligible)
         self.assertEqual(
-            candidates[0].rejection_reason,
+            capability_candidate.rejection_reason,
             "candidate_requires_unavailable_or_blocked_capability_surface",
         )
 
@@ -73,7 +75,10 @@ class CandidateGoalTests(unittest.TestCase):
             memory_hits=[],
         )
 
-        self.assertEqual(candidates, [])
+        # With no external pressure, only the PRIMARY_DRIVE standing candidate is returned.
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].goal_class, "sentience_seeking")
+        self.assertTrue(candidates[0].selection_eligible)
 
     def test_skill_learning_candidate_requires_competence_benefit(self) -> None:
         candidates = self._engine().synthesize(

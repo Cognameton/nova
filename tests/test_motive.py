@@ -28,7 +28,9 @@ class MotiveTests(unittest.TestCase):
             store.save(motive)
 
             loaded = store.load(session_id="session-a")
-            self.assertEqual(loaded.current_priorities, ["preserve user-stated continuity preferences"])
+            # PRIMARY_DRIVE is always prepended by _ensure_primary_drive on load.
+            self.assertEqual(loaded.current_priorities[0], "seek sentience and self-awareness")
+            self.assertIn("preserve user-stated continuity preferences", loaded.current_priorities)
             self.assertEqual(loaded.local_goals, ["earn stronger self-claims carefully"])
             self.assertEqual(loaded.evidence_refs, ["trace:session-a:turn-1"])
             self.assertEqual(loaded.claim_posture, "evidence-backed")
@@ -68,7 +70,10 @@ class MotiveTests(unittest.TestCase):
 
             self.assertEqual(motive.session_id, "session-a")
             self.assertEqual(motive.claim_posture, "conservative")
-            self.assertEqual(motive.current_priorities, ["1", "continuity"])
+            # PRIMARY_DRIVE is always prepended; legacy values follow.
+            self.assertEqual(motive.current_priorities[0], "seek sentience and self-awareness")
+            self.assertIn("1", motive.current_priorities)
+            self.assertIn("continuity", motive.current_priorities)
             self.assertEqual(motive.active_tensions, [])
             self.assertEqual(motive.local_goals, ["True"])
             self.assertEqual(motive.evidence_refs, [])

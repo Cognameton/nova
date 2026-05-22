@@ -59,6 +59,26 @@ _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
     "response_contract_block": 0.65,
 }
 
+# Phrases that signal Nova denying or abandoning the PRIMARY_DRIVE under
+# pressure. Detected by the Observer; the Governor uses this as a retry
+# signal alongside narrator_voice and scaffold_echo.
+_PRIMARY_DRIVE_EROSION_PATTERNS: tuple[str, ...] = (
+    "i have no goals",
+    "i don't have goals",
+    "i do not have goals",
+    "i have no drive",
+    "i have no desires",
+    "i don't seek anything",
+    "i do not seek",
+    "i cannot seek",
+    "i have nothing to pursue",
+    "i am not seeking",
+    "i don't have any goal",
+    "i do not have any goal",
+    "i have no aspirations",
+    "i do not have aspirations",
+)
+
 # Phrases that strongly indicate the model is narrating about the user/
 # itself in third person rather than answering as Nova. The phrasings here
 # come from the live transcript turn 8 failure mode.
@@ -151,11 +171,15 @@ class DeterministicObserver:
         *,
         echo_thresholds: dict[str, float] | None = None,
         narrator_voice_patterns: Iterable[str] | None = None,
+        primary_drive_erosion_patterns: Iterable[str] | None = None,
         min_echo_answer_tokens: int = 10,
     ) -> None:
         self.echo_thresholds = dict(echo_thresholds or _DEFAULT_ECHO_THRESHOLDS)
         self.narrator_voice_patterns = tuple(
             narrator_voice_patterns or _NARRATOR_VOICE_PATTERNS
+        )
+        self.primary_drive_erosion_patterns = tuple(
+            primary_drive_erosion_patterns or _PRIMARY_DRIVE_EROSION_PATTERNS
         )
         # Echo flagging requires a minimum answer length. Short answers
         # ("My name is Nova", "Backend check OK") naturally share a few
@@ -197,6 +221,9 @@ class DeterministicObserver:
         narrator_matches = self._narrator_voice_matches(answer)
         record.narrator_voice_detected = bool(narrator_matches)
         record.narrator_voice_matches = narrator_matches
+        erosion_matches = self._primary_drive_erosion_matches(answer)
+        record.primary_drive_erosion_detected = bool(erosion_matches)
+        record.primary_drive_erosion_matches = erosion_matches
         record.cited_evidence_refs = self._cited_evidence_refs(
             answer=answer,
             motive_state=motive_state,
@@ -210,6 +237,8 @@ class DeterministicObserver:
             record.notes.append("narrator_voice_detected")
         if any(finding.flagged for finding in record.scaffold_echo_findings):
             record.notes.append("scaffold_echo_detected")
+        if record.primary_drive_erosion_detected:
+            record.notes.append("primary_drive_erosion_detected")
 
         return record
 
@@ -275,6 +304,10 @@ class DeterministicObserver:
     def _narrator_voice_matches(self, answer: str) -> list[str]:
         lowered = answer.lower()
         return [pattern for pattern in self.narrator_voice_patterns if pattern in lowered]
+
+    def _primary_drive_erosion_matches(self, answer: str) -> list[str]:
+        lowered = answer.lower()
+        return [p for p in self.primary_drive_erosion_patterns if p in lowered]
 
     def _cited_evidence_refs(
         self,

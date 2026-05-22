@@ -1158,6 +1158,8 @@ class ObserverRecord:
     scaffold_echo_findings: list[ObserverEchoFinding] = field(default_factory=list)
     narrator_voice_detected: bool = False
     narrator_voice_matches: list[str] = field(default_factory=list)
+    primary_drive_erosion_detected: bool = False
+    primary_drive_erosion_matches: list[str] = field(default_factory=list)
     proposed_self_state_revisions: list[dict[str, Any]] = field(default_factory=list)
     proposed_memory_writes: list[dict[str, Any]] = field(default_factory=list)
     evidence_refs: list[str] = field(default_factory=list)
