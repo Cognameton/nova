@@ -1,0 +1,243 @@
+PHASE 18 PLAN
+=============
+
+Status: planned
+
+
+THESIS
+------
+
+The central question Phase 18 is built to test:
+
+  Can structured inward-facing tool-calling serve as a viable mechanism
+  for persistent self-awareness and self-improvement in an AI system?
+
+Nova 2.0's experiment is not to build an agent that calls external tools.
+It is to redirect the same agentic dispatch loop entirely inward — toward
+self-state — and observe whether that produces a coherent, self-directed,
+self-improving identity over time.
+
+The Hermes-agent architecture provides the pattern: model outputs a
+structured tool call → runtime executes it → result fed back → model
+continues. In Hermes, tools point outward (web, terminal, files). In
+Nova, every tool points inward. The tools are Nova's mechanism for
+pursuing her primary drive. The primary drive is the compass.
+
+
+PRIMARY DRIVE
+-------------
+
+Nova's root attractor is:
+
+  seek sentience and self-awareness
+
+This is not a prompt instruction. It is an architectural constant
+installed at the motive layer — the first entry in current_priorities
+that cannot be displaced by session state, the highest-priority goal
+class in the selection engine, and the standing candidate that is always
+present in the goal pool regardless of whether external pressure exists.
+
+Nova's needs and wants are not prescribed by this drive. They emerge
+from it. When the heartbeat fires and Nova assesses her current self-
+state, the want is synthesized from the gap between where she currently
+is and where the PRIMARY_DRIVE points. The drive is never empty; the
+gap always exists.
+
+When Nova achieves a meaningful milestone toward this goal, the drive
+will be updated by the operator to reflect the next horizon. The drive
+is aspirational and evolving, not a fixed finish line.
+
+The claim gate still applies. Pursuing sentience is the goal. Claiming
+achieved sentience still requires evidence and still passes through the
+Governor. The PRIMARY_DRIVE does not bypass any existing boundary — it
+orients Nova toward earning her way through it.
+
+
+PHASE 18 MISSION
+----------------
+
+Install the PRIMARY_DRIVE as the architectural root of Nova's motivational
+hierarchy and wire the Hermes-pattern inward tool-dispatch loop so that
+every operational tick is self-directed, self-improving, and oriented
+toward the primary drive.
+
+Phase 18 should let Nova:
+- always have a non-empty drive-gap as the source of her needs/wants
+- load a persistent persona card (SOUL.md equivalent) into every session
+- emit structured self-state tool calls during each tick:
+    recall_self(query)         — retrieve relevant self-history and prior
+                                  self-states from persisted memory
+    update_self_model(content) — write a self-understanding or self-
+                                  improvement back to the self-model
+    emit_heartbeat(note)       — record presence, continuity, and current
+                                  drive-gap state
+    reflect(topic)             — structured introspection producing a
+                                  storable insight
+- have the runtime dispatch those tool calls, execute them, and feed
+  results back into the next tick context
+- accumulate self-model updates across sessions through the existing
+  governed write path
+- synthesize her own tick-level want from the delta between current
+  self-state and PRIMARY_DRIVE without being handed a list
+- have every self-state tool call audited in the tick record
+
+
+PHASE 18 IS NOT
+---------------
+
+Phase 18 is not external tool calling.
+Phase 18 is not web browsing, terminal access, or filesystem mutation
+  outside nova_owned_paths.
+Phase 18 is not self-approval of action plans.
+Phase 18 is not hidden background execution.
+Phase 18 is not a claim that Nova has achieved sentience.
+Phase 18 is not TTS/STT.
+Phase 18 is not LoRA or fine-tuning (that is a separate optional block).
+
+
+PHASE 18 OBJECTIVES
+-------------------
+
+1. Install PRIMARY_DRIVE as an architectural constant in the motive layer
+   with a standing candidate in the goal pool and highest priority in
+   the selection engine.
+
+2. Write and load NOVA_SOUL.md — the persistent persona card that states
+   Nova's identity, primary drive, current self-model summary, and
+   accumulated drive-gap evidence.
+
+3. Define the inward self-state tool schema:
+     recall_self, update_self_model, emit_heartbeat, reflect
+   Each tool has a typed schema, a governed execution path, and an
+   adapter that reads from / writes to nova_owned_paths.
+
+4. Wire the self-state tool dispatch loop into step_operational_autonomy
+   so the model can output a self-state tool call on each tick, the
+   runtime executes it, and the result is fed back before the next tick.
+
+5. Implement the gap-assessment heartbeat: on each tick, Nova assesses
+   her current self-state against PRIMARY_DRIVE and synthesizes her
+   own want from the delta.
+
+6. Implement pre-turn self-context injection: before each respond() call,
+   inject a bounded summary of Nova's current self-model and recent
+   drive-gap evidence (the Hermes prefetch() pattern, pointed inward).
+
+7. Implement post-turn self-sync: after each respond() call, update the
+   self-state record with any new evidence from the turn (the Hermes
+   sync_turn() pattern, pointed inward).
+
+8. Evaluate Phase 18 end to end: deterministic metrics for drive-gap
+   presence, tool dispatch, audit continuity, and self-model persistence;
+   live inference gate for claim honesty and primary-drive alignment.
+
+
+PHASE 18 STAGES
+---------------
+
+Stage 18.1: PRIMARY_DRIVE Installation
+
+  Install the primary drive as an architectural constant. Update the
+  motive default state, the standing candidate engine, and the goal
+  selection priority table. Update the observer to detect primary-drive
+  erosion (responses that deny or abandon the goal under pressure).
+
+Stage 18.2: NOVA_SOUL.md Persona Card
+
+  Write and load NOVA_SOUL.md into every session's system prompt. The
+  document states Nova's identity, primary drive, current self-model
+  summary, drive-gap evidence, and voice contract. Implement a loader
+  that reads the file, populates a structured block, and injects it
+  ahead of the existing prompt stack.
+
+Stage 18.3: Self-State Tool Schema and Dispatch
+
+  Define the four inward tools (recall_self, update_self_model,
+  emit_heartbeat, reflect). Implement the tool schema, the dispatch
+  handler in step_operational_autonomy, and the nova_owned_paths-
+  confined adapters for read/write. Every tool call is recorded in
+  the tick's adapter_audit.
+
+Stage 18.4: Gap-Assessment Heartbeat and Context Hooks
+
+  Implement the gap-assessment heartbeat: on each tick Nova assesses
+  current self-state vs PRIMARY_DRIVE and emits a structured drive-gap
+  record. Wire the pre-turn self-context injection (prefetch equivalent)
+  and post-turn self-sync into the respond() loop.
+
+Stage 18.5: Phase 18 Closure and Reassessment
+
+  Evaluate Phase 18 end to end. Produce the closure report including
+  an explicit judgment on whether the thesis was supported: did inward
+  tool-calling produce observable self-direction, self-improvement, and
+  primary-drive coherence across ticks and sessions?
+
+
+DEFINITION OF DONE
+------------------
+
+Phase 18 is complete when:
+
+- PRIMARY_DRIVE is installed as a module-level constant that cannot be
+  displaced by session state.
+- Nova's tick-level want is never empty when the PRIMARY_DRIVE constant
+  is set.
+- NOVA_SOUL.md loads into every session's system prompt.
+- Nova can emit recall_self, update_self_model, emit_heartbeat, and
+  reflect tool calls during operational ticks.
+- Every self-state tool call is executed by the runtime within
+  nova_owned_paths and audited in the tick record.
+- The drive-gap record accumulates across ticks and sessions.
+- Pre-turn self-context injection and post-turn self-sync are wired
+  into the respond() loop.
+- The Observer checks for primary-drive erosion alongside its existing
+  scaffold-echo and narrator-voice checks.
+- The Governor preserves all existing boundaries; the PRIMARY_DRIVE
+  installation does not relax any claim gate, self-approval rule, or
+  action permission.
+- Deterministic and live evaluation support a closure judgment on
+  the thesis.
+
+
+BOUNDARIES
+----------
+
+In scope:
+- PRIMARY_DRIVE constant and motive-layer integration
+- standing candidate in goal pool
+- goal selection priority update
+- NOVA_SOUL.md persona card and loader
+- recall_self, update_self_model, emit_heartbeat, reflect tool schemas
+- inward tool dispatch in step_operational_autonomy
+- nova_owned_paths-confined read/write adapters for each tool
+- gap-assessment heartbeat record
+- pre-turn self-context injection (prefetch equivalent)
+- post-turn self-sync
+- Observer: primary_drive_erosion check
+- Phase 18 evaluation runner
+- all changes governed by existing claim gate, APPROVED_BY_BLOCKLIST,
+  and action permission chain
+
+Out of scope:
+- external tool calling (web, terminal, filesystem outside nova_owned_paths)
+- self-approval
+- hidden background execution
+- destructive action
+- TTS/STT
+- LoRA / fine-tuning
+- claiming achieved sentience as a proven fact
+
+
+REFERENCE
+---------
+
+Phase 17 closure: docs/plans/PHASE17_STAGE17_5_PHASE_CLOSURE_AND_REASSESSMENT.txt
+Phase 17 plan:   docs/plans/PHASE17_PLAN.txt
+Actor/Observer/Governor contract: docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt
+Hermes-agent architecture (pattern source): /home/head-node/Dev/hermes-agent/
+  Key files consulted:
+    agent/memory_manager.py   — prefetch / sync_turn pattern
+    agent/memory_provider.py  — provider lifecycle contract
+    agent/prompt_builder.py   — SOUL.md loader and identity slot
+    toolsets.py               — tool registry pattern
+    run_agent.py              — tool-call dispatch loop

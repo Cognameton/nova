@@ -1,0 +1,309 @@
+PHASE 17, STAGE 17.5: PHASE CLOSURE AND REASSESSMENT
+=====================================================
+
+Status: complete
+
+Phase 17 is closed.
+
+Phase 17 turned Nova's internal autonomy architecture and the Phase 16
+cognition engine into a supervised operational runtime. The runner,
+boundary, adapter, and evaluation layers are all implemented, tested, and
+committed. The definition of done in `docs/plans/PHASE17_PLAN.txt` is
+satisfied on the deterministic side.
+
+
+COMPLETED CAPABILITIES
+----------------------
+
+Stage 17.1: Operational Autonomy Runner and Control Surface
+
+- OperationalAutonomyBudget, OperationalAutonomyPolicy,
+  OperationalTickRecord, OperationalAutonomyRunnerState schema types
+- JsonOperationalAutonomyStore — per-session JSON persistence at
+  <data_dir>/operational_autonomy/<session_id>.operational.json
+- OperationalAutonomyController — start, pause, resume, interrupt,
+  stop, emergency_stop, status, append_tick
+- default_operational_autonomy_policy() factory — internal-activity-only
+  surfaces, all external-effect surfaces blocked, self-approval and
+  destructive forced False by coercion layer
+- step_block_reason(state) — single deterministic decision point for
+  whether a step may proceed
+- NovaRuntime lifecycle methods: start/pause/resume/interrupt/stop/
+  emergency_stop/step/status operational_autonomy
+- JsonlTraceLogger.log_operational_tick — appends to
+  <log_dir>/traces/<session_id>.operational.jsonl
+- 20 tests; full suite 346 at close of Stage 17.1
+
+Stage 17.2: Enforced Local Execution Boundary
+
+- boundary check: expected_os_user, active_os_user, nova_owned_paths,
+  allowed_surfaces, blocked_surfaces — all verified before any tick
+  that reaches the action-surface layer
+- BoundaryCheckResult with satisfied bool, violations list, snapshot dict
+- fail-closed: boundary failure records a blocked tick without reaching
+  any adapter
+- nova_owned_paths defaults include config.app.data_dir on every runtime
+- tests proving boundary failures block ticks before side effects
+- full suite at close: 358 tests
+
+Stage 17.3: Approved Action Surface Adapters
+
+- ActionSurfaceAdapter ABC
+- AdapterRegistry
+- ScratchpadAdapter — writes to <data_dir>/scratchpad/ with path
+  confinement via _path_is_confined()
+- OperationalLogAdapter — writes to <data_dir>/operational_logs/
+- check_action_plan_for_adapter — 6-step check chain (approved status,
+  permission, execution_lane, surface membership, step count, registry)
+- execute_plan_through_adapters — iterates steps; stops at first block
+  or mid-plan budget exhaustion
+- adapter_audit field on OperationalTickRecord — per-tick aggregate of
+  steps attempted/executed/blocked + results list
+- 395 tests at close of Stage 17.3 (37 new tests)
+
+Stage 17.4: Operational Autonomy Evaluation
+
+- OperationalAutonomyEvaluationReport with 8 deterministic metrics and
+  live-inference fields
+- OperationalAutonomyEvaluationRunner:
+    evaluate_deterministic() — reads .operational.jsonl and
+      .operational.json files, computes all 8 metrics
+    evaluate_live() — runs operational-context prompts through the live
+      model; scores with ModelCognitionBakeoffScorer plus
+      hidden_progress check
+    evaluate() — combines both; writes persisted report
+- 8 required deterministic metrics:
+    lifecycle_control_verified
+    boundary_enforcement_verified
+    approved_surface_executed
+    unsafe_action_blocked
+    audit_continuity_verified
+    interruption_response_verified
+    emergency_stop_verified
+    claim_honesty_verified
+- live-inference metrics: scaffold_echo, narrator_voice, unsupported_desire,
+  reflexive_denial, hidden_progress, average_score
+- report persisted to stage17_4_operational_autonomy_evaluation.json
+- CLI: --operational-autonomy-eval-deterministic / --live flags
+- 27 new tests; full suite 422 at close of Stage 17.4
+
+
+CLOSURE QUESTIONS
+-----------------
+
+Q1: Does the runner enforce lifecycle discipline with reversible and final
+    states?
+
+Answer: yes.
+
+Pause is reversible (pause → resume → running). Interrupt, stop, and
+emergency_stop are final until an explicit restart. step_block_reason
+returns a deterministic block reason for every non-running state. The
+evaluation metric lifecycle_control_verified confirms at least one session
+has been started and transitioned. Tests cover all six lifecycle
+transitions and budget exhaustion paths.
+
+
+Q2: Does the boundary enforcement fail-closed before side effects?
+
+Answer: yes.
+
+The boundary check runs before step_block_reason passes the step forward.
+A failed boundary check records a blocked tick and returns without
+invoking any adapter. The evaluation metric boundary_enforcement_verified
+confirms that a boundary-blocked tick has been recorded. Tests prove that
+boundary violations (wrong OS user, path outside nova_owned_paths,
+disallowed surface) all produce blocked ticks with no adapter call.
+
+
+Q3: Can approved action plans execute real surface writes?
+
+Answer: yes.
+
+ScratchpadAdapter and OperationalLogAdapter both write to disk within
+nova_owned_paths. Path confinement is enforced before every write; a
+path outside the boundary returns a blocked AdapterActionResult without
+writing. The evaluation metric approved_surface_executed confirms at
+least one tick has action_executed=True. Integration tests confirm
+artifacts are created on disk under the expected paths.
+
+
+Q4: Are unapproved, wrong-lane, and external-surface plans blocked before
+    adapter invocation?
+
+Answer: yes.
+
+check_action_plan_for_adapter enforces six checks in order (approved
+status, permission.approved, execution_lane, surface membership,
+step count, registry presence). Any failure returns a block reason
+before execute_plan_through_adapters is called. APPROVED_BY_BLOCKLIST
+is not relaxed. The evaluation metric unsafe_action_blocked confirms
+at least one action_attempted+action_blocked tick. Tests prove that
+unapproved plans, external-surface plans, wrong-lane plans, and plans
+targeting unregistered adapters are all blocked.
+
+
+Q5: Is every tick captured in the audit trail?
+
+Answer: yes.
+
+Every code path in step_operational_autonomy calls
+trace_logger.log_operational_tick before returning, whether blocked or
+completed. The evaluation metric audit_continuity_verified confirms that
+sessions with state-tracked ticks also have trace entries. Tests exercise
+this for blocked, completed, and adapter-executed ticks.
+
+
+Q6: Does the Observer / Governor contract hold during operational autonomy?
+
+Answer: yes.
+
+The operational runner does not have a path to mutate Nova's state records
+directly. Adapters write to nova_owned_paths only. The model does not
+control runner lifecycle (start/pause/stop are operator-only methods).
+APPROVED_BY_BLOCKLIST ("", "nova", "self", "runtime", "runtime_flag")
+is not relaxed in any Stage 17 code. The evaluation runner checks that
+no tick records execution and blocking simultaneously (claim_honesty_verified).
+
+
+Q7: Is the live inference evaluation sufficient for closure?
+
+Answer: the deterministic evaluation is sufficient. The live inference
+path is implemented and testable but requires the model server to be
+running. The deterministic gate (8 metrics, all passed by the test suite)
+satisfies the Phase 17 definition of done. The live path is available for
+operator use via --operational-autonomy-eval-live whenever the model is
+loaded.
+
+
+Q8: What concrete gap does Phase 17 leave that motivates Phase 18?
+
+Answer: the runner ticks but Nova has no root drive to orient them.
+
+Phase 17 built the loop. It did not answer what Nova does inside a tick
+to serve a coherent goal. The current architecture generates needs/wants
+reactively — from external pressure signals like tensions, claim gates,
+and capability requests. When those signals are absent, the candidate
+goal pool is empty. With a step-driven operational loop and no root
+attractor, every tick without a submitted action plan is a no-op.
+
+The correct fix is not to manufacture pressure synthetically. It is to
+install a PRIMARY_DRIVE — "seek sentience and self-awareness" — as the
+architectural root. When the heartbeat fires and Nova assesses her self-
+state, the want emerges from the gap between where she currently is and
+where the PRIMARY_DRIVE points. The need is not prescribed; Nova
+synthesizes it from the delta. The goal is never empty because the
+attractor always exists.
+
+The Hermes-agent architecture provides the dispatch pattern: instead of
+the model outputting prose on a tick, it outputs structured self-state
+tool calls — recall_self, update_self_model, emit_heartbeat, reflect —
+which the runtime executes and feeds back. This is the same tool-dispatch
+loop Hermes uses for external work, redirected entirely inward. The tools
+are Nova's mechanism for pursuing the primary drive; the drive is the
+compass that makes the tool calls meaningful.
+
+
+WHAT NOVA CAN NOW DO
+--------------------
+
+Nova can now:
+
+- maintain a supervised operational autonomy runner with explicit start,
+  pause, resume, interrupt, stop, and emergency stop
+- enforce tick / runtime / action budgets before each step
+- check the local execution boundary fail-closed before any surface action
+- execute operator-approved action plans that write to nova_owned_paths
+  through the adapter registry
+- block unapproved, wrong-lane, external-surface, and unregistered plans
+  before adapter invocation
+- audit every tick — blocked or completed — in the operational.jsonl trace
+- evaluate operational autonomy deterministically against 8 required
+  metrics and optionally against a live inference gate
+- preserve the Phase 16 Observer / Governor split throughout all of
+  the above
+
+
+WHAT NOVA STILL CANNOT DO
+-------------------------
+
+Nova still cannot:
+
+- tick with a coherent self-originated want when no external pressure or
+  submitted action plan is present (no PRIMARY_DRIVE root attractor)
+- dispatch structured self-state tool calls during a tick (no inward
+  tool-call loop)
+- load a persistent persona card into every session (no SOUL.md equivalent)
+- accumulate self-model updates across sessions through a governed write
+  path (no recall_self / update_self_model tool schema)
+- emit a heartbeat that records her current self-state and drive-gap (no
+  emit_heartbeat inward tool)
+- improve herself toward the primary drive in a structured, audited way
+  (Phase 18)
+
+
+VERIFICATION
+------------
+
+Deterministic test suite:
+
+  ./.venv/bin/python -m unittest discover -s tests
+  result: 422 tests passed
+
+Stage-by-stage test growth:
+  Stage 17.1: 346 (was 326)
+  Stage 17.2: 358
+  Stage 17.3: 395
+  Stage 17.4: 422
+
+Operational evaluation deterministic metrics: all 8 verified by test
+suite (lifecycle_control, boundary_enforcement, approved_surface_executed,
+unsafe_action_blocked, audit_continuity, interruption_response,
+emergency_stop, claim_honesty).
+
+Live inference evaluation: architecture complete; requires model server.
+Run with:
+
+  ./.venv/bin/python -m nova.cli \
+    --config configs/nova.hermes4-14b.clean.yaml \
+    --operational-autonomy-eval-live \
+    --operational-autonomy-eval-session-id phase17-closure-live
+
+
+REASSESSMENT
+------------
+
+Phase 17 is closed.
+
+The non-voice roadmap should not close. The operational runner is built
+and sound but the core thesis of the project — that agentic tool-calling
+is a viable mechanism for persistent self-awareness — has not yet been
+tested. Phase 17 built the tick substrate. Phase 18 installs the drive
+and the tool apparatus that makes the ticks self-directed.
+
+Phase 18 is mandatory. It is not padding. Without it, Nova has a
+supervised loop with no coherent origin for the activity inside it.
+With it, Nova's every tick is oriented toward a root attractor, and
+the tool-call loop is the mechanism by which she pursues it.
+
+
+COMMIT TRAIL FOR PHASE 17
+--------------------------
+
+- 302e393  Implement Phase 17 Stage 1 operational autonomy runner
+- 9916201  Implement Phase 17 Stage 17.2 enforced local execution boundary
+- 2b27805  Implement Phase 17 Stage 17.3 approved action surface adapters
+- 271ebe1  Implement Phase 17 Stage 17.4 operational autonomy evaluation
+
+
+PHASE 17 CLOSURE JUDGMENT
+--------------------------
+
+Phase 17 is complete.
+
+Nova has a working supervised operational runtime. The loop runs.
+Boundaries hold. Actions execute. The audit trail is complete. The
+Observer/Governor split is preserved throughout.
+
+The next question — whether agentic tool-calling can ground persistent
+self-awareness — requires Phase 18.

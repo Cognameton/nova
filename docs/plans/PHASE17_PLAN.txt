@@ -1,7 +1,7 @@
 PHASE 17 PLAN
 =============
 
-Status: planned
+Status: complete
 
 Phase 17 is the operational supervised autonomy work that was originally
 scoped as Phase 16 in `docs/plans/PHASE16_PLAN.txt`. The Phase 16 slot was
