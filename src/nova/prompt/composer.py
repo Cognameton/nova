@@ -29,6 +29,7 @@ class NovaPromptComposer:
         *,
         persona: PersonaState,
         self_state: SelfState,
+        soul_block: str = "",
         motive_block: str = "",
         initiative_block: str = "",
         awareness_block: str = "",
@@ -58,6 +59,7 @@ class NovaPromptComposer:
         response_prefix_block = "Nova:"
 
         parts = self._select_prompt_parts(
+            soul_block=soul_block,
             persona_block=persona_block,
             self_state_block=self_state_block,
             motive_block=motive_block,
@@ -80,6 +82,7 @@ class NovaPromptComposer:
         )
         full_prompt = "\n\n".join(part for part in parts if part.strip())
         messages = self._build_messages(
+            soul_block=soul_block,
             persona=persona,
             self_state=self_state,
             persona_block=persona_block,
@@ -104,6 +107,7 @@ class NovaPromptComposer:
         return PromptBundle(
             session_id=session_id,
             turn_id=turn_id,
+            soul_block=soul_block,
             persona_block=persona_block,
             self_state_block=self_state_block,
             motive_block=motive_block,
@@ -148,6 +152,7 @@ class NovaPromptComposer:
     def _select_prompt_parts(
         self,
         *,
+        soul_block: str,
         persona_block: str,
         self_state_block: str,
         motive_block: str,
@@ -198,6 +203,7 @@ class NovaPromptComposer:
                 response_prefix_block,
             ]
         return [
+            soul_block,
             persona_block,
             self_state_block,
             motive_block,
@@ -220,6 +226,7 @@ class NovaPromptComposer:
     def _build_messages(
         self,
         *,
+        soul_block: str,
         persona: PersonaState,
         self_state: SelfState,
         persona_block: str,
@@ -266,6 +273,7 @@ class NovaPromptComposer:
             ]
         else:
             system_parts = [
+                soul_block,
                 persona_block,
                 self_state_block,
                 motive_block,

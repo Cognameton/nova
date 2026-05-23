@@ -986,6 +986,7 @@ class PromptBundle:
     response_contract_block: str
     full_prompt: str
     token_estimate: int
+    soul_block: str = ""
     messages: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
