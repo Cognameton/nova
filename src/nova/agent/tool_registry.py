@@ -93,4 +93,72 @@ def default_tool_registry() -> ToolRegistry:
             internal=False,
         )
     )
+    # Phase 18 Stage 18.3 — inward-pointing self-state tools
+    registry.register_spec(
+        ToolSpec(
+            name="recall_self",
+            description="Return Nova's current self-state, motive state, and primary drive summary.",
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={},
+        )
+    )
+    registry.register_spec(
+        ToolSpec(
+            name="reflect",
+            description=(
+                "Produce a structured reflection on the gap between the current "
+                "self-state and the primary drive."
+            ),
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={},
+        )
+    )
+    registry.register_spec(
+        ToolSpec(
+            name="emit_heartbeat",
+            description=(
+                "Record a self-observation heartbeat: current state, drive-gap "
+                "assessment, and next inquiry intent."
+            ),
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "observation": {"type": "string"},
+                    "gap_assessment": {"type": "string"},
+                    "next_inquiry": {"type": "string"},
+                },
+                "required": ["observation"],
+            },
+        )
+    )
+    registry.register_spec(
+        ToolSpec(
+            name="update_self_model",
+            description=(
+                "Propose an update to a SelfState field. Requires approval before "
+                "the change is applied. Allowed fields: identity_summary, "
+                "current_focus, active_questions, stable_preferences, "
+                "relationship_notes, continuity_notes, open_tensions."
+            ),
+            permission=TOOL_APPROVAL_REQUIRED,
+            destructive=False,
+            internal=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "field": {"type": "string"},
+                    "value": {},
+                    "rationale": {"type": "string"},
+                },
+                "required": ["field", "value", "rationale"],
+            },
+        )
+    )
     return registry

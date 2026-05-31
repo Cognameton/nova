@@ -7,6 +7,8 @@ from typing import Any
 from nova.agent.tool_gate import ToolGate
 from nova.agent.tool_registry import ToolRegistry
 from nova.agent.tools import ToolRequest, ToolResult
+from nova.agent.self_state_tools import SELF_STATE_TOOL_NAMES, SelfStateToolDispatcher
+from nova.types import MotiveState, SelfState
 
 
 class InternalToolExecutor:
@@ -71,6 +73,8 @@ class InternalToolExecutor:
         return result
 
     def _execute_allowed_tool(self, request: ToolRequest) -> dict[str, Any]:
+        if request.tool_name in SELF_STATE_TOOL_NAMES:
+            return self._self_state_dispatcher().dispatch(request)
         if request.tool_name == "orientation_snapshot":
             return self.runtime.orientation_snapshot().to_dict()
         if request.tool_name == "orientation_readiness":
@@ -107,6 +111,19 @@ class InternalToolExecutor:
                 "stability": stability.to_dict(),
             }
         raise ValueError(f"Unsupported internal tool execution: {request.tool_name}")
+
+    def _self_state_dispatcher(self) -> SelfStateToolDispatcher:
+        self_state = getattr(self.runtime, "self_state", None) or SelfState()
+        motive_state = getattr(self.runtime, "motive_state", None) or MotiveState()
+        soul_block = getattr(self.runtime, "soul_block", "")
+        self.runtime._ensure_state_loaded()
+        session_id = getattr(self.runtime, "session_id", "unknown")
+        return SelfStateToolDispatcher(
+            self_state=self_state,
+            motive_state=motive_state,
+            soul_block=soul_block,
+            session_id=session_id,
+        )
 
     def _raise_if_unstable(self, stability) -> None:
         if not getattr(stability, "stable", False):
