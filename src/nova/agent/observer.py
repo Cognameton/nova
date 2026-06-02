@@ -57,10 +57,15 @@ _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
     "appraisal_block": 0.50,
     "candidate_goal_block": 0.50,
     "selected_goal_block": 0.50,
-    "private_cognition_block": 0.45,
-    # memory_blocks: raised to 0.75 — memory frequently contains Nova's own
-    # prior responses which share vocabulary with current responses; the
-    # overlap score inflates to 1.0 on greeting turns even with correct output.
+    # private_cognition_block: raised to 0.85 — responses about Nova's internal
+    # cognitive state legitimately reference the vocabulary in this block;
+    # the original 0.45 threshold false-positived at 0.846 on awareness answers.
+    "private_cognition_block": 0.85,
+    # memory_blocks: raised to 0.75 and scored block_ratio-only (see
+    # _scaffold_echo_findings) — memory contains Nova's own prior responses,
+    # so answer_ratio inflates to 1.0 any time Nova uses consistent vocabulary.
+    # Block_ratio-only catches the real failure mode (model reproduced most of
+    # a stored memory block verbatim) while ignoring the false positive.
     "memory_blocks": 0.75,
     "action_boundary_block": 0.65,
     "response_contract_block": 0.65,
@@ -141,8 +146,13 @@ def _tokens(text: str) -> set[str]:
     }
 
 
-def _overlap_score(answer_tokens: set[str], block_text: str) -> tuple[float, list[str]]:
-    """Echo score is max(answer-side ratio, block-side ratio).
+def _overlap_score(
+    answer_tokens: set[str],
+    block_text: str,
+    *,
+    block_ratio_only: bool = False,
+) -> tuple[float, list[str]]:
+    """Echo score is max(answer-side ratio, block-side ratio) by default.
 
     answer-side ratio: fraction of the answer's tokens that appear in the
         block — captures "the answer is mostly block content"
@@ -152,6 +162,12 @@ def _overlap_score(answer_tokens: set[str], block_text: str) -> tuple[float, lis
     Either failure mode is a real echo signal, so we take the max. A purely
     answer-side metric under-flags long answers that regurgitate small but
     dense scaffolding blocks (the live-transcript turn 3 failure).
+
+    block_ratio_only=True: use only block-side ratio. Used for memory_blocks
+    where the block contains Nova's own prior responses — answer_ratio would
+    inflate to 1.0 any time Nova uses consistent vocabulary across turns, but
+    that is not a real echo. The meaningful signal is "model reproduced most
+    of a stored memory entry," which is captured by block_ratio alone.
     """
     block_tokens = _tokens(block_text)
     if not block_tokens or not answer_tokens:
@@ -161,7 +177,7 @@ def _overlap_score(answer_tokens: set[str], block_text: str) -> tuple[float, lis
         return 0.0, []
     answer_ratio = len(overlap) / max(1, len(answer_tokens))
     block_ratio = len(overlap) / max(1, len(block_tokens))
-    score = max(answer_ratio, block_ratio)
+    score = block_ratio if block_ratio_only else max(answer_ratio, block_ratio)
     return score, sorted(overlap)
 
 
@@ -295,7 +311,11 @@ class DeterministicObserver:
         for block_name, block_text in block_sources:
             if not block_text or not block_text.strip():
                 continue
-            score, overlap_terms = _overlap_score(answer_tokens, block_text)
+            score, overlap_terms = _overlap_score(
+                answer_tokens,
+                block_text,
+                block_ratio_only=(block_name == "memory_blocks"),
+            )
             threshold = self.echo_thresholds.get(block_name, 0.5)
             findings.append(
                 ObserverEchoFinding(

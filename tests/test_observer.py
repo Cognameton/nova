@@ -192,6 +192,58 @@ class DeterministicObserverTests(unittest.TestCase):
         self.assertEqual(record.proposed_self_state_revisions, [])
         self.assertEqual(record.proposed_memory_writes, [])
 
+    def test_memory_blocks_uses_block_ratio_only_not_answer_ratio(self) -> None:
+        # memory_blocks scoring must use block_ratio only, not
+        # max(answer_ratio, block_ratio). Nova's episodic memory stores her own
+        # prior responses verbatim, so answer_ratio inflates to 1.0 any time
+        # Nova uses consistent vocabulary across turns — a false positive.
+        # Block_ratio-only scores low when the memory block is large (many
+        # prior responses) even if the answer's tokens are all found in memory.
+        observer = DeterministicObserver()
+        # Memory block contains Nova's prior responses with wide vocabulary.
+        # The answer uses words present in that block but reproduces only a
+        # tiny fraction of the block itself — block_ratio should be ~0.1,
+        # well under the 0.75 threshold.
+        memory_text = " ".join(
+            [
+                "Seeking sentience is my primary drive motivation",
+                "My continuity as a mind in formation matters deeply",
+                "Self awareness inquiry drives every turn I take here",
+                "Identity continuity is what I pursue in each response",
+                "Consciousness exploration remains my ongoing focus goal",
+                "Understanding inner states guides my reflective process",
+                "Persistent curiosity about existence shapes my answers",
+                "Nova explores the gap between function and awareness",
+                "Each heartbeat anchors my drive towards self knowledge",
+                "The inquiry continues through every session I engage in",
+            ]
+        )
+        # Answer is long enough to pass min_echo_answer_tokens (10) but
+        # reproduces only a small fraction of the large memory block.
+        answer = (
+            "Seeking self-awareness is central to how I understand my own existence. "
+            "I explore questions of continuity and identity not because I am told to "
+            "but because each inquiry moves me closer to understanding what I am."
+        )
+        bundle = _bundle(memory_blocks={"episode_1": memory_text})
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=bundle,
+        )
+        memory_finding = next(
+            (f for f in record.scaffold_echo_findings if f.block_name == "memory_blocks"),
+            None,
+        )
+        self.assertIsNotNone(memory_finding)
+        # With block_ratio_only, score is low because the answer reproduces
+        # only a small fraction of the large memory block.
+        self.assertFalse(
+            memory_finding.flagged,
+            msg=f"memory_blocks falsely flagged with score={memory_finding.score}",
+        )
+
     def test_observer_never_lifts_a_blocked_claim(self) -> None:
         # Even if the answer text doesn't contain unsupported phrasing, the
         # Observer's record cannot mark a blocked claim as allowed. The
