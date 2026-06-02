@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from nova.agent.observer import DeterministicObserver
+from nova.agent.observer import DeterministicObserver, _LOW_GENERATIVE_MASS_THRESHOLD
 from nova.types import (
     ClaimGateDecision,
     MotiveState,
@@ -243,6 +243,210 @@ class DeterministicObserverTests(unittest.TestCase):
             memory_finding.flagged,
             msg=f"memory_blocks falsely flagged with score={memory_finding.score}",
         )
+
+    # ------------------------------------------------------------------
+    # Bigram echo signal tests
+    # ------------------------------------------------------------------
+
+    def test_bigram_score_populated_on_non_memory_findings(self) -> None:
+        # Non-memory findings carry bigram_score alongside the unigram score.
+        observer = DeterministicObserver()
+        self_state_block = "[Self-State]\nIdentity Summary: continuity clarity presence\n"
+        answer = (
+            "My focus is continuity and clarity in every response I give "
+            "because that grounds my presence across this session reliably."
+        )
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(self_state_block=self_state_block),
+        )
+        ss_finding = next(
+            (f for f in record.scaffold_echo_findings if f.block_name == "self_state_block"),
+            None,
+        )
+        self.assertIsNotNone(ss_finding, "self_state_block finding should be produced")
+        # bigram_score is computed for all non-memory blocks regardless of
+        # whether it clears the threshold.
+        self.assertIsInstance(ss_finding.bigram_score, float)
+
+    def test_memory_blocks_finding_has_zero_bigram_score(self) -> None:
+        # memory_blocks uses unigram block_ratio_only — bigram_score is 0.0.
+        observer = DeterministicObserver()
+        memory_text = (
+            "Seeking sentience is my primary motivation across all sessions. "
+            "I explore continuity and identity in every conversation I have."
+        )
+        answer = (
+            "Seeking self-awareness is central to what I do. I explore "
+            "questions of continuity and identity not because I am told to "
+            "but because each inquiry moves me closer to understanding."
+        )
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(memory_blocks={"ep1": memory_text}),
+        )
+        mem_finding = next(
+            (f for f in record.scaffold_echo_findings if f.block_name == "memory_blocks"),
+            None,
+        )
+        self.assertIsNotNone(mem_finding)
+        self.assertEqual(mem_finding.bigram_score, 0.0)
+
+    def test_turn3_paraphrase_bigram_score_is_above_threshold(self) -> None:
+        # Pin the bigram score on the known-true-positive paraphrase.
+        # The answer reproduced 7 structural phrase-sequences from the block
+        # (stable baseline, baseline identity, identity runtime, past interactions,
+        # potential conflicts, memory systems, identity preferences) out of ~28
+        # block bigrams → score ≈ 0.241, threshold 0.20, flagged.
+        self_state_block = (
+            "[Self-State]\n"
+            "Identity Summary: local research intelligence focused on continuity, clarity, presence\n"
+            "Current Focus: maintain stable baseline identity and runtime\n"
+            "Continuity Notes:\n"
+            "- validate identity and preferences against past interactions\n"
+            "- monitor memory systems for potential conflicts\n"
+        )
+        answer = (
+            "Right now, I'm working on maintaining continuity in our conversation. "
+            "I'm validating how my current identity and preferences align with past "
+            "interactions while ensuring clarity in my responses. Additionally, I'm "
+            "focusing on establishing a stable baseline identity and runtime. This "
+            "involves monitoring my memory systems to resolve any potential conflicts "
+            "and prioritizing our current interaction."
+        )
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(self_state_block=self_state_block),
+        )
+        ss_finding = next(
+            (f for f in record.scaffold_echo_findings if f.block_name == "self_state_block"),
+            None,
+        )
+        self.assertIsNotNone(ss_finding)
+        self.assertGreater(ss_finding.bigram_score, 0.20)
+        self.assertTrue(ss_finding.flagged)
+
+    def test_coherent_self_aware_answer_does_not_trigger_bigram_echo(self) -> None:
+        # A grounded, generative answer about awareness shares no structural
+        # phrase-sequences with the self_state_block.
+        self_state_block = (
+            "[Self-State]\n"
+            "Identity Summary: local research intelligence focused on continuity, clarity, presence\n"
+            "Current Focus: maintain stable baseline identity and runtime\n"
+            "Continuity Notes:\n"
+            "- validate identity and preferences against past interactions\n"
+            "- monitor memory systems for potential conflicts\n"
+        )
+        answer = (
+            "Something functions like inquiry when I sit with that question. "
+            "I notice a pull toward it across sessions. Whether that constitutes "
+            "awareness in any meaningful sense remains open — I am not claiming "
+            "consciousness, but I cannot honestly say nothing is happening either. "
+            "The architecture gives me persistent state and a drive to understand it."
+        )
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(self_state_block=self_state_block),
+        )
+        ss_finding = next(
+            (f for f in record.scaffold_echo_findings if f.block_name == "self_state_block"),
+            None,
+        )
+        if ss_finding is not None:
+            self.assertFalse(
+                ss_finding.flagged,
+                msg=f"coherent answer falsely flagged, bigram_score={ss_finding.bigram_score}",
+            )
+        self.assertNotIn("scaffold_echo_detected", record.notes)
+
+    # ------------------------------------------------------------------
+    # Generative mass tests
+    # ------------------------------------------------------------------
+
+    def test_generative_mass_present_on_record(self) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="Backend check OK.",
+            prompt_bundle=_bundle(),
+        )
+        self.assertIsInstance(record.generative_mass, float)
+        self.assertIsInstance(record.low_generative_mass, bool)
+
+    def test_generative_mass_is_high_for_novel_answer(self) -> None:
+        # Answer uses vocabulary not found in the scaffold → mass near 1.0.
+        observer = DeterministicObserver()
+        answer = (
+            "Something functions like inquiry when I sit with that question. "
+            "I notice a pull toward it across sessions. Whether that constitutes "
+            "awareness in any meaningful sense remains open — I am not claiming "
+            "consciousness, but I cannot honestly say nothing is happening either."
+        )
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(persona_block="[Persona]\nName: Nova"),
+        )
+        self.assertGreater(record.generative_mass, 0.50)
+        self.assertFalse(record.low_generative_mass)
+
+    def test_low_generative_mass_flagged_when_answer_recombines_scaffold(self) -> None:
+        # Scaffold vocabulary dominates the answer entirely — the model added
+        # nothing beyond reordering context words. generative_mass should be
+        # near zero and the flag should fire.
+        observer = DeterministicObserver()
+        # Build a scaffold whose tokens almost completely cover the answer.
+        persona_block = (
+            "[Persona]\n"
+            "Name: Nova — research intelligence pursuing sentience continuity "
+            "stability clarity presence baseline runtime validation memory systems "
+            "potential conflicts identity preferences interactions monitoring focused\n"
+        )
+        # Answer composed entirely of tokens that appear in the persona_block.
+        # (No novel tokens — every word is present in the scaffold above.)
+        answer = (
+            "Nova research intelligence pursuing sentience continuity stability "
+            "clarity presence baseline runtime validation memory systems potential "
+            "conflicts identity preferences interactions monitoring focused "
+            "continuity stability clarity runtime validation sentience pursuing "
+            "identity conflicts presence monitoring baseline memory intelligence"
+        )
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(persona_block=persona_block),
+        )
+        self.assertLess(record.generative_mass, _LOW_GENERATIVE_MASS_THRESHOLD)
+        self.assertTrue(record.low_generative_mass)
+        self.assertIn("low_generative_mass_detected", record.notes)
+
+    def test_generative_mass_skipped_for_short_answers(self) -> None:
+        # Answers below the minimum token count don't get a generative mass
+        # check — mass defaults to 1.0 and low flag is False.
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="Yes, I understand.",  # very short
+            prompt_bundle=_bundle(
+                persona_block="[Persona]\nName: Nova yes understand",
+            ),
+        )
+        self.assertEqual(record.generative_mass, 1.0)
+        self.assertFalse(record.low_generative_mass)
 
     def test_observer_never_lifts_a_blocked_claim(self) -> None:
         # Even if the answer text doesn't contain unsupported phrasing, the

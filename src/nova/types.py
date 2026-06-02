@@ -1137,7 +1137,8 @@ class TraceRecord:
 class ObserverEchoFinding:
     schema_version: str = SCHEMA_VERSION
     block_name: str = ""
-    score: float = 0.0
+    score: float = 0.0          # unigram score (trace only)
+    bigram_score: float = 0.0   # bigram block_ratio (primary flag signal)
     threshold: float = 0.0
     flagged: bool = False
     overlap_terms: list[str] = field(default_factory=list)
@@ -1161,6 +1162,8 @@ class ObserverRecord:
     narrator_voice_matches: list[str] = field(default_factory=list)
     primary_drive_erosion_detected: bool = False
     primary_drive_erosion_matches: list[str] = field(default_factory=list)
+    generative_mass: float = 1.0
+    low_generative_mass: bool = False
     proposed_self_state_revisions: list[dict[str, Any]] = field(default_factory=list)
     proposed_memory_writes: list[dict[str, Any]] = field(default_factory=list)
     evidence_refs: list[str] = field(default_factory=list)

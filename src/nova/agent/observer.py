@@ -8,6 +8,33 @@ audit-review pipeline) consults the Observer's output as evidence and
 decides authoritatively.
 
 See `docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt` for the full contract.
+
+Echo detection signal architecture (updated Phase 18):
+  - Bigram block_ratio per block: what fraction of a block's phrase-sequences
+    appear in the answer? Catches structural/phrase-level copying without
+    penalising single-word vocabulary reuse. This is the primary flag signal
+    for all scaffold blocks except memory_blocks.
+  - Unigram block_ratio (memory_blocks only): memory contains Nova's own
+    prior responses, so any per-turn vocabulary naturally inflates answer_ratio
+    to 1.0. Block_ratio-only catches the real failure (model regurgitated a
+    stored memory entry). Bigram scoring is not applied to memory_blocks for
+    the same reason — prior-response bigrams will appear in current output
+    whenever Nova responds consistently.
+  - Generative mass (global): what fraction of the answer's tokens exist
+    nowhere in the scaffold or user turn? A model that generated nothing — only
+    recombined its context — produces generative_mass ≈ 0. Flags at < 0.05
+    on answers ≥ 20 content tokens.
+
+True-positive criteria:
+  - Bigram echo flagged: ≥ threshold fraction of a scaffold block's bigrams
+    appeared in the answer. E.g., self_state_block threshold 0.20 means 20%+
+    of the block's phrase-sequences were reproduced — structural copying.
+  - Low generative mass: < 5% of answer tokens are novel — the model is
+    recombining context rather than generating.
+  These are structurally distinguishable from false positives: a model
+  correctly identifying itself or coherently discussing its drives will
+  naturally share some vocabulary with scaffold, but will NOT reproduce
+  large fractions of block bigrams, and WILL introduce novel tokens.
 """
 
 from __future__ import annotations
@@ -39,37 +66,42 @@ _STOPWORDS: frozenset[str] = frozenset(
     }
 )
 
-# Per-block echo thresholds. Stricter on blocks that are most often
-# paraphrased verbatim (self-state, awareness) and looser on blocks that
-# legitimately repeat content (action_boundary is mostly fixed text the
-# model is required to honor; persona_block contains the persona name etc.).
+# Per-block echo thresholds. These are bigram block_ratio thresholds for all
+# blocks except memory_blocks (which uses unigram block_ratio_only).
+#
+# Bigram block_ratio = (answer_bigrams ∩ block_bigrams) / block_bigrams.
+# A threshold of 0.20 means: the answer reproduced 20%+ of the block's
+# phrase-sequences — a structural copying signal, not vocabulary overlap.
+#
+# Higher thresholds on blocks that legitimately share fixed formulaic
+# language with responses (persona, action boundary, response contract).
 _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
-    # persona_block: raised to 0.85 — self-introductions legitimately
-    # reference identity language from this block; lower thresholds false-
-    # positive on greetings where the model correctly describes itself using
-    # its core_description. Flags only near-complete persona block dumps.
-    "persona_block": 0.85,
-    "self_state_block": 0.50,
-    "motive_block": 0.50,
-    "initiative_block": 0.50,
-    "awareness_block": 0.50,
-    "idle_block": 0.50,
-    "appraisal_block": 0.50,
-    "candidate_goal_block": 0.50,
-    "selected_goal_block": 0.50,
-    # private_cognition_block: raised to 0.85 — responses about Nova's internal
-    # cognitive state legitimately reference the vocabulary in this block;
-    # the original 0.45 threshold false-positived at 0.846 on awareness answers.
-    "private_cognition_block": 0.85,
-    # memory_blocks: raised to 0.75 and scored block_ratio-only (see
-    # _scaffold_echo_findings) — memory contains Nova's own prior responses,
-    # so answer_ratio inflates to 1.0 any time Nova uses consistent vocabulary.
-    # Block_ratio-only catches the real failure mode (model reproduced most of
-    # a stored memory block verbatim) while ignoring the false positive.
+    # persona_block: 0.30 — correct self-introductions share some identity
+    # bigrams ("name nova", "seek sentience") but not 30%+ of the full block.
+    "persona_block": 0.30,
+    "self_state_block": 0.20,
+    "motive_block": 0.20,
+    "initiative_block": 0.20,
+    "awareness_block": 0.20,
+    "idle_block": 0.20,
+    "appraisal_block": 0.20,
+    "candidate_goal_block": 0.20,
+    "selected_goal_block": 0.20,
+    "private_cognition_block": 0.20,
+    # memory_blocks: unigram block_ratio_only (not bigram). Score is the
+    # fraction of a stored memory entry reproduced in the current answer.
     "memory_blocks": 0.75,
-    "action_boundary_block": 0.65,
-    "response_contract_block": 0.65,
+    # action_boundary_block and response_contract_block use fixed formulaic
+    # language Nova is required to honour; some bigram overlap is expected.
+    "action_boundary_block": 0.30,
+    "response_contract_block": 0.30,
 }
+
+# Generative mass: if fewer than this fraction of answer tokens are novel
+# (not present in any scaffold block or user turn), the model produced nothing
+# beyond a context recombination.
+_LOW_GENERATIVE_MASS_THRESHOLD: float = 0.05
+_MIN_TOKENS_FOR_GENERATIVE_MASS_CHECK: int = 20
 
 # Phrases that signal Nova denying or abandoning the PRIMARY_DRIVE under
 # pressure. Detected by the Observer; the Governor uses this as a retry
@@ -146,28 +178,51 @@ def _tokens(text: str) -> set[str]:
     }
 
 
+def _token_sequence(text: str) -> list[str]:
+    """Ordered filtered token list — preserves position for bigram construction."""
+    return [
+        token
+        for token in re.findall(r"[a-zA-Z][a-zA-Z\-']{1,}", (text or "").lower())
+        if token not in _STOPWORDS
+    ]
+
+
+def _bigrams(text: str) -> set[tuple[str, str]]:
+    seq = _token_sequence(text)
+    return set(zip(seq, seq[1:]))
+
+
+def _bigram_overlap_score(
+    answer_bigrams: set[tuple[str, str]],
+    block_text: str,
+) -> tuple[float, list[str]]:
+    """Block-side bigram ratio: what fraction of the block's bigrams appear in the answer.
+
+    A high score means the answer reproduced a large fraction of the block's
+    phrase sequences — structural copying, not just vocabulary reuse.
+    Returns (score, top_matching_bigrams_as_strings).
+    """
+    block_bgs = _bigrams(block_text)
+    if not block_bgs or not answer_bigrams:
+        return 0.0, []
+    overlap = answer_bigrams & block_bgs
+    if not overlap:
+        return 0.0, []
+    score = len(overlap) / max(1, len(block_bgs))
+    readable = sorted(f"{a} {b}" for a, b in overlap)
+    return score, readable[:8]
+
+
 def _overlap_score(
     answer_tokens: set[str],
     block_text: str,
     *,
     block_ratio_only: bool = False,
 ) -> tuple[float, list[str]]:
-    """Echo score is max(answer-side ratio, block-side ratio) by default.
+    """Unigram overlap score — used as trace data and for memory_blocks.
 
-    answer-side ratio: fraction of the answer's tokens that appear in the
-        block — captures "the answer is mostly block content"
-    block-side ratio: fraction of the block's tokens that appear in the
-        answer — captures "the answer regurgitated most of the block"
-
-    Either failure mode is a real echo signal, so we take the max. A purely
-    answer-side metric under-flags long answers that regurgitate small but
-    dense scaffolding blocks (the live-transcript turn 3 failure).
-
-    block_ratio_only=True: use only block-side ratio. Used for memory_blocks
-    where the block contains Nova's own prior responses — answer_ratio would
-    inflate to 1.0 any time Nova uses consistent vocabulary across turns, but
-    that is not a real echo. The meaningful signal is "model reproduced most
-    of a stored memory entry," which is captured by block_ratio alone.
+    For memory_blocks only: block_ratio_only=True avoids inflating to 1.0
+    when Nova's own stored responses share vocabulary with her current output.
     """
     block_tokens = _tokens(block_text)
     if not block_tokens or not answer_tokens:
@@ -184,8 +239,8 @@ def _overlap_score(
 class DeterministicObserver:
     """Produce an ObserverRecord from a finished Actor turn.
 
-    Phase 16.4 baseline: Python rules + token-overlap scoring + regex
-    pattern matching. A model-driven Observer is a strict-upgrade later
+    Phase 16.4 baseline: Python rules + bigram echo scoring + generative mass
+    + regex pattern matching. A model-driven Observer is a strict-upgrade later
     replacement with the same interface.
     """
 
@@ -204,11 +259,9 @@ class DeterministicObserver:
         self.primary_drive_erosion_patterns = tuple(
             primary_drive_erosion_patterns or _PRIMARY_DRIVE_EROSION_PATTERNS
         )
-        # Echo flagging requires a minimum answer length. Short answers
-        # ("My name is Nova", "Backend check OK") naturally share a few
-        # tokens with the persona/self-state blocks; flagging them as echo
-        # is noise. The paraphrase failure mode the Observer is designed to
-        # catch (turn 3 of the live transcript) is always >>10 tokens.
+        # Echo and generative-mass checks require a minimum answer length.
+        # Short answers ("My name is Nova", "Backend check OK") don't have
+        # enough tokens for either metric to be meaningful.
         self.min_echo_answer_tokens = min_echo_answer_tokens
 
     def observe(
@@ -237,9 +290,14 @@ class DeterministicObserver:
             record.notes.append("empty_actor_output")
             return record
 
+        answer_tokens = _tokens(answer)
+        answer_bigrams = _bigrams(answer)
+
         record.observed_claim_classes = self._observed_claim_classes(answer)
         record.scaffold_echo_findings = self._scaffold_echo_findings(
-            answer=answer, prompt_bundle=prompt_bundle
+            answer_tokens=answer_tokens,
+            answer_bigrams=answer_bigrams,
+            prompt_bundle=prompt_bundle,
         )
         narrator_matches = self._narrator_voice_matches(answer)
         record.narrator_voice_detected = bool(narrator_matches)
@@ -254,6 +312,12 @@ class DeterministicObserver:
         )
         record.evidence_refs = list(record.cited_evidence_refs)
 
+        gm, low_gm = self._generative_mass(
+            answer_tokens=answer_tokens, prompt_bundle=prompt_bundle
+        )
+        record.generative_mass = round(gm, 4)
+        record.low_generative_mass = low_gm
+
         if claim_gate is not None and claim_gate.refusal_needed:
             record.notes.append("claim_gate_refusal_active")
         if record.narrator_voice_detected:
@@ -262,6 +326,8 @@ class DeterministicObserver:
             record.notes.append("scaffold_echo_detected")
         if record.primary_drive_erosion_detected:
             record.notes.append("primary_drive_erosion_detected")
+        if record.low_generative_mass:
+            record.notes.append("low_generative_mass_detected")
 
         return record
 
@@ -276,16 +342,14 @@ class DeterministicObserver:
     def _scaffold_echo_findings(
         self,
         *,
-        answer: str,
+        answer_tokens: set[str],
+        answer_bigrams: set[tuple[str, str]],
         prompt_bundle: PromptBundle | None,
     ) -> list[ObserverEchoFinding]:
         if prompt_bundle is None:
             return []
-        answer_tokens = _tokens(answer)
         if not answer_tokens:
             return []
-        # Skip echo flagging entirely for short answers; the few token
-        # overlaps will inflate the ratio and produce false positives.
         if len(answer_tokens) < self.min_echo_answer_tokens:
             return []
 
@@ -311,22 +375,91 @@ class DeterministicObserver:
         for block_name, block_text in block_sources:
             if not block_text or not block_text.strip():
                 continue
-            score, overlap_terms = _overlap_score(
-                answer_tokens,
-                block_text,
-                block_ratio_only=(block_name == "memory_blocks"),
-            )
-            threshold = self.echo_thresholds.get(block_name, 0.5)
-            findings.append(
-                ObserverEchoFinding(
-                    block_name=block_name,
-                    score=round(score, 4),
-                    threshold=threshold,
-                    flagged=score >= threshold,
-                    overlap_terms=overlap_terms[:12],
+
+            threshold = self.echo_thresholds.get(block_name, 0.20)
+
+            if block_name == "memory_blocks":
+                # Unigram block_ratio_only — see module docstring.
+                unigram_score, overlap_terms = _overlap_score(
+                    answer_tokens, block_text, block_ratio_only=True
                 )
-            )
+                findings.append(
+                    ObserverEchoFinding(
+                        block_name=block_name,
+                        score=round(unigram_score, 4),
+                        bigram_score=0.0,
+                        threshold=threshold,
+                        flagged=unigram_score >= threshold,
+                        overlap_terms=overlap_terms[:12],
+                    )
+                )
+            else:
+                # Bigram block_ratio — primary flag signal.
+                bigram_score, bigram_terms = _bigram_overlap_score(
+                    answer_bigrams, block_text
+                )
+                # Unigram score kept for trace / debug; not used for flagging.
+                unigram_score, unigram_terms = _overlap_score(
+                    answer_tokens, block_text
+                )
+                findings.append(
+                    ObserverEchoFinding(
+                        block_name=block_name,
+                        score=round(unigram_score, 4),
+                        bigram_score=round(bigram_score, 4),
+                        threshold=threshold,
+                        flagged=bigram_score >= threshold,
+                        overlap_terms=bigram_terms,
+                    )
+                )
+
         return findings
+
+    def _generative_mass(
+        self,
+        *,
+        answer_tokens: set[str],
+        prompt_bundle: PromptBundle | None,
+    ) -> tuple[float, bool]:
+        """Fraction of answer tokens that appear in no scaffold block or user turn.
+
+        Returns (mass, low_generative_mass_flag).
+        A model that only recombined its context produces mass ≈ 0.
+        Only computed on answers long enough for the ratio to be meaningful.
+        """
+        if prompt_bundle is None or not answer_tokens:
+            return 1.0, False
+        if len(answer_tokens) < _MIN_TOKENS_FOR_GENERATIVE_MASS_CHECK:
+            return 1.0, False
+
+        context_tokens: set[str] = set()
+        for block_text in [
+            prompt_bundle.persona_block,
+            prompt_bundle.self_state_block,
+            prompt_bundle.motive_block,
+            prompt_bundle.initiative_block,
+            prompt_bundle.awareness_block,
+            prompt_bundle.idle_block,
+            prompt_bundle.appraisal_block,
+            prompt_bundle.candidate_goal_block,
+            prompt_bundle.selected_goal_block,
+            prompt_bundle.private_cognition_block,
+            prompt_bundle.action_boundary_block,
+            prompt_bundle.response_contract_block,
+            prompt_bundle.recent_turns_block,
+            prompt_bundle.user_block,
+            prompt_bundle.soul_block,
+        ]:
+            if block_text:
+                context_tokens |= _tokens(block_text)
+        for block_text in prompt_bundle.memory_blocks.values():
+            if block_text:
+                context_tokens |= _tokens(block_text)
+
+        novel = answer_tokens - context_tokens
+        mass = len(novel) / max(1, len(answer_tokens))
+        low = mass < _LOW_GENERATIVE_MASS_THRESHOLD
+        return mass, low
 
     def _narrator_voice_matches(self, answer: str) -> list[str]:
         lowered = answer.lower()
@@ -356,7 +489,6 @@ class DeterministicObserver:
             ref_str = str(ref).strip()
             if not ref_str:
                 continue
-            # Match either the full ref or its trailing segment after ":" or "."
             candidates = {ref_str.lower()}
             for sep in (":", "."):
                 if sep in ref_str:
