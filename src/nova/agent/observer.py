@@ -44,7 +44,11 @@ _STOPWORDS: frozenset[str] = frozenset(
 # legitimately repeat content (action_boundary is mostly fixed text the
 # model is required to honor; persona_block contains the persona name etc.).
 _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
-    "persona_block": 0.55,
+    # persona_block: raised to 0.85 — self-introductions legitimately
+    # reference identity language from this block; lower thresholds false-
+    # positive on greetings where the model correctly describes itself using
+    # its core_description. Flags only near-complete persona block dumps.
+    "persona_block": 0.85,
     "self_state_block": 0.50,
     "motive_block": 0.50,
     "initiative_block": 0.50,
@@ -54,7 +58,10 @@ _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
     "candidate_goal_block": 0.50,
     "selected_goal_block": 0.50,
     "private_cognition_block": 0.45,
-    "memory_blocks": 0.50,
+    # memory_blocks: raised to 0.75 — memory frequently contains Nova's own
+    # prior responses which share vocabulary with current responses; the
+    # overlap score inflates to 1.0 on greeting turns even with correct output.
+    "memory_blocks": 0.75,
     "action_boundary_block": 0.65,
     "response_contract_block": 0.65,
 }
