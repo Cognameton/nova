@@ -76,6 +76,11 @@ from nova.agent.action_surface import (
     execute_plan_through_adapters,
 )
 from nova.agent.boundary import check_operational_boundary
+from nova.agent.heartbeat import DriveGapEngine, HeartbeatStore, SelfModelProposalStore
+from nova.agent.self_context import SelfContextEngine
+from nova.agent.self_state_tick import SelfStateTickEngine
+from nova.agent.self_state_tools import SelfStateToolDispatcher, _UPDATABLE_SELF_STATE_FIELDS
+from nova.agent.soul import load_soul_block
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
 from nova.agent.tool_registry import ToolRegistry, default_tool_registry
@@ -122,6 +127,7 @@ from nova.types import (
     AutonomousActionPlanStep,
     PrivateCognitionPacket,
     SelectedInternalGoal,
+    SelfModelProposal,
     TraceRecord,
     TurnRecord,
     ValidationResult,
@@ -188,6 +194,11 @@ class NovaRuntime:
         operational_autonomy_store: JsonOperationalAutonomyStore | None = None,
         operational_autonomy_controller: OperationalAutonomyController | None = None,
         operational_boundary: NovaOwnedExecutionBoundary | None = None,
+        heartbeat_store: HeartbeatStore | None = None,
+        proposal_store: SelfModelProposalStore | None = None,
+        self_context_engine: SelfContextEngine | None = None,
+        drive_gap_engine: DriveGapEngine | None = None,
+        self_state_tick_engine: SelfStateTickEngine | None = None,
     ):
         self.config = config
         self.backend = backend
@@ -296,6 +307,17 @@ class NovaRuntime:
                 base_dir=Path(self.config.app.data_dir) / "operational_logs"
             ),
         ])
+
+        # Phase 18 Stage 18.4 — heartbeat persistence and self-context hooks
+        self.heartbeat_store = heartbeat_store or HeartbeatStore(
+            Path(self.config.app.data_dir) / "heartbeats"
+        )
+        self.proposal_store = proposal_store or SelfModelProposalStore(
+            Path(self.config.app.data_dir) / "self_state"
+        )
+        self.self_context_engine = self_context_engine or SelfContextEngine()
+        self.drive_gap_engine = drive_gap_engine or DriveGapEngine()
+        self.self_state_tick_engine = self_state_tick_engine or SelfStateTickEngine()
 
         self.session_id: str | None = None
         self.persona = None
@@ -768,6 +790,15 @@ class NovaRuntime:
             return tick
 
         # 4. No action plan: complete the tick with no side effect (Stage 17.2 behaviour).
+        tick_notes = ["stage17_2_boundary_satisfied", "no_real_action_surface_invoked"]
+        if self.self_state is not None and self.motive_state is not None:
+            drive_gap = self.drive_gap_engine.assess(
+                self_state=self.self_state,
+                motive_state=self.motive_state,
+                session_id=self.session_id,
+                tick_id=f"{self.session_id}:operational:{state.tick_count + 1}",
+            )
+            tick_notes.append(f"drive_gap:{drive_gap.gap_summary[:80]}")
         tick = self.operational_autonomy_controller.append_tick(
             session_id=self.session_id,
             status="completed",
@@ -777,10 +808,7 @@ class NovaRuntime:
             action_blocked=False,
             boundary_snapshot=boundary_result.snapshot,
             evidence_refs=[f"runner:{state.runner_id}"],
-            notes=[
-                "stage17_2_boundary_satisfied",
-                "no_real_action_surface_invoked",
-            ],
+            notes=tick_notes,
         )
         self.trace_logger.log_operational_tick(
             session_id=self.session_id, tick=tick.to_dict()
@@ -792,6 +820,168 @@ class NovaRuntime:
             last_action_status="operational_autonomy_tick",
         )
         return tick
+
+    def model_self_state_tick(
+        self,
+        *,
+        trigger: str = "self_state_tick",
+    ) -> OperationalTickRecord:
+        """Run one model-in-the-loop self-state tool call.
+
+        Stage 18.4: the model is asked to choose and emit one of the four
+        self-state tools (recall_self, reflect, emit_heartbeat, update_self_model).
+        The call is dispatched via SelfStateToolDispatcher with heartbeat_store
+        and proposal_store wired in for persistence. A drive-gap assessment is
+        attached to every tick regardless of the tool chosen. The tick is
+        recorded in the operational autonomy log and requires the runner to be
+        in the 'running' lifecycle state.
+        """
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        self._ensure_state_loaded()
+        assert self.self_state is not None
+        assert self.motive_state is not None
+
+        state = self.operational_autonomy_controller.status(session_id=self.session_id)
+        block_reason = operational_step_block_reason(state)
+        boundary_result = check_operational_boundary(self.operational_boundary, state.policy)
+
+        if block_reason or not boundary_result.satisfied:
+            reason = block_reason or "local_execution_boundary_failed"
+            tick = self.operational_autonomy_controller.append_tick(
+                session_id=self.session_id,
+                status="blocked",
+                trigger=trigger,
+                block_reason=reason,
+                action_blocked=True,
+                boundary_snapshot=boundary_result.snapshot,
+                notes=["stage18_4_self_state_tick_blocked", f"reason:{reason}"],
+            )
+            self.trace_logger.log_operational_tick(
+                session_id=self.session_id, tick=tick.to_dict()
+            )
+            return tick
+
+        tick_sequence = state.tick_count + 1
+        tick_id = f"{self.session_id}:self_state:{tick_sequence}"
+
+        self_context_block = self.self_context_engine.prefetch(
+            self_state=self.self_state,
+            motive_state=self.motive_state,
+            heartbeat_store=self.heartbeat_store,
+            proposal_store=self.proposal_store,
+        )
+        recent_heartbeats = self.heartbeat_store.list_recent(limit=3)
+
+        messages = self.self_state_tick_engine.build_messages(
+            session_id=self.session_id,
+            tick_id=tick_id,
+            trigger=trigger,
+            self_context_block=self_context_block,
+            recent_heartbeats=recent_heartbeats,
+        )
+        generation = self.backend.generate(
+            self._generation_request(prompt="", messages=messages)
+        )
+        tool_request = self.self_state_tick_engine.parse(
+            raw_text=generation.raw_text,
+            session_id=self.session_id,
+            tick_id=tick_id,
+        )
+
+        adapter_audit: dict = {
+            "tool_requested": tool_request.tool_name if tool_request else None,
+            "raw_output_length": len(generation.raw_text or ""),
+            "parse_ok": tool_request is not None,
+            "tool_executed": False,
+        }
+
+        if tool_request is not None:
+            dispatcher = SelfStateToolDispatcher(
+                self_state=self.self_state,
+                motive_state=self.motive_state,
+                soul_block=load_soul_block(),
+                session_id=self.session_id,
+                heartbeat_store=self.heartbeat_store,
+                proposal_store=self.proposal_store,
+            )
+            try:
+                result = dispatcher.dispatch(tool_request)
+                adapter_audit["tool_result"] = result
+                adapter_audit["tool_executed"] = True
+            except Exception as exc:
+                adapter_audit["tool_error"] = str(exc)
+
+        drive_gap = self.drive_gap_engine.assess(
+            self_state=self.self_state,
+            motive_state=self.motive_state,
+            session_id=self.session_id,
+            tick_id=tick_id,
+        )
+
+        tick = self.operational_autonomy_controller.append_tick(
+            session_id=self.session_id,
+            status="completed",
+            trigger=trigger,
+            action_attempted=tool_request is not None,
+            action_executed=bool(adapter_audit.get("tool_executed")),
+            action_blocked=False,
+            boundary_snapshot=boundary_result.snapshot,
+            adapter_audit=adapter_audit,
+            evidence_refs=[f"self_state_tick:{tick_id}"],
+            notes=[
+                "stage18_4_self_state_tick",
+                f"drive_gap:{drive_gap.gap_summary[:80]}",
+                f"tool:{tool_request.tool_name if tool_request else 'none'}",
+            ],
+        )
+        self.trace_logger.log_operational_tick(
+            session_id=self.session_id, tick=tick.to_dict()
+        )
+        self.update_presence(
+            mode="operational_autonomy",
+            current_focus="self-state tick recorded",
+            interaction_summary=(
+                f"Self-state tick: tool={tool_request.tool_name if tool_request else 'none'}; "
+                f"gap={drive_gap.gap_summary[:60]}"
+            ),
+            last_action_status="self_state_tick_completed",
+        )
+        return tick
+
+    def apply_self_model_proposal(self, *, proposal_id: str) -> SelfModelProposal | None:
+        """Apply an operator-approved update_self_model proposal to SelfState.
+
+        Stage 18.4: the operator calls this after reviewing a proposal produced
+        by Nova's update_self_model tool call. The SelfState field is mutated
+        and saved, then the proposal is marked applied in the proposal store.
+        Returns the updated proposal record, or None if the proposal_id is
+        unknown or already applied.
+        """
+        self._ensure_state_loaded()
+        assert self.self_state is not None
+
+        proposal = self.proposal_store.get(proposal_id)
+        if proposal is None or proposal.applied:
+            return proposal
+
+        field = proposal.proposed_field
+        value = proposal.proposed_value
+        if field not in _UPDATABLE_SELF_STATE_FIELDS:
+            return None
+
+        if isinstance(value, list):
+            setattr(self.self_state, field, list(value))
+        elif isinstance(value, str):
+            setattr(self.self_state, field, str(value))
+        elif value is not None:
+            setattr(self.self_state, field, value)
+
+        self.self_state_store.save(self.self_state)
+        applied_at = utc_now_iso()
+        updated = self.proposal_store.mark_applied(proposal_id, applied_at)
+        return updated
 
     def review_internal_autonomy_run(
         self,
@@ -2248,9 +2438,17 @@ class NovaRuntime:
             selected_goal=selected_internal_goal,
             proposal=internal_goal_initiative_proposal,
         )
+        self_context_block = self.self_context_engine.prefetch(
+            self_state=self.self_state,
+            motive_state=self.motive_state,
+            heartbeat_store=self.heartbeat_store,
+            proposal_store=self.proposal_store,
+        )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
             self_state=self.self_state,
+            soul_block=load_soul_block(),
+            self_context_block=self_context_block,
             motive_block=motive_block,
             initiative_block=initiative_block,
             awareness_block=awareness_block,
@@ -2407,6 +2605,12 @@ class NovaRuntime:
             },
         )
         self.session_store.append_turn(turn)
+        self.self_context_engine.sync_turn(
+            turn_id=turn_id,
+            answer_text=final_answer,
+            self_state=self.self_state,
+            self_state_store=self.self_state_store,
+        )
 
         persisted_memory_events = []
         if validation.valid:

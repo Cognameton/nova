@@ -8,12 +8,15 @@ structured self-inquiry, not for external work.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from nova.agent.motive import PRIMARY_DRIVE
 from nova.agent.tools import ToolRequest
-from nova.types import MotiveState, SelfState
+from nova.types import HeartbeatRecord, MotiveState, SelfModelProposal, SelfState
+
+if TYPE_CHECKING:
+    from nova.agent.heartbeat import HeartbeatStore, SelfModelProposalStore
 
 
 # SelfState fields that update_self_model is permitted to propose changes to.
@@ -45,11 +48,15 @@ class SelfStateToolDispatcher:
         motive_state: MotiveState,
         soul_block: str,
         session_id: str,
+        heartbeat_store: HeartbeatStore | None = None,
+        proposal_store: SelfModelProposalStore | None = None,
     ) -> None:
         self._self_state = self_state
         self._motive_state = motive_state
         self._soul_block = soul_block
         self._session_id = session_id
+        self._heartbeat_store = heartbeat_store
+        self._proposal_store = proposal_store
 
     def dispatch(self, request: ToolRequest) -> dict[str, Any]:
         if request.tool_name == "recall_self":
@@ -73,12 +80,16 @@ class SelfStateToolDispatcher:
         raise ValueError(f"Unknown self-state tool: {request.tool_name!r}")
 
     def recall_self(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "primary_drive": PRIMARY_DRIVE,
             "soul_block_present": bool(self._soul_block),
             "self_state": self._self_state.to_dict(),
             "motive_state": self._motive_state.to_dict(),
         }
+        if self._heartbeat_store is not None:
+            recent = self._heartbeat_store.list_recent(limit=5)
+            result["recent_heartbeats"] = [hb.to_dict() for hb in recent]
+        return result
 
     def reflect(self) -> dict[str, Any]:
         ss = self._self_state
@@ -106,20 +117,23 @@ class SelfStateToolDispatcher:
         gap_assessment: str = "",
         next_inquiry: str = "",
     ) -> dict[str, Any]:
-        return {
-            "heartbeat_id": uuid4().hex,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "session_id": self._session_id,
-            "primary_drive": PRIMARY_DRIVE,
-            "observation": observation,
-            "gap_assessment": gap_assessment,
-            "next_inquiry": next_inquiry or self._self_state.current_focus or PRIMARY_DRIVE,
-            "motive_priority": (
+        heartbeat = HeartbeatRecord(
+            heartbeat_id=uuid4().hex,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            session_id=self._session_id,
+            primary_drive=PRIMARY_DRIVE,
+            observation=observation,
+            gap_assessment=gap_assessment,
+            next_inquiry=next_inquiry or self._self_state.current_focus or PRIMARY_DRIVE,
+            motive_priority=(
                 self._motive_state.current_priorities[0]
                 if self._motive_state.current_priorities
                 else PRIMARY_DRIVE
             ),
-        }
+        )
+        if self._heartbeat_store is not None:
+            self._heartbeat_store.append(heartbeat)
+        return heartbeat.to_dict()
 
     def update_self_model(
         self,
@@ -133,12 +147,16 @@ class SelfStateToolDispatcher:
                 f"Field {field!r} is not updatable via update_self_model. "
                 f"Allowed fields: {sorted(_UPDATABLE_SELF_STATE_FIELDS)}"
             )
-        return {
-            "proposal_id": uuid4().hex,
-            "proposed_field": field,
-            "proposed_value": value,
-            "rationale": rationale,
-            "approval_required": True,
-            "applied": False,
-            "session_id": self._session_id,
-        }
+        proposal = SelfModelProposal(
+            proposal_id=uuid4().hex,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            session_id=self._session_id,
+            proposed_field=field,
+            proposed_value=value,
+            rationale=rationale,
+            approval_required=True,
+            applied=False,
+        )
+        if self._proposal_store is not None:
+            self._proposal_store.append(proposal)
+        return proposal.to_dict()

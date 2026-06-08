@@ -30,6 +30,7 @@ class NovaPromptComposer:
         persona: PersonaState,
         self_state: SelfState,
         soul_block: str = "",
+        self_context_block: str = "",
         motive_block: str = "",
         initiative_block: str = "",
         awareness_block: str = "",
@@ -60,6 +61,7 @@ class NovaPromptComposer:
 
         parts = self._select_prompt_parts(
             soul_block=soul_block,
+            self_context_block=self_context_block,
             persona_block=persona_block,
             self_state_block=self_state_block,
             motive_block=motive_block,
@@ -83,6 +85,7 @@ class NovaPromptComposer:
         full_prompt = "\n\n".join(part for part in parts if part.strip())
         messages = self._build_messages(
             soul_block=soul_block,
+            self_context_block=self_context_block,
             persona=persona,
             self_state=self_state,
             persona_block=persona_block,
@@ -108,6 +111,7 @@ class NovaPromptComposer:
             session_id=session_id,
             turn_id=turn_id,
             soul_block=soul_block,
+            self_context_block=self_context_block,
             persona_block=persona_block,
             self_state_block=self_state_block,
             motive_block=motive_block,
@@ -153,6 +157,7 @@ class NovaPromptComposer:
         self,
         *,
         soul_block: str,
+        self_context_block: str,
         persona_block: str,
         self_state_block: str,
         motive_block: str,
@@ -204,6 +209,7 @@ class NovaPromptComposer:
             ]
         return [
             soul_block,
+            self_context_block,
             persona_block,
             self_state_block,
             motive_block,
@@ -227,6 +233,7 @@ class NovaPromptComposer:
         self,
         *,
         soul_block: str,
+        self_context_block: str,
         persona: PersonaState,
         self_state: SelfState,
         persona_block: str,
@@ -274,6 +281,7 @@ class NovaPromptComposer:
         else:
             system_parts = [
                 soul_block,
+                self_context_block,
                 persona_block,
                 self_state_block,
                 motive_block,

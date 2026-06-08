@@ -987,6 +987,7 @@ class PromptBundle:
     full_prompt: str
     token_estimate: int
     soul_block: str = ""
+    self_context_block: str = ""
     messages: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -1186,6 +1187,62 @@ class ProbeResult:
     score: float | None = None
     passed: bool | None = None
     notes: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+# ---- Phase 18 Stage 18.4 types ----
+
+@dataclass(slots=True)
+class HeartbeatRecord:
+    """Persisted output of the emit_heartbeat self-state tool."""
+    schema_version: str = SCHEMA_VERSION
+    heartbeat_id: str = ""
+    timestamp: str = ""
+    session_id: str = ""
+    primary_drive: str = ""
+    observation: str = ""
+    gap_assessment: str = ""
+    next_inquiry: str = ""
+    motive_priority: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class DriveGapRecord:
+    """Per-tick runtime assessment of the gap between self-state and PRIMARY_DRIVE."""
+    schema_version: str = SCHEMA_VERSION
+    gap_id: str = ""
+    timestamp: str = ""
+    session_id: str = ""
+    tick_id: str = ""
+    primary_drive: str = ""
+    current_focus: str = ""
+    active_questions_count: int = 0
+    open_tensions_count: int = 0
+    gap_summary: str = ""
+    gap_present: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class SelfModelProposal:
+    """Persisted update_self_model proposal awaiting operator approval."""
+    schema_version: str = SCHEMA_VERSION
+    proposal_id: str = ""
+    timestamp: str = ""
+    session_id: str = ""
+    proposed_field: str = ""
+    proposed_value: Any = None
+    rationale: str = ""
+    approval_required: bool = True
+    applied: bool = False
+    applied_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
