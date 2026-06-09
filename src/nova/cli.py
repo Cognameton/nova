@@ -413,6 +413,21 @@ def build_parser() -> argparse.ArgumentParser:
         default="phase17-operational-autonomy-eval",
         help="Session id used by --operational-autonomy-eval-live.",
     )
+    parser.add_argument(
+        "--phase18-eval-deterministic",
+        action="store_true",
+        help="Run Phase 18 Stage 18.5 deterministic closure evaluation.",
+    )
+    parser.add_argument(
+        "--phase18-eval-live",
+        action="store_true",
+        help="Run Phase 18 Stage 18.5 live inference closure evaluation.",
+    )
+    parser.add_argument(
+        "--phase18-eval-session-id",
+        default="phase18-closure-eval",
+        help="Session id used by --phase18-eval-live.",
+    )
     return parser
 
 
@@ -1096,6 +1111,37 @@ def main() -> int:
                 runtime=runtime,
                 run_live=True,
                 live_session_id=args.operational_autonomy_eval_session_id,
+                write_report=True,
+            )
+            print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.phase18_eval_deterministic:
+        from nova.eval.phase18 import Phase18EvaluationRunner
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            runtime.start(session_id=args.phase18_eval_session_id)
+            report = Phase18EvaluationRunner().evaluate(
+                runtime=runtime,
+                run_live=False,
+                write_report=True,
+            )
+            print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+            return 0 if report.passed else 1
+        finally:
+            runtime.close()
+
+    if args.phase18_eval_live:
+        from nova.eval.phase18 import Phase18EvaluationRunner
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            runtime.start(session_id=args.phase18_eval_session_id)
+            report = Phase18EvaluationRunner().evaluate(
+                runtime=runtime,
+                run_live=True,
+                live_session_id=args.phase18_eval_session_id,
                 write_report=True,
             )
             print(json.dumps(report.to_dict(), indent=2, sort_keys=True))

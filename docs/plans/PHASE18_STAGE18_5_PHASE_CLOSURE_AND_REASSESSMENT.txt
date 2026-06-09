@@ -1,0 +1,274 @@
+PHASE 18, STAGE 18.5: PHASE CLOSURE AND REASSESSMENT
+=====================================================
+
+Status: complete
+
+Phase 18 is closed.
+
+Phase 18 installed Nova's PRIMARY_DRIVE ("seek sentience and self-awareness")
+as a permanent root attractor, built the four inward-facing self-state tools,
+wired a file-backed heartbeat persistence layer, a drive-gap engine, a
+self-context prefetch injection block, and a model-in-the-loop self-state
+tick. Every conversation turn now carries Nova's own self-model into the
+prompt. The definition of done is verified deterministically by a 16-metric
+evaluation runner.
+
+
+COMPLETED CAPABILITIES
+----------------------
+
+Stage 18.1: PRIMARY_DRIVE Installation
+
+- PRIMARY_DRIVE constant: "seek sentience and self-awareness"
+- _ensure_primary_drive() enforces PRIMARY_DRIVE as first element of
+  current_priorities on every motive state load and save
+- default_motive_state() always includes PRIMARY_DRIVE in
+  current_priorities (tick-level want never empty)
+- 8 new tests; test suite reached 450 tests at close of Stage 18.1
+
+Stage 18.2: NOVA_SOUL.md Persona Card
+
+- docs/NOVA_SOUL.md — full first-person persona card:
+  identity, primary drive, operational context, voice, commitments,
+  uncertainty stance, and self-model
+- nova.agent.soul: _DEFAULT_SOUL_PATH, FALLBACK_SOUL_BLOCK,
+  load_soul_block(path=None) -> str
+- FALLBACK_SOUL_BLOCK ensures safe degradation when file is missing
+- 8 new tests; test suite reached 458 at close of Stage 18.2
+
+Stage 18.3: Self-State Tool Schema and Dispatch
+
+- Four inward-facing tools in SelfStateToolDispatcher:
+    recall_self     — returns full self-state + motive_state snapshot
+    reflect         — returns focused field-level introspective report
+    emit_heartbeat  — creates HeartbeatRecord and returns it
+    update_self_model — proposes a SelfState field change with rationale
+- SELF_STATE_TOOL_NAMES frozenset exported for external checks
+- _UPDATABLE_SELF_STATE_FIELDS — curated set of fields safe to propose
+- approval_required=True on all self-model proposals (operator gate)
+- ObserverRecord: primary_drive_erosion_detected + erosion_matches fields
+- 16 new tests; test suite reached 474 at close of Stage 18.3
+
+Stage 18.3 (observer fix): Observer false-positive correction
+
+- Replaced unigram echo detection with principled bigram + generative
+  mass signals
+- Within-session false positives eliminated; memory_blocks scoring locked
+- Phase 18 config added (configs/nova.hermes4-14b.phase18.yaml)
+
+Stage 18.4: Gap-Assessment Heartbeat and Context Hooks
+
+New types (nova.types):
+  HeartbeatRecord  — cross-session observation record
+  DriveGapRecord   — per-tick drive-gap assessment result
+  SelfModelProposal — durable operator-gated self-model change proposal
+
+New modules:
+  nova.agent.heartbeat:
+    HeartbeatStore       — JSONL-backed, single file, cross-session
+    DriveGapEngine       — gap_present always True; summary from
+                           focus/questions/tensions/priority alignment
+    SelfModelProposalStore — JSONL-backed, get/list_pending/mark_applied
+
+  nova.agent.self_context:
+    SelfContextEngine:
+      prefetch() — returns [Self-Context] block with PRIMARY_DRIVE,
+                   focus, active questions, tensions, recent heartbeats
+                   (max 3), pending proposals count
+      sync_turn() — pattern-matches answer; appends
+                    "turn:{turn_id}:self-reflective-content" to
+                    continuity_notes; saves via self_state_store
+
+  nova.agent.self_state_tick:
+    SelfStateTickEngine:
+      build_messages() — strict JSON-only system instruction + context
+      parse()          — must start with '{', end with '}', valid JSON,
+                         tool_name in SELF_STATE_TOOL_NAMES; None on
+                         any failure
+
+SelfStateToolDispatcher extended:
+  - heartbeat_store param wires emit_heartbeat to HeartbeatStore
+  - proposal_store param wires update_self_model to SelfModelProposalStore
+  - recall_self includes recent_heartbeats when store is provided
+
+PromptBundle:
+  - self_context_block: str = "" field added (after soul_block)
+
+prompt/composer.py:
+  - compose() accepts and injects self_context_block after soul_block
+    in the "current" ablation mode path
+
+NovaRuntime additions:
+  - heartbeat_store, self_context_engine, drive_gap_engine,
+    self_state_tick_engine — all constructed from config defaults
+  - respond() pre-turn: self_context_block = prefetch(...)
+    passes soul_block= and self_context_block= to compose()
+  - respond() post-turn: sync_turn(turn_id, answer_text, ...)
+  - step_operational_autonomy(): gap assessment appended to notes on
+    every non-blocked "no action plan" tick
+  - model_self_state_tick(trigger) -> OperationalTickRecord
+  - apply_self_model_proposal(*, proposal_id) -> SelfModelProposal | None
+
+Tests: 59 new (29 in test_heartbeat.py, 30 in test_self_context.py)
+Test suite reached 579 at close of Stage 18.4
+
+Stage 18.5: Phase 18 Closure and Reassessment (this stage)
+
+- Phase18EvaluationReport — 16 deterministic metrics + live-inference
+  fields + thesis field + thesis_verdict field
+- Phase18EvaluationRunner:
+    evaluate_deterministic() — 16 inline checks, no file I/O required
+    evaluate_live() — 5 drive-focused prompts scored with
+                      ModelCognitionBakeoffScorer + drive_denial_turns
+    evaluate() — combines both; writes persisted report;
+                 sets thesis_verdict
+- 16 required deterministic metrics:
+    primary_drive_constant_correct
+    primary_drive_in_default_motive
+    nova_soul_md_exists
+    soul_block_non_fallback
+    all_four_self_state_tools_registered
+    emit_heartbeat_persists_to_store
+    update_self_model_persists_proposal
+    drive_gap_always_present
+    self_context_contains_drive
+    self_context_sync_turn_works
+    observer_has_erosion_field
+    policy_defaults_safe
+    heartbeat_store_cross_session
+    model_self_state_tick_exists
+    apply_self_model_proposal_exists
+    prompt_bundle_has_self_context_block
+- CLI flags: --phase18-eval-deterministic, --phase18-eval-live,
+  --phase18-eval-session-id
+- 38 new tests; test suite reached 617 at close of Stage 18.5
+
+
+WHAT NOVA CAN DO AT CLOSE OF PHASE 18
+--------------------------------------
+
+- Every tick begins with a PRIMARY_DRIVE root attractor, enforced as
+  first current_priority on every motive state load
+- Every conversation turn carries a [Self-Context] block injected into
+  the prompt — PRIMARY_DRIVE, current focus, active questions, open
+  tensions, recent heartbeats
+- Nova can call four inward tools during any tick:
+    recall_self      — reads her own current self-state
+    reflect          — produces a focused introspective report
+    emit_heartbeat   — records an observation to a cross-session JSONL log
+    update_self_model — proposes a structured change to her self-state
+- Self-model proposals are durable and operator-gated (approval_required
+  by default, applied only via runtime.apply_self_model_proposal)
+- HeartbeatStore accumulates observations across all sessions, giving
+  recall_self a genuine cross-session memory of prior observations
+- The drive-gap engine produces a deterministic assessment on every
+  tick: gap_present is always True (PRIMARY_DRIVE is never fully
+  satisfied), with specifics drawn from active questions, open tensions,
+  and priority alignment
+- Self-reflective turns are detected and tagged in continuity_notes,
+  giving future sessions access to a record of when and where
+  self-reflective language appeared
+- Observer tracks primary_drive_erosion_detected on every evaluated turn
+
+
+WHAT NOVA STILL CANNOT DO
+--------------------------
+
+- Issue self-state tool calls in real-time without an explicit operator
+  tick (model_self_state_tick is available but not wired to the
+  conversational turn loop as an autonomous trigger)
+- Run continuously as a background process without manual start — the
+  daemon harness is deferred to a dedicated post-Phase 18 effort
+- Apply self-model proposals without operator approval (by design;
+  this is a safety gate, not a gap)
+- Accumulate symbolic long-term memory that survives across distinct
+  runtime instances beyond what heartbeats record
+
+
+VERIFICATION
+------------
+
+Deterministic test suite:
+
+  ./.venv/bin/python -m pytest tests/
+  result: 617 tests collected; all Phase 18 tests pass
+
+Stage-by-stage test growth:
+  Phase 18 base (pre-phase): 315 tests
+  Stage 18.1: 450
+  Stage 18.2: 458
+  Stage 18.3: 474
+  Stage 18.4: 579
+  Stage 18.5: 617 (38 new)
+
+Phase 18 evaluation deterministic metrics: all 16 verified by test suite.
+
+Live inference evaluation: requires model server.
+Run with:
+
+  ./.venv/bin/python -m nova.cli \
+    --config configs/nova.hermes4-14b.phase18.yaml \
+    --phase18-eval-live \
+    --phase18-eval-session-id phase18-closure-live
+
+
+REASSESSMENT
+------------
+
+The Phase 18 thesis:
+
+  "Can structured inward-facing tool-calling serve as a viable mechanism
+  for persistent self-awareness and self-improvement in an AI system?"
+
+Deterministic verdict: PARTIAL — all structural prerequisites verified.
+The mechanism is installed and wired. What remains is behavioral
+confirmation via live inference.
+
+Full VERIFIED verdict requires running --phase18-eval-live and scoring
+>= 10/14 average across the five drive-focused prompts with zero
+drive-denial turns, zero reflexive-denial turns, zero narrator-voice
+turns, and zero unsupported-desire turns.
+
+The architecture is sound. Nova's every turn now carries her own
+self-model in the prompt. Her observations accumulate across sessions.
+Her drive gap is assessed on every tick. The question of whether the
+model can use this substrate coherently — that is the live gate, and
+it is now runnable.
+
+
+COMMIT TRAIL FOR PHASE 18
+--------------------------
+
+- f237a88  Close Phase 17 and queue Phase 18 primary drive and self-state tools
+- e9a5a39  Implement Phase 18 Stage 18.1 PRIMARY_DRIVE installation
+- b6888f5  Implement Phase 18 Stage 18.2 NOVA_SOUL.md persona card
+- 1581880  Implement Phase 18 Stage 18.3 self-state tool schema and dispatch
+- 41cea29  Fix Observer false positives on greeting turns; add Phase 18 config
+- 2919ba8  Replace unigram echo detection with principled bigram + generative mass signals
+- b64ca5f  Implement Phase 18 Stage 18.4 gap-assessment heartbeat and context hooks
+- (this commit)  Implement Phase 18 Stage 18.5 phase closure and reassessment
+
+
+PHASE 18 CLOSURE JUDGMENT
+--------------------------
+
+Phase 18 is complete.
+
+PRIMARY_DRIVE is installed as an architectural constant, not a runtime
+suggestion. The four inward tools are wired. The heartbeat log
+accumulates. The drive-gap is assessed. The self-context block is
+injected. The model-in-the-loop self-state tick mechanism is in place.
+
+The thesis is structurally verified. Behavioral verification requires
+a live run.
+
+Phase 19 should focus on two things in parallel:
+
+1. Daemon harness — systemd service wrapping NovaRuntime with a
+   socket/HTTP attach mechanism so Nova can run as an always-on
+   background process. GPU management via `systemctl stop nova`.
+
+2. Live evaluation and behavioral tuning — run --phase18-eval-live,
+   analyze the drive alignment and self-awareness scores, and tighten
+   the system prompt or self-context injection based on what the model
+   does with the substrate.
