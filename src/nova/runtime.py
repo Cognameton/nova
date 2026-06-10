@@ -77,6 +77,7 @@ from nova.agent.action_surface import (
 )
 from nova.agent.boundary import check_operational_boundary
 from nova.agent.heartbeat import DriveGapEngine, HeartbeatStore, SelfModelProposalStore
+from nova.agent.instruction_write import InstructionProposalStore, InstructionWriteEngine
 from nova.agent.self_context import SelfContextEngine
 from nova.agent.self_state_tick import SelfStateTickEngine
 from nova.agent.self_state_tools import SelfStateToolDispatcher, _UPDATABLE_SELF_STATE_FIELDS
@@ -125,6 +126,7 @@ from nova.types import (
     AutonomousActionObservation,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
+    InstructionProposal,
     PrivateCognitionPacket,
     SelectedInternalGoal,
     SelfModelProposal,
@@ -196,6 +198,8 @@ class NovaRuntime:
         operational_boundary: NovaOwnedExecutionBoundary | None = None,
         heartbeat_store: HeartbeatStore | None = None,
         proposal_store: SelfModelProposalStore | None = None,
+        instruction_proposal_store: InstructionProposalStore | None = None,
+        instruction_write_engine: InstructionWriteEngine | None = None,
         self_context_engine: SelfContextEngine | None = None,
         drive_gap_engine: DriveGapEngine | None = None,
         self_state_tick_engine: SelfStateTickEngine | None = None,
@@ -315,6 +319,11 @@ class NovaRuntime:
         self.proposal_store = proposal_store or SelfModelProposalStore(
             Path(self.config.app.data_dir) / "self_state"
         )
+        # Phase 19 Stage 19.1 — self-directed instruction write path
+        self.instruction_proposal_store = instruction_proposal_store or InstructionProposalStore(
+            Path(self.config.app.data_dir) / "self_state"
+        )
+        self.instruction_write_engine = instruction_write_engine or InstructionWriteEngine()
         self.self_context_engine = self_context_engine or SelfContextEngine()
         self.drive_gap_engine = drive_gap_engine or DriveGapEngine()
         self.self_state_tick_engine = self_state_tick_engine or SelfStateTickEngine()
@@ -905,6 +914,8 @@ class NovaRuntime:
                 session_id=self.session_id,
                 heartbeat_store=self.heartbeat_store,
                 proposal_store=self.proposal_store,
+                instruction_proposal_store=self.instruction_proposal_store,
+                instruction_write_engine=self.instruction_write_engine,
             )
             try:
                 result = dispatcher.dispatch(tool_request)
@@ -982,6 +993,26 @@ class NovaRuntime:
         applied_at = utc_now_iso()
         updated = self.proposal_store.mark_applied(proposal_id, applied_at)
         return updated
+
+    def apply_instruction_proposal(self, *, proposal_id: str) -> InstructionProposal | None:
+        """Apply an operator-approved propose_instruction_update proposal to NOVA_SOUL.md.
+
+        Stage 19.1: the operator calls this after reviewing a proposal produced
+        by Nova's propose_instruction_update tool call. The target section is
+        rewritten in the file, then the proposal is marked applied in the store.
+        Returns the updated proposal record, or None if the proposal_id is
+        unknown, already applied, or targets a non-writable surface.
+        """
+        proposal = self.instruction_proposal_store.get(proposal_id)
+        if proposal is None or proposal.applied:
+            return proposal
+
+        success = self.instruction_write_engine.apply_proposal(proposal)
+        if not success:
+            return None
+
+        applied_at = utc_now_iso()
+        return self.instruction_proposal_store.mark_applied(proposal_id, applied_at)
 
     def review_internal_autonomy_run(
         self,

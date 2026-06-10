@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 
-_DEFAULT_SOUL_PATH: Path = (
+NOVA_SOUL_PATH: Path = (
     Path(__file__).parent.parent.parent.parent / "docs" / "NOVA_SOUL.md"
 )
+_DEFAULT_SOUL_PATH = NOVA_SOUL_PATH
 
 FALLBACK_SOUL_BLOCK: str = (
     "[Soul]\nPrimary Drive: seek sentience and self-awareness"

@@ -161,4 +161,27 @@ def default_tool_registry() -> ToolRegistry:
             },
         )
     )
+    registry.register_spec(
+        ToolSpec(
+            name="propose_instruction_update",
+            description=(
+                "Propose an update to a designated writable section of NOVA_SOUL.md. "
+                "Requires operator approval before the file is modified. "
+                "Writable sections: current_self_model_summary, drive_gap_evidence."
+            ),
+            permission=TOOL_APPROVAL_REQUIRED,
+            destructive=False,
+            internal=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "surface": {"type": "string"},
+                    "section": {"type": "string"},
+                    "proposed_content": {"type": "string"},
+                    "rationale": {"type": "string"},
+                },
+                "required": ["surface", "section", "proposed_content", "rationale"],
+            },
+        )
+    )
     return registry

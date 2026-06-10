@@ -1246,3 +1246,23 @@ class SelfModelProposal:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class InstructionProposal:
+    """Persisted propose_instruction_update proposal awaiting operator approval."""
+    schema_version: str = SCHEMA_VERSION
+    proposal_id: str = ""
+    timestamp: str = ""
+    session_id: str = ""
+    surface: str = ""
+    section: str = ""
+    current_content: str = ""
+    proposed_content: str = ""
+    rationale: str = ""
+    approval_required: bool = True
+    applied: bool = False
+    applied_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

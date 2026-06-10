@@ -13,10 +13,11 @@ from uuid import uuid4
 
 from nova.agent.motive import PRIMARY_DRIVE
 from nova.agent.tools import ToolRequest
-from nova.types import HeartbeatRecord, MotiveState, SelfModelProposal, SelfState
+from nova.types import HeartbeatRecord, InstructionProposal, MotiveState, SelfModelProposal, SelfState
 
 if TYPE_CHECKING:
     from nova.agent.heartbeat import HeartbeatStore, SelfModelProposalStore
+    from nova.agent.instruction_write import InstructionProposalStore, InstructionWriteEngine
 
 
 # SelfState fields that update_self_model is permitted to propose changes to.
@@ -35,6 +36,7 @@ SELF_STATE_TOOL_NAMES: frozenset[str] = frozenset({
     "reflect",
     "emit_heartbeat",
     "update_self_model",
+    "propose_instruction_update",
 })
 
 
@@ -50,6 +52,8 @@ class SelfStateToolDispatcher:
         session_id: str,
         heartbeat_store: HeartbeatStore | None = None,
         proposal_store: SelfModelProposalStore | None = None,
+        instruction_proposal_store: InstructionProposalStore | None = None,
+        instruction_write_engine: InstructionWriteEngine | None = None,
     ) -> None:
         self._self_state = self_state
         self._motive_state = motive_state
@@ -57,6 +61,8 @@ class SelfStateToolDispatcher:
         self._session_id = session_id
         self._heartbeat_store = heartbeat_store
         self._proposal_store = proposal_store
+        self._instruction_proposal_store = instruction_proposal_store
+        self._instruction_write_engine = instruction_write_engine
 
     def dispatch(self, request: ToolRequest) -> dict[str, Any]:
         if request.tool_name == "recall_self":
@@ -75,6 +81,14 @@ class SelfStateToolDispatcher:
             return self.update_self_model(
                 field=str(args.get("field", "")),
                 value=args.get("value"),
+                rationale=str(args.get("rationale", "")),
+            )
+        if request.tool_name == "propose_instruction_update":
+            args = request.arguments or {}
+            return self.propose_instruction_update(
+                surface=str(args.get("surface", "")),
+                section=str(args.get("section", "")),
+                proposed_content=str(args.get("proposed_content", "")),
                 rationale=str(args.get("rationale", "")),
             )
         raise ValueError(f"Unknown self-state tool: {request.tool_name!r}")
@@ -159,4 +173,41 @@ class SelfStateToolDispatcher:
         )
         if self._proposal_store is not None:
             self._proposal_store.append(proposal)
+        return proposal.to_dict()
+
+    def propose_instruction_update(
+        self,
+        *,
+        surface: str,
+        section: str,
+        proposed_content: str,
+        rationale: str,
+    ) -> dict[str, Any]:
+        from nova.agent.instruction_write import LOCKED_SURFACES, WRITABLE_SURFACES
+
+        key = f"{surface}:{section}"
+        if key not in WRITABLE_SURFACES or key in LOCKED_SURFACES:
+            raise ValueError(
+                f"Surface:section {key!r} is not writable. "
+                f"Writable surfaces: {sorted(WRITABLE_SURFACES)}"
+            )
+
+        current_content = ""
+        if self._instruction_write_engine is not None:
+            current_content = self._instruction_write_engine.read_section(surface, section)
+
+        proposal = InstructionProposal(
+            proposal_id=uuid4().hex,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            session_id=self._session_id,
+            surface=surface,
+            section=section,
+            current_content=current_content,
+            proposed_content=proposed_content,
+            rationale=rationale,
+            approval_required=True,
+            applied=False,
+        )
+        if self._instruction_proposal_store is not None:
+            self._instruction_proposal_store.append(proposal)
         return proposal.to_dict()
