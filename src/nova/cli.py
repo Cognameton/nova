@@ -428,6 +428,43 @@ def build_parser() -> argparse.ArgumentParser:
         default="phase18-closure-eval",
         help="Session id used by --phase18-eval-live.",
     )
+    # Phase 19 Stage 19.2 — Daemon Harness
+    parser.add_argument(
+        "--daemon",
+        action="store_true",
+        help="Start Nova as an always-on background daemon (foreground process, managed by systemd).",
+    )
+    parser.add_argument(
+        "--daemon-stop",
+        action="store_true",
+        help="Send a shutdown signal to the running Nova daemon.",
+    )
+    parser.add_argument(
+        "--daemon-status",
+        action="store_true",
+        help="Print the running Nova daemon status.",
+    )
+    parser.add_argument(
+        "--attach",
+        action="store_true",
+        help="Attach an interactive REPL to the running Nova daemon.",
+    )
+    parser.add_argument(
+        "--daemon-socket",
+        default="",
+        help="Path to the daemon Unix socket (default: <data_dir>/nova.sock).",
+    )
+    parser.add_argument(
+        "--tick-interval",
+        type=int,
+        default=300,
+        help="Autonomous self-state tick interval in seconds (default: 300).",
+    )
+    parser.add_argument(
+        "--daemon-session-id",
+        default="nova-daemon",
+        help="Session id used by the Nova daemon (default: nova-daemon).",
+    )
     return parser
 
 
@@ -1160,6 +1197,56 @@ def main() -> int:
             return 0 if tick.model_cognition.get("valid") else 1
         finally:
             runtime.close()
+
+    # Phase 19 Stage 19.2 — daemon client commands (no model loaded)
+    if args.daemon_stop or args.daemon_status or args.attach:
+        from nova.daemon import NovaAttachClient, default_socket_path
+
+        if args.daemon_socket:
+            sock_path = Path(args.daemon_socket)
+        else:
+            components = build_memory_components(config_override=args.config_override)
+            sock_path = default_socket_path(components["data_dir"])
+
+        client = NovaAttachClient(sock_path)
+
+        if args.daemon_stop:
+            ok = client.send_shutdown()
+            print("Nova daemon stopped." if ok else "Nova daemon not running or shutdown failed.")
+            return 0 if ok else 1
+
+        if args.daemon_status:
+            status = client.send_status()
+            if status is None:
+                print("Nova daemon not running.")
+                return 1
+            print(json.dumps(status.to_dict(), indent=2, sort_keys=True))
+            return 0
+
+        if args.attach:
+            client.run_repl()
+            return 0
+
+    # Phase 19 Stage 19.2 — daemon server (foreground, systemd-managed)
+    if args.daemon:
+        from nova.daemon import NovaDaemon, default_socket_path
+
+        runtime = build_runtime(config_override=args.config_override)
+        if args.daemon_socket:
+            sock_path = Path(args.daemon_socket)
+        else:
+            data_dir = _resolve_path(runtime.config.app.data_dir)
+            sock_path = default_socket_path(data_dir)
+
+        daemon = NovaDaemon(
+            runtime=runtime,
+            socket_path=sock_path,
+            tick_interval_seconds=args.tick_interval,
+            session_id=args.daemon_session_id,
+        )
+        print(f"Nova daemon starting — socket: {sock_path} tick_interval: {args.tick_interval}s")
+        daemon.start()
+        return 0
 
     runtime = build_runtime(config_override=args.config_override)
     if args.prompt_ablation_mode:

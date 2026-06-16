@@ -1,0 +1,39 @@
+[Unit]
+Description=Nova 2.0 Agentic Runtime Daemon
+Documentation=file://%h/Dev/ai-lab/nova2.0/docs/NOVA_SOUL.md
+After=network.target
+
+[Service]
+Type=simple
+User=head-node
+
+# -- Paths -------------------------------------------------------------------
+WorkingDirectory=/home/head-node/Dev/ai-lab/nova2.0
+Environment=PYTHONUNBUFFERED=1
+
+# -- Command -----------------------------------------------------------------
+# Replace the --config path with your active config file.
+# --tick-interval controls how often the autonomous self-state tick fires (seconds).
+ExecStart=/home/head-node/Dev/ai-lab/nova2.0/.venv/bin/python -m nova.cli \
+    --config /home/head-node/Dev/ai-lab/nova2.0/configs/nova.hermes4-14b-phase18.yaml \
+    --daemon \
+    --tick-interval 300 \
+    --daemon-session-id nova-daemon
+
+# -- Restart policy ----------------------------------------------------------
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=120
+TimeoutStopSec=60
+
+# SIGTERM → NovaDaemon._on_sigterm → graceful shutdown + GPU release.
+KillMode=control-group
+KillSignal=SIGTERM
+
+# -- Logging -----------------------------------------------------------------
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nova-daemon
+
+[Install]
+WantedBy=multi-user.target
