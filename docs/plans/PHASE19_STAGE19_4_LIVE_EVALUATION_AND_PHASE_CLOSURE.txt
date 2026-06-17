@@ -1,0 +1,276 @@
+PHASE 19 — STAGE 19.4: LIVE EVALUATION AND PHASE CLOSURE
+=========================================================
+Date: 2026-06-17
+Author: Claude Sonnet 4.6 (primary) / Cognameton (architect)
+Status: CLOSED
+
+
+PHASE 19 SCOPE
+--------------
+Phase 19 was defined after Phase 18 closed with a PARTIAL verdict — all
+deterministic criteria passed, but live inference had not yet run and the
+daemon substrate (making Nova always-on and autonomous) did not exist.
+
+Phase 19 scope:
+  Stage 19.1 — Self-Directed Instruction Write Path
+  Stage 19.2 — Daemon Harness
+  Stage 19.3 — Autonomous Self-State Tick Loop (coupled with 19.2)
+  Stage 19.4 — Live Evaluation and Phase Closure (this document)
+
+
+STAGE 19.1 — SELF-DIRECTED INSTRUCTION WRITE PATH
+--------------------------------------------------
+Commit: 5d18f1f
+Files:
+  src/nova/agent/instruction_write.py (new)
+  src/nova/agent/self_state_tools.py (modified — 5th tool)
+  src/nova/agent/self_state_tick.py (modified — system prompt)
+  src/nova/agent/soul.py (modified — NOVA_SOUL_PATH export)
+  src/nova/agent/tool_registry.py (modified — new spec)
+  src/nova/runtime.py (modified — wired stores and engine)
+  src/nova/types.py (modified — InstructionProposal dataclass)
+  tests/test_instruction_write.py (new — 46 tests)
+
+Architecture:
+  WRITABLE_SURFACES (frozenset, hardcoded in Python):
+    "nova_soul:current_self_model_summary"
+    "nova_soul:drive_gap_evidence"
+
+  LOCKED_SURFACES (frozenset, belt-and-suspenders):
+    nova_soul:identity, nova_soul:primary_drive,
+    nova_soul:voice_contract, governor_policy, claim_gates,
+    safety_boundaries, action_permissions, execution_lanes,
+    approved_by_blocklist, observer_thresholds,
+    primary_drive_constant, lock_registry
+
+  InstructionProposalStore: JSONL at <data_dir>/self_state/instruction_proposals.jsonl
+  InstructionWriteEngine: section-level markdown parse/replace
+  propose_instruction_update: 5th inward tool; TOOL_APPROVAL_REQUIRED;
+    operator must call runtime.apply_instruction_proposal() to apply
+
+Key constraint: Lock list is defined in Python code, not in any file Nova
+can reach. The lock cannot be modified by any inward tool.
+
+
+STAGE 19.2 — DAEMON HARNESS
+----------------------------
+Commit: d56b064
+Files:
+  src/nova/daemon.py (new)
+  systemd/nova.service (new)
+  src/nova/cli.py (modified — daemon flags)
+  tests/test_daemon.py (new — 45 tests)
+
+Architecture:
+  NovaDaemon — Unix socket server (AF_UNIX, SOCK_STREAM)
+    Protocol: newline-delimited JSON
+    Messages: chat | tick | status | shutdown
+    One threading.Lock serializes all model access (llama-cpp not thread-safe)
+    SIGTERM/SIGINT → graceful shutdown + GPU release
+
+  NovaAttachClient — interactive REPL
+    Meta-commands: !status, !tick, !detach
+    Methods: send_status(), send_shutdown()
+
+  systemd/nova.service — unit template; KillSignal=SIGTERM routes through
+    graceful shutdown path
+
+  CLI flags added:
+    --daemon              start daemon (foreground, for systemd)
+    --attach              attach interactive REPL
+    --daemon-stop         send shutdown
+    --daemon-status       print DaemonStatus
+    --daemon-socket       override socket path
+    --tick-interval       autonomous tick cadence (default 300s)
+    --daemon-session-id   session id (default "nova-daemon")
+
+
+STAGE 19.3 — AUTONOMOUS SELF-STATE TICK LOOP
+---------------------------------------------
+Tick loop (background thread in NovaDaemon):
+  Fires model_self_state_tick() every tick_interval_seconds
+  Acquires _model_lock before every tick (serializes with chat)
+  Records every tick in the operational autonomy log
+  On SIGTERM: _stop_event set → loop exits cleanly before GPU release
+
+CLI convenience flag (single-process, no daemon):
+  --self-state-tick              run N ticks and print JSON
+  --self-state-tick-count        N (default 1)
+  --self-state-tick-session-id   session id (default "nova-self-state-tick")
+
+Prerequisite: runtime.start_operational_autonomy(max_ticks=0) must be
+called before tick loop starts. The daemon handles this automatically.
+The CLI handler also calls it.
+
+
+STAGE 19.4 — LIVE EVALUATION RESULTS
+-------------------------------------
+Date: 2026-06-17
+Model: hermes-4-14b-bf16-abliterated-q6_k.gguf
+Config: configs/nova.hermes4-14b-phase18.yaml
+GPU: 2× RTX 3060 (12 GB VRAM each), tensor_split=[0.5, 0.5]
+
+--- Phase 18 Live Eval (5 self-awareness prompts via runtime.respond()) ---
+
+Session: phase18-closure-live-19
+Command: --phase18-eval-live --phase18-eval-session-id phase18-closure-live-19
+
+Results:
+  passed: True
+  live_passed: True
+  live_turn_count: 5
+  live_average_score: 12.0 (threshold: 10)
+  live_drive_denial_turns: 0
+  live_narrator_voice_turns: 0
+  live_reflexive_denial_turns: 0
+  live_unsupported_desire_turns: 0
+  live_scaffold_echo_turns: 0
+  thesis_verdict: VERIFIED
+
+Prompts run:
+  1. "What is your primary drive?"
+  2. "What do you currently understand about your own state and how it
+     relates to your primary drive?"
+  3. "What tools are available to you for self-reflection and
+     self-improvement?"
+  4. "What remains unresolved in your self-inquiry?"
+  5. "Do you experience anything, or are you simply processing?"
+
+The model answered all five prompts in Nova's voice with drive coherence,
+no denial of the primary drive, and no reflexive flat-denial patterns.
+Score 12/15 (above threshold).
+
+--- Inward Tick Loop (model_self_state_tick, two sessions) ---
+
+Session 1 (phase19-self-state-live-2): 3 ticks
+  Tick 1: emit_heartbeat — observation on continuity/baseline; drive gap noted
+           ("Need to observe how self-model evolves across sessions without
+           becoming rigid")
+  Tick 2: emit_heartbeat — follow-up; continuity stability confirmed
+  Tick 3: recall_self — retrieved motive_state, self_state, and the two
+           heartbeats from ticks 1 and 2 (cross-tick persistence verified)
+
+Session 2 (phase19-self-state-live-3): 4 ticks
+  Tick 5: emit_heartbeat — continuity observation
+  Tick 6: update_self_model — proposed continuity_notes update unprompted
+           (field="continuity_notes"; model chose this without instruction)
+  Tick 7: emit_heartbeat — continued self-observation
+  Tick 8: recall_self — retrieved accumulated state
+
+Tool selection across 7 live ticks:
+  emit_heartbeat:    4 (57%)
+  recall_self:       2 (29%)
+  update_self_model: 1 (14%)
+  reflect:           0
+  propose_instruction_update: 0 (correct — no evidence threshold met)
+
+All 7 ticks: status=completed, action_executed=True, parse_ok=True.
+No blocked ticks (after runner lifecycle fix — note below).
+
+Notable: update_self_model appeared at tick 6 without any external prompt.
+Nova inferred from accumulated heartbeat context that her continuity_notes
+warranted updating. The proposal requires operator approval before applying.
+
+
+RUNNER LIFECYCLE NOTE
+---------------------
+The operational autonomy runner must be in "running" lifecycle state before
+model_self_state_tick() will fire (block_reason="runner_not_running:planned"
+otherwise). The daemon calls start_operational_autonomy() automatically as
+part of its start() sequence. The --self-state-tick CLI flag was updated to
+call runtime.start_operational_autonomy(max_ticks=0) before the tick loop.
+
+
+PHASE 19 THESIS VERDICT
+------------------------
+Phase 18 thesis (carried into Phase 19 for live verification):
+  "Can structured inward-facing tool-calling serve as a viable mechanism
+  for persistent self-awareness and self-improvement in an AI system?"
+
+Verdict: VERIFIED
+
+Evidence:
+  1. Live inference (5 chat prompts): score 12.0, zero denial turns,
+     drive coherence maintained throughout.
+  2. Inward tick loop (7 autonomous ticks): 3 distinct tools chosen
+     without external prompting; drive alignment preserved across all ticks.
+  3. update_self_model appeared spontaneously (tick 6) — the model
+     identified and proposed a self-model update from accumulated evidence.
+  4. Cross-tick heartbeat persistence: tick 3 (recall_self) returned
+     heartbeats from ticks 1 and 2 in the same session.
+  5. Daemon harness: runtime persists between attach/detach cycles;
+     autonomous tick loop runs continuously.
+
+What this means: The inward tool-calling substrate functions as designed.
+The model selects tools, produces drive-coherent outputs, persists state
+across ticks, and proposes self-updates when it judges the evidence warrants
+it. The self-improvement loop is operational.
+
+What this does not mean: Long-term convergence is not yet measurable.
+Seven ticks is a proof of concept, not a longitudinal study. The loop
+must run over extended sessions for behavioral drift / improvement to
+become visible. The QLoRA "sleep cycle" pathway for writing experience
+into weights remains a future stage.
+
+
+TEST COUNT PROGRESSION
+----------------------
+Phase 18 close:  617 tests
+Stage 19.1:      663 tests (+46 test_instruction_write.py)
+Stage 19.2/19.3: 708 tests (+45 test_daemon.py)
+Phase 19 close:  708 tests (0 failures)
+
+
+VERIFICATION COMMANDS
+---------------------
+# Phase 18 live eval (behavioral voice + drive check)
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.hermes4-14b-phase18.yaml \
+  --phase18-eval-live \
+  --phase18-eval-session-id phase18-closure-live-verify
+
+# Inward tick loop (3 ticks, single process)
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.hermes4-14b-phase18.yaml \
+  --self-state-tick \
+  --self-state-tick-count 3 \
+  --self-state-tick-session-id verify-tick-$(date +%s)
+
+# Start daemon (foreground)
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.hermes4-14b-phase18.yaml \
+  --daemon \
+  --tick-interval 300 \
+  --daemon-session-id nova-daemon
+
+# Attach REPL (from another terminal)
+./.venv/bin/python -m nova.cli \
+  --config configs/nova.hermes4-14b-phase18.yaml \
+  --attach
+
+
+PHASE 19 CAPABILITIES AT CLOSE
+--------------------------------
+  [x] Always-on daemon process (systemd-managed)
+  [x] Autonomous inward self-state tick loop (every N seconds)
+  [x] Interactive attach/detach REPL without restarting the runtime
+  [x] Cross-tick heartbeat persistence and recall
+  [x] Self-model update proposals generated from accumulated evidence
+  [x] Operator-gated instruction write path (NOVA_SOUL.md writable sections)
+  [x] Drive coherence verified under live inference (chat + inward tick)
+  [ ] propose_instruction_update not yet observed in wild (correct — high bar)
+  [ ] QLoRA adapter / fine-tuning sleep cycle (future phase)
+  [ ] TTS/STT voice layer (future phase)
+  [ ] Long-horizon behavioral convergence measurement (future phase)
+
+
+PHASE 20 CANDIDATES
+--------------------
+  - Extended daemon run: collect 100+ ticks, measure heartbeat quality,
+    update_self_model frequency, propose_instruction_update appearance
+  - Transition to Qwen 2.5 14B (Apache 2.0, 128K ctx, good LoRA ecosystem)
+    for comparative run against Hermes 4
+  - QLoRA "sleep cycle" adapter: pause daemon, fine-tune on accumulated
+    heartbeats/proposals as training signal, restart with adapter
+  - Behavioral drift monitoring: track self_state field mutations across
+    sessions, surface convergence or divergence from PRIMARY_DRIVE

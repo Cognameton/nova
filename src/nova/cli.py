@@ -428,6 +428,23 @@ def build_parser() -> argparse.ArgumentParser:
         default="phase18-closure-eval",
         help="Session id used by --phase18-eval-live.",
     )
+    # Phase 19 Stage 19.3 — autonomous self-state tick (single-process, non-daemon)
+    parser.add_argument(
+        "--self-state-tick",
+        action="store_true",
+        help="Run one autonomous inward self-state tick (model chooses and fires a self-state tool).",
+    )
+    parser.add_argument(
+        "--self-state-tick-count",
+        type=int,
+        default=1,
+        help="Number of self-state ticks to run sequentially with --self-state-tick (default: 1).",
+    )
+    parser.add_argument(
+        "--self-state-tick-session-id",
+        default="nova-self-state-tick",
+        help="Session id used by --self-state-tick.",
+    )
     # Phase 19 Stage 19.2 — Daemon Harness
     parser.add_argument(
         "--daemon",
@@ -1195,6 +1212,27 @@ def main() -> int:
             tick = runtime.model_idle_tick()
             print(json.dumps(tick.to_dict(), indent=2, sort_keys=True))
             return 0 if tick.model_cognition.get("valid") else 1
+        finally:
+            runtime.close()
+
+    # Phase 19 Stage 19.3 — single-process self-state tick
+    if args.self_state_tick:
+        runtime = build_runtime(config_override=args.config_override)
+        session_id = None if args.new_session else args.self_state_tick_session_id
+        try:
+            runtime.start(session_id=session_id)
+            # Transition operational autonomy runner from planned → running
+            # before firing ticks. max_ticks=0 means unlimited budget.
+            runtime.start_operational_autonomy(max_ticks=0)
+            ticks = []
+            for i in range(args.self_state_tick_count):
+                tick = runtime.model_self_state_tick(trigger="cli_self_state_tick")
+                ticks.append(tick.to_dict())
+            if len(ticks) == 1:
+                print(json.dumps(ticks[0], indent=2, sort_keys=True))
+            else:
+                print(json.dumps(ticks, indent=2, sort_keys=True))
+            return 0
         finally:
             runtime.close()
 
