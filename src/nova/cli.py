@@ -428,6 +428,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="phase18-closure-eval",
         help="Session id used by --phase18-eval-live.",
     )
+    # Phase 20 Stage 20.1 — tick quality analysis
+    parser.add_argument(
+        "--tick-analysis",
+        action="store_true",
+        help="Analyze accumulated self-state tick history and heartbeat quality.",
+    )
     # Phase 19 Stage 19.3 — autonomous self-state tick (single-process, non-daemon)
     parser.add_argument(
         "--self-state-tick",
@@ -1214,6 +1220,30 @@ def main() -> int:
             return 0 if tick.model_cognition.get("valid") else 1
         finally:
             runtime.close()
+
+    # Phase 20 Stage 20.1 — tick quality analysis (no model needed)
+    if args.tick_analysis:
+        from nova.eval.tick_analysis import TickHistoryAnalyzer
+        from nova.agent.heartbeat import HeartbeatStore, SelfModelProposalStore
+
+        components = build_memory_components(config_override=args.config_override)
+        data_dir = components["data_dir"]
+        log_dir = components["log_dir"]
+        trace_dir = log_dir / "traces"
+
+        heartbeat_store = HeartbeatStore(data_dir / "heartbeats")
+        proposal_store = SelfModelProposalStore(data_dir / "self_state")
+
+        analyzer = TickHistoryAnalyzer(
+            trace_dir=trace_dir,
+            heartbeat_store=heartbeat_store,
+            proposal_store=proposal_store,
+        )
+        report = analyzer.analyze()
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        if report.reasons:
+            return 1
+        return 0
 
     # Phase 19 Stage 19.3 — single-process self-state tick
     if args.self_state_tick:
