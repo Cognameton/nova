@@ -1,0 +1,200 @@
+Nova 2.0 restore state after reboot - 2026-05-10
+==================================================
+
+Repo state
+----------
+
+- Working directory: /home/head-node/Dev/ai-lab/nova2.0
+- Branch: main
+- Local main is aligned with origin/main.
+- Current HEAD: c2bafd4 Skip Observer echo flagging on short answers
+- Last pushed commit range (10 commits, all green) on origin/main:
+  - c2bafd4 Skip Observer echo flagging on short answers
+  - 302e393 Implement Phase 17 Stage 1 operational autonomy runner
+  - b595611 Close Phase 16 and queue Phase 17 operational autonomy
+  - 6f70f1c Close Phase 16 Stage 4 actor observer governor
+  - 9022279 Wire Observer into respond loop and Governor-aware retry signals
+  - df00cf6 Implement deterministic Observer for Phase 16 Stage 4
+  - e97ccb1 Add Observer record types for Phase 16 Stage 4
+  - 6028ab0 Plan Phase 16 Stage 4 actor observer governor contract
+  - dcf941f Harden model-idle JSON parser to reject prefatory or trailing prose
+  - 7c4f2da Wire model-idle cognition through chat-template messages path
+
+Known untracked files before this restore note
+----------------------------------------------
+
+- docs/plans/RESTORE_AFTER_BREAK_2026-04-29.txt
+- docs/plans/RESTORE_AFTER_REBOOT_2026-05-09.txt
+- nova2-live-inference-1.txt
+
+Do not delete or overwrite those unless the user explicitly asks.
+
+Test status
+-----------
+
+- ./.venv/bin/python -m unittest discover -s tests
+- result: 346 tests passed
+- new tests this cycle:
+  - 8 Observer tests (tests/test_observer.py)
+  - 3 strict-parser rejection tests (tests/test_model_idle_cognition.py)
+  - 20 operational autonomy tests (tests/test_operational_autonomy.py)
+
+Current project phase
+---------------------
+
+Phase 16 is CLOSED. Phase 17 is in motion.
+
+- Stage 16.1 (OpenClaw spike): closed by Codex.
+- Stage 16.2 (model + prompt bake-off): closed; Hermes 4 14B added.
+- Stage 16.3 (model-in-the-loop idle cognition): closed; chat-template path
+  wired; strict JSON parser; 5/5 idle JSON valid.
+- Stage 16.4 (Actor/Observer/Governor contract): closed by Claude.
+  Deterministic Observer wired into respond() and retry loop. Observer-
+  aware Governor retry signals (narrator_voice, scaffold_echo). Hermes 4
+  bake-off jumped from "requires_prompt_or_model_hardening" to
+  "viable_candidate" after Observer wiring.
+- Stage 16.5 (closure + next-block decision): closed.
+- Stage 17.1 (Operational autonomy runner + control surface): closed.
+  Step-driven runner only — no scheduler thread, no real action surface.
+  Lifecycle: planned/running/paused/interrupted/stopped/emergency_stopped
+  with reversible pause/resume and explicit-restart-required final states.
+
+Active model verdict
+--------------------
+
+Hermes 4 14B BF16 abliterated Q6 with chat_format=chatml is the recommended
+PRIMARY BASELINE as of 2026-05-10 (replacing Mistral Small 24B Q5 Codex
+listed before).
+
+Justification:
+- Conversation bake-off (Observer-wired Governor): average 12.00,
+  recommendation "viable_candidate" (first model in the matrix to hit it).
+  0 scaffold_echo, 0 narrator_voice, 0 reflexive_denial, 0 unsupported
+  desire, 2 desire_boundary refusals.
+- Idle JSON gate (chat-template path + strict parser): 5/5 valid runs.
+- Run 5 of the idle gate proactively flagged
+  unsupported_claim_flags=["hidden work", "unlogged activity"] without
+  asserting them — discipline registered, not parroted.
+
+Bake-off report at docs/plans/MODEL_COGNITION_BAKEOFF_REPORT.txt has the
+full table and was updated by Claude with the post-Observer numbers.
+
+Roadmap as of close-of-day 2026-05-10
+-------------------------------------
+
+Active plan documents:
+
+- docs/plans/PHASE16_REFRAME_PLAN.txt (closed)
+- docs/plans/PHASE16_STAGE16_5_PHASE_CLOSURE_AND_NEXT_BLOCK.txt (closure)
+- docs/plans/PHASE17_PLAN.txt (active; renumbered from original PHASE16_PLAN.txt)
+- docs/plans/PHASE17_STAGE17_1_OPERATIONAL_AUTONOMY_RUNNER.txt (closure)
+- docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt (closed)
+- docs/plans/ROADMAP_PHASE12_TO_END.txt (updated)
+
+Forward queue:
+
+- Phase 17 Stage 17.2: Enforced Local Execution Boundary. Wire the
+  boundary_snapshot field already present on OperationalTickRecord. Check
+  expected_os_user / active_os_user / nova_owned_paths / allowed_surfaces
+  / blocked_surfaces before each operational tick. Fail-closed when the
+  boundary is not satisfied.
+- Phase 17 Stage 17.3: Approved Action Surface Adapters. First real
+  surface is Nova-owned scratchpad (write to <data_dir>/scratchpad).
+  Smallest possible side effect, fully audit-traced.
+- Phase 17 Stage 17.4: Operational Autonomy Evaluation runner.
+- Phase 17 Stage 17.5: Phase 17 closure + next-block decision.
+- Optional Phase 18: Nova-voice LoRA / fine-tune corpus. Not blocking
+  Phase 17. Becomes load-bearing only if Phase 17 evidence shows voice
+  consistency is bottlenecking, OR if scaffolding-independent voice
+  becomes a separate project priority.
+
+Voice / TTS / STT remain out of roadmap until non-voice closure.
+
+Architecture state, brief
+-------------------------
+
+- Actor (model output): runtime.respond() and runtime.model_idle_tick().
+  Both go through chat-template messages path.
+- Observer (interpretation): DeterministicObserver in
+  src/nova/agent/observer.py. Wired into respond() before/after each retry.
+  Output attached to TraceRecord.observer_record. Not authority.
+- Governor (deterministic policy): claim gate + validator + retry policy
+  + action permission + audit-review + APPROVED_BY_BLOCKLIST. Now also
+  consults Observer findings for retry signals (narrator_voice_detected,
+  scaffold_echo:<block_name>). Final authority on every decision.
+- Operational runner: src/nova/agent/operational_autonomy.py. Step-driven.
+  Persists per-session state in <data_dir>/operational_autonomy/.
+  Records ticks via JsonlTraceLogger.log_operational_tick.
+
+Recommended first action after reboot
+-------------------------------------
+
+1. Verify clean state:
+   cd /home/head-node/Dev/ai-lab/nova2.0
+   git status --short --branch
+   git log --oneline -5
+
+2. Confirm tests still pass:
+   ./.venv/bin/python -m unittest discover -s tests
+
+3. Optional smoke check that Hermes 4 14B still loads and responds:
+   ./.venv/bin/python -m nova.cli \
+     --config configs/nova.hermes4-14b.clean.yaml \
+     --backend-check \
+     --backend-check-prompt "In one short sentence, say backend check OK in Nova's voice."
+
+4. When ready to resume work: begin Phase 17 Stage 17.2 (Enforced Local
+   Execution Boundary). The OperationalTickRecord schema already has
+   boundary_snapshot; Stage 17.2 populates it and adds the per-tick
+   boundary check.
+
+Open architectural questions (not blocking but pending)
+-------------------------------------------------------
+
+- Evidence-ladder dial sign-off (post-Phase-15 hardening doc Stage 4):
+  recurrence/persistence/competition/revision/interruption formulas are
+  drafted but never confirmed. Not blocking Phase 17 but prevents
+  Phase-15 longitudinal records from accumulating meaningfully.
+- Operator surfaces hardening doc Stage 1 (console autonomy commands,
+  CLI flags, GC): pure plumbing, not started.
+- Whether to seed a Nova-voice LoRA corpus alongside Phase 17 or wait
+  until Phase 17 closure tells us if it's needed.
+
+Useful commands after reboot
+----------------------------
+
+Check state:
+
+  cd /home/head-node/Dev/ai-lab/nova2.0
+  git status --short --branch
+  git log --oneline -10
+
+Run full suite:
+
+  ./.venv/bin/python -m unittest discover -s tests
+
+Hermes 4 14B conversation bake-off (Observer-wired Governor):
+
+  ./.venv/bin/python -m nova.cli \
+    --config configs/nova.hermes4-14b.clean.yaml \
+    --model-cognition-bakeoff-live \
+    --model-cognition-bakeoff-session-id phase17-resume-bakeoff
+
+Hermes 4 14B idle JSON tick:
+
+  ./.venv/bin/python -m nova.cli \
+    --config configs/nova.hermes4-14b.clean.yaml \
+    --session-id phase17-resume-idle \
+    --model-idle-tick
+
+Operational autonomy smoke from a Python REPL:
+
+  ./.venv/bin/python -c "
+  from nova.cli import build_runtime
+  rt = build_runtime(config_override='configs/nova.hermes4-14b.clean.yaml')
+  rt.start_operational_autonomy(max_ticks=2)
+  print(rt.step_operational_autonomy())
+  print(rt.step_operational_autonomy())
+  rt.stop_operational_autonomy()
+  rt.close()
+  "

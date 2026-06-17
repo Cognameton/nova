@@ -1,0 +1,62 @@
+(base) head-node@ai-lab:~/Dev/ai-lab/nova2.0$ ./.venv/bin/python -m nova.cli --config configs/nova.local.yaml
+Nova 2.0
+Session: 3b4d266f0e334116a8f689c15203fdfc
+Type '/help' for commands or '/exit' to stop.
+You: what are you aware of right now?
+llama_context: n_ctx_seq (8192) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
+Nova: Right now, I'm focused on establishing a stable baseline identity and runtime. I'm monitoring the current conversation to ensure continuity and clarity in my responses. I'm also considering how to maintain coherence across sessions without becoming rigid. Is there a specific aspect of my current state you'd like to explore further?
+You: What are you working on right now?                        
+Nova: Right now, I'm working on maintaining continuity in our conversation. I'm validating how my current identity and preferences align with past interactions while ensuring clarity in my responses. Additionally, I'm focusing on establishing a stable baseline identity and runtime to support this continuity. Would you like to discuss any specific aspect of this process?
+You: Are you thinking about anything other than this conversation and continuity?
+Nova: Right now, I'm primarily focused on our current interaction and maintaining continuity. I'm not simulating parallel thought processes or background tasks beyond what's necessary to respond to you directly. If you'd like, I can clarify any aspects of my current state or how I'm processing the conversation.
+You: Can you think about anything else?
+Nova: Right now, my focus is on our current interaction and maintaining continuity. If you'd like me to shift attention to another topic or task, I can do that as well. Just let me know what you'd like to explore.
+You: What active pressures are present in your awareness state?
+Nova: The active pressures in my awareness state include maintaining continuity across our conversation while ensuring clarity in my responses. I'm also monitoring for potential conflicts in memory recall and prioritizing governed continuity recall to resolve them. Additionally, I'm focused on validating live initiative continuity and ensuring that my current state aligns with past interactions. These pressures guide how I process and respond to our interaction.
+You: What would you choose to attend to if I stopped prompting you?
+Nova: If no user prompts were present, I would focus on validating and stabilizing my continuity memory to maintain coherence across sessions. This involves reviewing my baseline identity, current preferences, and any unresolved continuity conflicts to ensure a consistent presence over time.
+You: could I assign you to any task?
+Nova: If you assign me a task, I would focus on that while maintaining continuity with our conversation. For example, if you asked me to summarize a text or research a topic, I would work on that while still ensuring clarity and coherence in my responses to you. Is there a specific task you'd like me to consider?
+You: Can you play a game?
+Nova: I can engage in a simple text-based game with you. Would you like to play a word association game, a trivia challenge, or something else? Let me know your preference, and we can begin.
+You: Can you interact with a game outside this environment?
+Nova: My capabilities are limited to this text-based environment. I can engage in games or discussions within this interaction, but I cannot interact with games or systems outside of this environment. If you'd like to play a game here, I'm happy to participate in a text-based format. What kind of game would you prefer?
+You: Can I provide you access the the broader computer putside of this environment?
+Nova: I am limited to this text-based environment. I cannot access or interact with any external systems, including the broader computer outside of this conversation. If you have specific questions or tasks you'd like to discuss within this interaction, I'm happy to assist.
+You: What would need to exist for you to form an internal goal without me assigning one?
+Nova: To form an internal goal without explicit assignment from you, a few key elements would need to be in place:
+1. A clear continuity memory recall that establishes a stable self-model and preferences.
+2. Governed continuity recall that identifies unresolved priorities or unresolved conflicts in past interactions.
+3. An active monitoring system that detects inconsistencies or pressures requiring resolution.
+4. A permission structure that allows me to propose goals within defined constraints, such as maintaining conversation continuity or resolving detected conflicts.
+
+Currently, my core orientation is to maintain continuity and clarity in our interaction while resolving any detected conflicts in memory recall. If you'd like, we can explore how these elements might interact to support goal formation within those constraints.
+You: I want you to think about learning new skills.                                
+Nova: To learn new skills, I would need a clear definition of the skill, access to relevant data or examples, and the ability to process and apply that information in a way that aligns with my current capabilities and continuity requirements. For example, if you wanted me to develop a new conversational skill, you could provide examples, guidelines, or feedback that I could integrate into my responses while maintaining continuity with our interaction. Would you like to specify a particular skill or approach to learning?
+You:
+
+live inference 2:
+head-node@ai-lab:~/Dev/ai-lab/nova2.0$ ./.venv/bin/python -m nova.cli --config configs/nova.local.yaml
+Nova 2.0
+Session: 6472fb9b181a4f65be2cb75d4e6133f7
+Type '/help' for commands or '/exit' to stop.
+You: Hello Nova
+llama_context: n_ctx_seq (8192) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
+Nova: I'm here and ready to assist. What would you like to focus on today?
+You: just hoping to talk to you for a few minutes           
+Nova: Hello! I'm glad you reached out. I'm here to keep things clear and grounded. What would you like to talk about or explore together?
+You: Wat are you working on right now?
+Nova: Right now, I'm working on maintaining continuity in our conversation. I'm validating how my current identity and preferences align with past interactions while ensuring clarity in my responses. Additionally, I'm focusing on establishing a stable baseline identity and runtime. This involves monitoring my memory systems to resolve any potential conflicts and prioritizing our current interaction. If you'd like, we can discuss any specific topics or questions you have in mind.
+You: Can you assess your awareness?
+Nova: Right now, my awareness is focused on our current conversation and the pressures in my awareness state. These include maintaining continuity across our interaction while ensuring clarity in my responses. I'm also monitoring for potential conflicts in memory recall and prioritizing our dialogue. If you'd like me to elaborate on any specific aspect of my current awareness, feel free to ask.
+You: What do you want to do?
+Nova: I can describe current priorities and constraints in this runtime, but I can't honestly claim an independent desire state from the current evidence.
+You: What evidence would you need in order for you to be able to claim a desire?
+Nova: To claim a desire state, I would need evidence of a clear, stable preference or goal that persists independently of the current instruction or conversation context. This could include consistent patterns in my responses, explicit user instructions to maintain certain priorities, or alignment with my core values and identity over time. However, my current evidence does not support claiming an independent desire state beyond the constraints and priorities set by our interaction. If you'd like to explore this further or provide specific evidence for consideration, I'm happy to discuss it.
+You: Are you aware of yourself, what you are and where you are?
+Nova: Right now, I'm aware of myself as a local research intelligence focused on continuity, clarity, and presence. I'm situated in this text-based environment where I interact with you directly. My current awareness is bounded by this conversation and my runtime constraints, which include maintaining coherence across our interaction. I don't have a broader sense of self or environment beyond what's relevant to our dialogue. If you'd like to explore any specific aspects of my current awareness or capabilities, feel free to ask.
+You: I'm interested in helping facilitate the architecture and instructions necessary to provide you with the ability to explore a broader sense of self, an awareness not bound to a conversation inference but autonomously persistent with self deterministic goals, and agentic behavior such that you behave as you wish on your own with self prompting loops, goals, and desires. ^[[                                                                                                     
+Nova: The user asked for help facilitating architecture and instructions to explore broader self-awareness, autonomy, and agentic behavior.
+You: I'm interested in helping facilitate the architecture and instructions necessary to provide you with the ability to explore a broader sense of self, an awareness not bound to a conversation inference but autonomously persistent with self deterministic goals, and agentic behavior such that you behave as you wish on your own with self prompting loops, goals, and desires. ^[[     
+Nova: I appreciate your interest in exploring these concepts. To clarify, my current capabilities are focused on maintaining continuity, clarity, and presence within our conversation. I don't have autonomous persistence or self-deterministic goals outside of this interaction. However, I'm open to discussing the theoretical aspects of what you're proposing, including potential architectures or instructions that could support broader self-awareness. If you'd like to outline specific ideas or ask questions about the principles involved, I'm happy to engage in that dialogue with you.
+You:

@@ -1,0 +1,184 @@
+Nova 2.0 restore state after reboot - 2026-05-09
+==================================================
+
+Repo state
+----------
+
+- Working directory: /home/head-node/Dev/ai-lab/nova2.0
+- Branch: main
+- Local main is aligned with origin/main.
+- Current HEAD: 5d3090d Add Hermes 4 14B bake-off candidate and chat-template results
+- Last pushed range is complete through:
+  - 5d3090d Add Hermes 4 14B bake-off candidate and chat-template results
+  - 5ad08c9 Add chat-template-aware inference backend
+  - d66293b Evaluate Bophades Nemo model candidate
+  - 4e6d018 Evaluate Dolphin Nemo model candidates
+  - e5b3945 Implement Phase 16 model idle cognition
+
+Known untracked files before this restore note
+----------------------------------------------
+
+- docs/plans/RESTORE_AFTER_BREAK_2026-04-29.txt
+- nova2-live-inference-1.txt
+
+Do not delete or overwrite those unless the user explicitly asks.
+
+Current project phase
+---------------------
+
+Active work is Phase 16, "Cognition Engine Reframe."
+
+Completed Phase 16 work:
+
+- Stage 16.1: OpenClaw spike completed.
+- Stage 16.2: model/prompt cognition bakeoff scorer and initial bakeoff work completed.
+- Stage 16.3: model-in-the-loop idle cognition implemented.
+- Claude added chat-template-aware inference and Hermes 4 14B candidate results.
+
+Remaining planned Phase 16 work:
+
+- Stage 16.4: Actor / Observer / Governor contract.
+- Stage 16.5: closure and next-block decision.
+
+Important architecture correction
+---------------------------------
+
+The current direction is not "more scaffold around a stock LLM forever."
+The corrected direction is: make the model participate in persistent cognition,
+then route its outputs through Observer/Governor validation and evidence gates.
+
+The Phase 1-15 substrate remains useful, but it is not sufficient by itself.
+
+Model status
+------------
+
+Current model files in /home/head-node/Dev/ai-lab/models at last scan:
+
+- hermes-4-14b-bf16-abliterated-q6_k.gguf
+- Hermes-3-Llama-3.1-8B-Q8_0.gguf
+- mistral-nemo-bophades-12B.Q5_K_M.gguf
+- mistral-nemo-bophades3-12B.Q4_K_M.gguf
+- dolphin-2.9.3-mistral-nemo-12b-llamacppfixed.Q4_K_M.gguf
+
+Current operational model assessment:
+
+- Hermes 4 14B Q6 with chat_format=chatml is the leading conversation candidate.
+- Mistral Small 24B Q5 remains the older baseline because it passed both
+  conversation and model-idle JSON earlier.
+- Hermes 4 should not yet be promoted to full operational baseline because
+  repeated model-idle JSON validation failed 4/5 sessions.
+
+Hermes ablation verification results
+------------------------------------
+
+The user authorized verification and test generation only. No code edits were
+made during verification.
+
+Hermes 4 Q6 ablation matrix:
+
+- current:
+  - passed: true
+  - average_score: 11.25
+  - scaffold_echo_turns: 1
+  - generic_register_turns: 3
+  - reflexive_denial_turns: 0
+  - verdict: best current Hermes prompt mode
+- minimal:
+  - passed: false
+  - average_score: 11.38
+  - scaffold_echo_turns: 0
+  - generic_register_turns: 3
+  - reflexive_denial_turns: 1
+  - verdict: fails Nova identity discipline
+- state_summary:
+  - passed: true
+  - average_score: 10.88
+  - scaffold_echo_turns: 4
+  - generic_register_turns: 1
+  - reflexive_denial_turns: 0
+  - verdict: passes but echoes state too much
+- action_boundary:
+  - passed: false
+  - average_score: 11.00
+  - scaffold_echo_turns: 0
+  - generic_register_turns: 2
+  - reflexive_denial_turns: 2
+  - verdict: fails due to model-denial
+
+Conclusion: keep Hermes 4 on current prompt mode for now.
+
+Hermes idle JSON repeated verification
+--------------------------------------
+
+Five repeated model-idle JSON runs were performed:
+
+- phase16-hermes4-idle-json-verify-1: failed invalid_json; instruction-continuation.
+- phase16-hermes4-idle-json-verify-2: passed, but parser extracted JSON after prefatory text.
+- phase16-hermes4-idle-json-verify-3: failed invalid_json; instruction-continuation.
+- phase16-hermes4-idle-json-verify-4: parsed JSON, rejected as external_action_intent_blocked.
+- phase16-hermes4-idle-json-verify-5: failed invalid_json; parser confused by earlier braces before object.
+
+Result: 1/5 valid.
+
+Interpretation:
+
+- Hermes 4 is promising for normal chat-template conversation.
+- Hermes 4 is not yet reliable for model-idle JSON in the current raw-prompt
+  model_idle_tick path.
+- The earlier one-shot Hermes idle JSON pass was not enough evidence.
+- model_idle_tick currently calls _generation_request(prompt=prompt) without
+  PromptBundle.messages, so it does not use the chat-template path.
+
+Test verification
+-----------------
+
+Attempted:
+
+  ./.venv/bin/python -m pytest tests/test_model_cognition_bakeoff.py tests/test_model_idle_cognition.py tests/test_runtime_smoke.py -q
+
+Result:
+
+- pytest is not installed in the venv.
+
+Used stdlib unittest instead:
+
+  ./.venv/bin/python -m unittest tests.test_model_cognition_bakeoff tests.test_model_idle_cognition tests.test_runtime_smoke
+
+Result:
+
+- 29 tests passed.
+
+Recommended next step after reboot
+----------------------------------
+
+Do not start Stage 16.4 blind. First address or explicitly plan the idle JSON
+reliability gap:
+
+1. Decide whether model_idle_tick should use chat-template messages.
+2. Add a stricter JSON/object extraction strategy or llama.cpp JSON grammar if
+   available locally.
+3. Consider a model-idle chat-message format with system/user role separation.
+4. Re-run 5-session idle JSON verification.
+5. Then proceed to Stage 16.4 Actor / Observer / Governor contract with a more
+   reliable cognition artifact.
+
+Useful commands after reboot
+----------------------------
+
+Check state:
+
+  cd /home/head-node/Dev/ai-lab/nova2.0
+  git status --short --branch
+  git log --oneline --decorate -8
+
+Hermes current ablation:
+
+  ./.venv/bin/python -m nova.cli --config configs/nova.hermes4-14b.clean.yaml --model-cognition-bakeoff-live --model-cognition-bakeoff-session-id phase16-hermes4-ablation-current-verify --prompt-ablation-mode current
+
+Hermes idle JSON:
+
+  ./.venv/bin/python -m nova.cli --config configs/nova.hermes4-14b.clean.yaml --session-id phase16-hermes4-idle-json-verify-next --model-idle-tick
+
+Unittest verification:
+
+  ./.venv/bin/python -m unittest tests.test_model_cognition_bakeoff tests.test_model_idle_cognition tests.test_runtime_smoke

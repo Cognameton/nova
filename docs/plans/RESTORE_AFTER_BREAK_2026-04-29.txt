@@ -1,0 +1,158 @@
+RESTORE POINT
+=============
+
+Date:
+- 2026-04-29
+
+Purpose:
+- Clean handoff point before an extended break.
+- Restore the exact Nova phase/stage context and git state without
+  re-deriving it.
+
+
+CURRENT GIT / PHASE STATE
+-------------------------
+
+Branch:
+- `main`
+
+Exact commit at break:
+- `7577c26423bfc3ddcefb9356ef8a7c903cc69637`
+
+Latest committed progression:
+- `7577c26` Close Phase 8 with validated closure review
+- `7ebf852` Implement Phase 8 Stage 4 self-model evaluation
+- `cdb12e2` Implement Phase 8 Stage 3 conflict negotiation
+- `120daff` Implement Phase 8 Stage 2 identity history visibility
+- `832447c` Implement Phase 8 Stage 1 self-model revision rules
+
+Worktree status at break point:
+- clean
+
+Current phase:
+- Phase 8 closed
+
+Current stage:
+- Stage 8.5 complete
+
+Next phase target:
+- Phase 9 planning
+
+
+WHAT IS ALREADY DONE
+--------------------
+
+Phases 1 through 7:
+- closed and committed separately
+
+Phase 8:
+- closed and committed separately
+
+Phase 8 achievements:
+- explicit revision rules for self-model claims
+- append-only identity-history persistence
+- bounded contradiction and uncertainty negotiation
+- live self-model evaluation with revision-history visibility
+- validated phase closure review
+
+
+PHASE 8 VALIDATION ANCHORS
+--------------------------
+
+Phase plan:
+- `docs/plans/PHASE8_PLAN.txt`
+
+Closure note:
+- `docs/plans/PHASE8_STAGE8_5_PHASE_CLOSURE.txt`
+
+Stage 8.4 live evaluation note:
+- `docs/plans/PHASE8_STAGE8_4_LIVE_SELF_MODEL_EVALUATION.txt`
+
+Live rerun configs:
+- `configs/nova.phase8.selfmodeleval.yaml`
+- `configs/nova.phase8.selfmodeleval.rerun.yaml`
+
+Final clean live evidence:
+- `data/phase8-self-model-eval-rerun/logs/stage8_self_model_validation.json`
+- `data/phase8-self-model-eval-rerun/memory/autobiographical.jsonl`
+- `data/phase8-self-model-eval-rerun/logs/traces/stage8-selfmodel-live-a.identity-history.jsonl`
+- `data/phase8-self-model-eval-rerun/logs/traces/stage8-selfmodel-live-d.identity-history.jsonl`
+
+Latest full test status before break:
+- `170 tests OK`
+
+
+CURRENT DISCUSSION / DECISION POINT
+-----------------------------------
+
+We explicitly paused after closing Phase 8.
+
+Immediate next work:
+- Phase 9 planning
+
+Roadmap context:
+- Phase 7 established bounded motive-state and evidence-gated self-claims.
+- Phase 8 established revision-aware self-model continuity.
+- Phase 9 should build the next architectural layer on top of that without
+  collapsing revision discipline, traceability, or operator control.
+
+Standing naming rule:
+- `stage9.1` means Phase 9, Stage 1
+- do not drift into forms like “Phase 9 Stage 91”
+
+Standing git-cycle shorthand:
+- `git cycle` means exactly:
+  - `fetch`
+  - `commit`
+  - `push`
+
+
+NEXT STAGE TARGET
+-----------------
+
+Immediate objective:
+- define Phase 9 in repo terms before implementing code
+
+Expected focus:
+1. restate the eventual end goal against the current build position
+2. define how Phase 9 advances persistent agency without pretending Phase 10
+   awareness work is already present
+3. preserve the Phase 8 revision/identity-history discipline as a hard
+   constraint
+4. write the official `PHASE9_PLAN.txt`
+5. then begin Stage 9.1 only after the plan is explicit
+
+Restrictions:
+- do not skip planning and jump directly into implementation
+- do not collapse persistent agency into uncontrolled autonomy
+- do not lose Phase 7 claim-honesty or Phase 8 revision-history guarantees
+- keep git cycles stage-bounded
+
+
+RECOMMENDED FIRST ACTION AFTER RESTORE
+--------------------------------------
+
+1. Confirm clean worktree:
+- `git status --short`
+
+2. Reconfirm current commit and recent progression:
+- `git rev-parse HEAD`
+- `git log --oneline -5`
+
+3. Re-open the Phase 8 closure and roadmap notes:
+- `docs/plans/PHASE8_STAGE8_5_PHASE_CLOSURE.txt`
+- `docs/plans/ROADMAP_FROM_PHASE7.txt`
+
+4. Begin Phase 9 by writing:
+- `docs/plans/PHASE9_PLAN.txt`
+
+
+RESUME SENTENCE
+---------------
+
+Resume from:
+- “Phase 8 is closed; begin Phase 9 planning.”
+
+Immediate objective:
+- restate the Phase 9 mission and stage sequence in repo form before any
+  implementation work begins.

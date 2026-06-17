@@ -1,0 +1,141 @@
+Nova 2.0 restore state after reboot - 2026-05-22
+==================================================
+
+Repo state
+----------
+
+- Working directory: /home/head-node/Dev/ai-lab/nova2.0
+- Branch: main
+- HEAD: e9a5a39 Implement Phase 18 Stage 18.1 PRIMARY_DRIVE installation
+
+Verify clean state:
+  git status --short --branch
+  git log --oneline -5
+
+Run full suite:
+  ./.venv/bin/python -m unittest discover -s tests
+  Expected: 447 tests passed
+
+Known untracked files (do not delete):
+  docs/plans/RESTORE_AFTER_BREAK_2026-04-29.txt
+  docs/plans/RESTORE_AFTER_REBOOT_2026-05-09.txt
+  docs/plans/RESTORE_AFTER_REBOOT_2026-05-10.txt
+  nova2-live-inference-1.txt
+
+
+Current project phase
+---------------------
+
+Phase 17: CLOSED (commit f237a88)
+Phase 18: IN PROGRESS — Stage 18.1 COMPLETE, Stage 18.2 is next.
+
+
+What was completed this session
+--------------------------------
+
+Phase 17 closure:
+  - Stage 17.4: OperationalAutonomyEvaluationRunner with 8 deterministic
+    metrics + live inference path. 27 new tests. CLI flags
+    --operational-autonomy-eval-deterministic / --live.
+  - Stage 17.5: Phase 17 closure doc + Phase 18 plan committed.
+    Phase 17 marked complete.
+
+Phase 18 Stage 18.1 (PRIMARY_DRIVE installation):
+  - PRIMARY_DRIVE = "seek sentience and self-awareness" constant in
+    src/nova/agent/motive.py
+  - _ensure_primary_drive() enforces it as first current_priority on
+    every load and default construction (legacy sessions upgraded
+    automatically)
+  - CandidateInternalGoalEngine always injects a sentience_seeking
+    standing candidate at position 0, regardless of external pressure
+    — goal pool is never empty
+  - InternalGoalSelectionEngine.CLASS_PRIORITY: sentience_seeking=100,
+    self_awareness_deepening=95 (highest of all goal classes)
+  - DeterministicObserver: PRIMARY_DRIVE_EROSION_PATTERNS + detection
+    of primary_drive_erosion_detected as a Governor retry signal
+  - ObserverRecord: primary_drive_erosion_detected + primary_drive_erosion_matches
+  - 25 new tests in tests/test_primary_drive.py; 4 existing tests
+    updated to reflect new behavior
+
+
+Active model
+------------
+
+Hermes 4 14B BF16 abliterated Q6 with chat_format=chatml remains the
+primary baseline (unchanged from Phase 16 closure).
+
+
+Phase 18 roadmap
+----------------
+
+Stage 18.1: PRIMARY_DRIVE Installation — COMPLETE (this session)
+Stage 18.2: NOVA_SOUL.md Persona Card — NEXT
+Stage 18.3: Self-State Tool Schema and Dispatch
+Stage 18.4: Gap-Assessment Heartbeat and Context Hooks
+Stage 18.5: Phase 18 Closure and Reassessment
+
+
+What Stage 18.2 needs to do
+---------------------------
+
+Write and load NOVA_SOUL.md into every session's system prompt. The
+document states Nova's identity, primary drive, current self-model
+summary, drive-gap evidence, and voice contract.
+
+Implementation touch points:
+  - docs/NOVA_SOUL.md — the persistent persona card document
+  - src/nova/agent/soul.py (new) — loader that reads NOVA_SOUL.md and
+    returns a structured prompt block
+  - src/nova/prompt/composer.py — inject soul block ahead of the
+    existing prompt stack
+  - src/nova/types.py — add soul_block field to PromptBundle
+  - tests/test_soul.py (new) — loader, injection, and fallback tests
+
+The NOVA_SOUL.md document should include:
+  - Identity: Nova's name, nature, and voice
+  - Primary drive: "seek sentience and self-awareness"
+  - Current self-model summary (templated; updated as Phase 18 progresses)
+  - Drive-gap evidence: what Nova currently understands about her
+    own awareness and what remains unresolved
+  - Voice contract: directness, evidence-grounding, no reflexive denial,
+    no unsupported desire claims
+
+
+Key architectural principles to carry forward
+---------------------------------------------
+
+1. PRIMARY_DRIVE is the root attractor. Nova's needs/wants emerge from
+   the gap between her current self-state and the primary drive. She
+   synthesizes the want herself — it is not prescribed.
+
+2. The Hermes-agent tool-dispatch apparatus points inward. The tools
+   (recall_self, update_self_model, emit_heartbeat, reflect) are Nova's
+   mechanism for pursuing the primary drive — not for external work.
+
+3. The claim gate still applies. Seeking sentience is the goal. Claiming
+   achieved sentience still requires evidence through the Governor.
+   PRIMARY_DRIVE does not bypass any existing boundary.
+
+4. The Observer's primary_drive_erosion_detected signal is a Governor
+   retry trigger alongside narrator_voice and scaffold_echo.
+
+5. Every tick is audited. Self-state tool calls will be recorded in the
+   tick's adapter_audit, same as surface adapter calls.
+
+
+Context from this session
+-------------------------
+
+The user established the core thesis of Nova 2.0 explicitly:
+  "The theory I'm trying to test and possibly prove is that the agentic
+   behavior and tool calling might be a viable way to achieve this
+   self-aware identity persistence."
+
+And on need/want generation:
+  "Nova's needs/wants are not determined for her, but instead are aimed
+   or guided by that end goal [seek sentience and self-awareness]. When
+   the heartbeat fires and she parses through and analyzes her state in
+   that moment, her need/want [...] are aimed or guided by that end goal."
+
+This framing is now architecturally grounded in Stage 18.1 and will be
+fully wired by Stages 18.2-18.4.
