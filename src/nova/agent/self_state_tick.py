@@ -25,6 +25,9 @@ _SYSTEM = "\n".join(
         "- Output the JSON object only. No prose before or after, no code fences, no commentary.",
         "- For recall_self or reflect: arguments must be {}.",
         "- For emit_heartbeat: arguments must include 'observation' (string, required).",
+        "  The observation MUST be specific and novel — do not restate or paraphrase any",
+        "  phrase from Recent heartbeat observations listed below. Introduce genuinely new",
+        "  evidence or perspective grounded in the current self-context.",
         "  Optional: 'gap_assessment' (string), 'next_inquiry' (string).",
         "- For update_self_model: arguments must include 'field', 'value', 'rationale'.",
         "  field must be one of: identity_summary, current_focus, active_questions,",
@@ -97,10 +100,10 @@ class SelfStateTickEngine:
         ]
         if recent_heartbeats:
             parts.append("")
-            parts.append("Recent heartbeat observations:")
+            parts.append("Recent heartbeat observations (already recorded — do not repeat these phrases):")
             for hb in recent_heartbeats[-3:]:
                 ts = hb.timestamp[:19] if hb.timestamp else "?"
-                obs = hb.observation[:80] if hb.observation else "(no observation)"
+                obs = hb.observation[:120] if hb.observation else "(no observation)"
                 parts.append(f"  [{ts}] {obs}")
         return "\n".join(parts)
 
