@@ -1,0 +1,75 @@
+PHASE 20 STAGE 20.3 — EXTENDED DAEMON OVERNIGHT RUN
+=====================================================
+
+Goal
+----
+Run Nova under the Qwen 3 14B config (nova.qwen3-14b.phase20.yaml) for an
+extended autonomous period (target: 50–100 ticks) to observe whether:
+
+  1. Echo rate drops from the cold-start value (1.0) as heartbeat history
+     accumulates and the self-context block diversifies.
+  2. Tool diversity increases beyond the initial emit_heartbeat-only baseline
+     as Nova gains evidence to support recall_self, reflect, propose_*, or
+     update_self_model calls.
+  3. Heartbeat quality (0–4 score) remains stable at ≥ 3.5 average.
+  4. No parser failures, stuck ticks, or daemon crashes over an 8-hour window.
+
+These measurements determine whether Nova's self-loop is convergent or
+degenerative at scale — the last gate before live testing begins.
+
+Prior state (entering Stage 20.3)
+----------------------------------
+  - 16 tick records across 4 sessions (phase20-qwen3-{debug,tick-1,2,3})
+  - 5 parse_ok ticks, 11 pre-fix parse failures (not counted in tool stats)
+  - echo_rate = 1.0 (expected: cold start, no history to differentiate)
+  - tool_distribution = {emit_heartbeat: 5} (expected: cold start)
+  - heartbeat avg quality = 3.8 / 4.0
+  - Phase 18 eval: VERIFIED on Qwen 3 (score 12.0)
+
+Daemon run parameters
+---------------------
+  Config:        configs/nova.qwen3-14b.phase20.yaml
+  Data dir:      ./data/phase20/qwen3-14b  (existing sessions continue)
+  Socket:        ./data/phase20/qwen3-14b/nova.sock
+  Session ID:    phase20-overnight-run-1
+  Tick interval: 300s (5 min)
+  Target ticks:  100  (~8.3 hours)
+  Log:           ./data/phase20/qwen3-14b/logs/daemon-overnight-1.log
+
+Start command:
+  nohup python -m nova.cli \
+    --config configs/nova.qwen3-14b.phase20.yaml \
+    --daemon \
+    --tick-interval 300 \
+    --daemon-session-id phase20-overnight-run-1 \
+    --daemon-socket ./data/phase20/qwen3-14b/nova.sock \
+    > ./data/phase20/qwen3-14b/logs/daemon-overnight-1.log 2>&1 &
+
+Analysis command (after run):
+  python -m nova.cli \
+    --config configs/nova.qwen3-14b.phase20.yaml \
+    --tick-analysis
+
+Pass criteria
+-------------
+  - ≥ 50 completed ticks (parse_ok)
+  - echo_rate < 0.7 (ideally < 0.5 by tick 50)
+  - tool_diversity ≥ 2 distinct tools
+  - heartbeat avg quality ≥ 3.5 / 4.0
+  - 0 daemon crashes
+
+Failure indicators requiring follow-up
+---------------------------------------
+  - echo_rate stays at 1.0 past 30 ticks → self-context injection not working
+    or recent heartbeats not being fed into tick build_messages()
+  - tool_diversity stays at 1 past 50 ticks → reconsider tick system prompt
+    or add forced-rotation hint every N ticks
+  - Parse failure rate > 10% → Qwen 3 diverging from JSON-only format;
+    may need stronger stop tokens or temperature reduction
+
+Phase 20 closure criteria
+--------------------------
+Stage 20.3 pass + a brief Stage 20.4 summary commit = Phase 20 closed.
+Phase 21 = live testing (real users, real sessions).
+
+Status: STARTED 2026-06-26
