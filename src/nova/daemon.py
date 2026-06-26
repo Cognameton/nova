@@ -85,6 +85,7 @@ class NovaDaemon:
         """Start the daemon: runtime, tick loop, socket server (blocking)."""
         self._started_at = datetime.now(timezone.utc).isoformat()
         self.runtime.start(session_id=self.session_id)
+        self.runtime.start_operational_autonomy(max_ticks=0)
 
         # Signal handlers can only be registered from the main thread.
         try:
