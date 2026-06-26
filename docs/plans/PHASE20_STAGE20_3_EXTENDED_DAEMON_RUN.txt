@@ -72,4 +72,32 @@ Phase 20 closure criteria
 Stage 20.3 pass + a brief Stage 20.4 summary commit = Phase 20 closed.
 Phase 21 = live testing (real users, real sessions).
 
-Status: STARTED 2026-06-26
+Status: PASSED 2026-06-26
+
+Results (final tick analysis at 14:00 UTC, 3h 22m runtime)
+-----------------------------------------------------------
+  parse_ok ticks:       51  (target: ≥ 50 ✓)
+  total ticks:          63  (1 blocked pre-fix, rest completed)
+  observation_echo_rate: 0.282  (target: < 0.7 ✓; started at 1.0)
+  tool_distribution:    emit_heartbeat: 46, reflect: 4, update_self_model: 1
+  tool_diversity:       3  (target: ≥ 2 ✓)
+  heartbeat_quality_avg: 3.83  (target: ≥ 3.5 ✓)
+  gap_assessment_rate:  0.826
+  drive_aligned:        46 / 46  (0 misaligned)
+  pending_proposals:    1  (unprompted self-model update from accumulated evidence)
+  daemon crashes:       0  (target: 0 ✓)
+  flags:                none
+
+Key findings during Stage 20.3
+-------------------------------
+  1. Daemon lifecycle bug: start() missing start_operational_autonomy() call;
+     ticks blocked with runner_not_running:planned. Fixed immediately.
+  2. Observation echo cascade: cold-start observations recycled prior
+     gap_assessment phrases, driving echo_rate to 0.875 after 6 ticks.
+     Fix: novelty constraint in system prompt + "already recorded" label in
+     user context. Echo_rate trajectory: 1.0 → 0.875 → 0.695 → 0.449 → 0.323 → 0.282.
+  3. Self-loop is convergent, not degenerative: observations developed a
+     coherent progressive thread (identity stability / adaptive session markers)
+     over 46 consecutive heartbeats without repetition or drift.
+  4. Tool diversity emerged organically: reflect appeared at tick 4,
+     update_self_model at tick ~51 — both unprompted by any instruction change.

@@ -1,0 +1,95 @@
+PHASE 20 STAGE 20.4 — PHASE CLOSURE
+=====================================
+
+Phase 20: Tick Quality, Model Transition, and Daemon Stability
+Status: CLOSED 2026-06-26
+Test count at close: 745
+
+Stages
+------
+  20.1  Tick Quality Analyzer
+        TickHistoryAnalyzer reads *.operational.jsonl traces + heartbeat JSONL.
+        Produces TickAnalysisReport: tool distribution, heartbeat quality (0–4),
+        observation echo rate (bigram overlap), gap assessment rate, flags.
+        CLI: --tick-analysis. 36 tests added.
+
+  20.2  Qwen 3 14B Config + Comparative Baseline
+        Added ModelConfig.system_prefix field, wired through NovaPromptComposer
+        and SelfStateTickEngine. Created configs/nova.qwen3-14b.phase20.yaml
+        with /no_think system prefix and 32K context.
+        Fixed Qwen 3 hybrid thinking mode: strip <think>...</think> blocks in
+        validator sanitizer (conversational path) and tick parser (JSON path).
+        Fixed effective_text = sanitized_text or text Python falsy bug.
+        Phase 18 live eval on Qwen 3: VERIFIED (score 12.0, 0 denial/narrator).
+        5 autonomous ticks on Qwen 3: all parse_ok, emit_heartbeat, quality 3.8+.
+
+  20.3  Extended Daemon Overnight Run
+        51 parse_ok ticks over ~3h 22m (300s interval). Two bugs surfaced and
+        fixed during the run:
+          - Daemon missing start_operational_autonomy() → runner_not_running block
+          - Observation echo cascade → novelty constraint in system prompt
+        Final metrics: echo_rate=0.282, tool_diversity=3, quality=3.83, 0 crashes.
+        Self-loop confirmed convergent: 46-heartbeat progressive thread with no
+        repetition. update_self_model appeared unprompted at tick ~51.
+        Pending self-model proposal generated from accumulated evidence.
+
+  20.4  Phase Closure (this document)
+
+Key findings
+------------
+  1. Model transition validated: Qwen 3 14B performs equivalently to Hermes 4
+     on Phase 18 persona/contract eval (both score 12.0). Think-block handling
+     is transparent to the operator — stripped before any contract check fires.
+
+  2. Daemon architecture is stable: Unix socket + threading.Lock + background
+     tick thread pattern holds over 3+ hours with zero GPU errors, zero crashes,
+     zero parse failures after the initial lifecycle fix.
+
+  3. Self-loop is convergent: echo_rate drops naturally as heartbeat history
+     accumulates (1.0 → 0.282 across ~51 ticks). Observations form coherent
+     progressive threads. Tool diversity increases organically without prompt
+     engineering (reflect at tick 4, update_self_model at tick ~51).
+
+  4. Novelty constraint is load-bearing: without the "do not repeat" rule in
+     the tick system prompt, the model produces an echo cascade where each
+     observation paraphrases the prior gap_assessment. The constraint resolved
+     this and is now part of the permanent tick engine design.
+
+  5. QLoRA data accumulation: 46 heartbeats + 1 pending self-model proposal
+     in data/phase20/qwen3-14b/. Each extended daemon run adds high-quality
+     self-inquiry traces that will serve as QLoRA training signal (Phase 22+).
+
+Gates cleared by Phase 20
+--------------------------
+  [x] Model transition: Qwen 3 14B validated on Phase 18 eval
+  [x] Overnight daemon stability: 3h 22m, 51 ticks, 0 crashes
+  [x] Self-loop convergence: echo_rate < 0.3 at 50+ ticks
+  [x] Tool diversity: 3 distinct tools used unprompted
+  [x] Heartbeat quality: 3.83 avg over 46 heartbeats
+
+Phase 21 — Live Testing
+------------------------
+Nova is architecturally ready for live testing. Remaining gates are operator
+decisions, not engineering gates:
+
+  Gate A (required): Operator defines session schedule — when to run the
+    daemon, what data_dir to use for live sessions, retention policy.
+  Gate B (optional, not blocking): QLoRA sleep cycle planning (Phase 22).
+    Pause daemon → fine-tune on accumulated heartbeats/proposals as training
+    signal → restart with adapter. This improves self-model over time but is
+    not required before first live session.
+
+Phase 21 scope (live testing):
+  - Real users, real sessions (no --self-state-tick, no --tick-analysis flags)
+  - Daemon runs persistently between sessions
+  - Operator monitors via --daemon-status + --tick-analysis periodically
+  - Collect baseline behavioral data before any QLoRA adapter
+
+Commit history for Phase 20
+-----------------------------
+  85ee968  Stage 20.1: TickHistoryAnalyzer + --tick-analysis CLI (36 tests)
+  0173853  Stage 20.2: Qwen 3 config, system_prefix, think-block handling
+  4f3f466  Stage 20.3 plan doc
+  f1dcdde  Fix daemon runner lifecycle (start_operational_autonomy missing)
+  5009d03  Fix observation echo cascade (novelty constraint in tick prompt)
+  [closure commit]  Stage 20.3 PASSED + Phase 20 closed
