@@ -31,7 +31,7 @@ class NovaOutputValidator:
     ) -> ValidationResult:
         text = (raw_text or "").strip()
         sanitized_text = self._sanitize_completion_artifacts(text)
-        effective_text = sanitized_text or text
+        effective_text = text if sanitized_text is None else sanitized_text
         violations: list[str] = []
 
         if not effective_text:
@@ -80,6 +80,16 @@ class NovaOutputValidator:
 
         original = text
         cleaned = text.strip()
+
+        # Strip <think>...</think> blocks (Qwen 3 thinking mode).
+        # These may contain empty content or internal reasoning that must not
+        # surface in the final answer. Strip greedily so stacked blocks collapse.
+        had_think_blocks = bool(re.search(r"<think>.*?</think>", cleaned, flags=re.DOTALL))
+        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+        # If stripping think blocks drained all content, return "" so effective_text
+        # is empty and empty_output fires rather than falling back to the raw text.
+        if had_think_blocks and not cleaned:
+            return ""
 
         cleaned = re.sub(r"^\[(plan|summary|answer|response)\]\s*\n?", "", cleaned, flags=re.IGNORECASE)
         while cleaned.startswith("[Response]"):

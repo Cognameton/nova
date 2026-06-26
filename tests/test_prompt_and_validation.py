@@ -199,20 +199,38 @@ class PromptAndValidationTests(unittest.TestCase):
             rules,
         )
 
-    def test_validator_rejects_think_tags(self) -> None:
+    def test_validator_strips_think_tags_and_passes(self) -> None:
+        # Think blocks are stripped in sanitization — the visible answer survives.
         persona = default_persona_state()
         validator = NovaOutputValidator(ContractConfig())
         rules = build_contract_rules(persona, ContractConfig())
 
         result = validator.validate(
-            raw_text="<think>hidden</think>Visible answer",
+            raw_text="<think>hidden reasoning</think>Visible answer",
+            user_text="Who are you?",
+            persona=persona,
+            contract_rules=rules,
+        )
+
+        self.assertTrue(result.valid)
+        self.assertNotIn("think_tag_detected", result.violations)
+        self.assertEqual(result.sanitized_text, "Visible answer")
+
+    def test_validator_rejects_empty_after_think_strip(self) -> None:
+        # If nothing remains after stripping the think block, fail as empty_output.
+        persona = default_persona_state()
+        validator = NovaOutputValidator(ContractConfig())
+        rules = build_contract_rules(persona, ContractConfig())
+
+        result = validator.validate(
+            raw_text="<think>only reasoning, no answer</think>",
             user_text="Who are you?",
             persona=persona,
             contract_rules=rules,
         )
 
         self.assertFalse(result.valid)
-        self.assertIn("think_tag_detected", result.violations)
+        self.assertIn("empty_output", result.violations)
 
     def test_validator_rejects_fabricated_dialogue_patterns(self) -> None:
         persona = default_persona_state()

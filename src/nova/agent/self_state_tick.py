@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from nova.agent.self_state_tools import SELF_STATE_TOOL_NAMES
@@ -49,6 +50,9 @@ class SelfStateTickEngine:
     SelfStateToolDispatcher with heartbeat_store and proposal_store wired in.
     """
 
+    def __init__(self, *, system_prefix: str = "") -> None:
+        self.system_prefix = system_prefix
+
     def build_messages(
         self,
         *,
@@ -58,8 +62,11 @@ class SelfStateTickEngine:
         self_context_block: str,
         recent_heartbeats: list[HeartbeatRecord],
     ) -> list[dict[str, str]]:
+        system_content = (
+            self.system_prefix + "\n\n" + _SYSTEM if self.system_prefix else _SYSTEM
+        )
         return [
-            {"role": "system", "content": _SYSTEM},
+            {"role": "system", "content": system_content},
             {
                 "role": "user",
                 "content": self._user_context(
@@ -106,6 +113,8 @@ class SelfStateTickEngine:
     ) -> ToolRequest | None:
         """Parse raw model output into a ToolRequest, or return None on failure."""
         text = (raw_text or "").strip()
+        # Strip <think>...</think> blocks before JSON extraction (Qwen 3).
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
         if not text:
             return None
         payload, ok = self._json_payload(text)

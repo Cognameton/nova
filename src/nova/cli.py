@@ -155,6 +155,7 @@ def build_runtime(*, config_override: str | None = None) -> NovaRuntime:
     composer = NovaPromptComposer(
         token_counter=backend.tokenize,
         ablation_mode=config.prompt.ablation_mode,
+        system_prefix=config.model.system_prefix,
     )
     validator = NovaOutputValidator(config.contract)
     retry_policy = BasicRetryPolicy()

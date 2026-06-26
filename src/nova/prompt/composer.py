@@ -18,11 +18,13 @@ class NovaPromptComposer:
         memory_char_limit: int = 240,
         recent_turn_char_limit: int = 800,
         ablation_mode: str = "current",
+        system_prefix: str = "",
     ):
         self.token_counter = token_counter
         self.memory_char_limit = memory_char_limit
         self.recent_turn_char_limit = recent_turn_char_limit
         self.ablation_mode = ablation_mode
+        self.system_prefix = system_prefix
 
     def compose(
         self,
@@ -298,6 +300,10 @@ class NovaPromptComposer:
             ]
 
         system_content = "\n\n".join(part for part in system_parts if part and part.strip())
+        if self.system_prefix and system_content:
+            system_content = self.system_prefix + "\n\n" + system_content
+        elif self.system_prefix:
+            system_content = self.system_prefix
         messages: list[dict[str, str]] = []
         if system_content:
             messages.append({"role": "system", "content": system_content})

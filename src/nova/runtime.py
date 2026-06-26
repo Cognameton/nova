@@ -326,7 +326,9 @@ class NovaRuntime:
         self.instruction_write_engine = instruction_write_engine or InstructionWriteEngine()
         self.self_context_engine = self_context_engine or SelfContextEngine()
         self.drive_gap_engine = drive_gap_engine or DriveGapEngine()
-        self.self_state_tick_engine = self_state_tick_engine or SelfStateTickEngine()
+        self.self_state_tick_engine = self_state_tick_engine or SelfStateTickEngine(
+            system_prefix=getattr(config.model, "system_prefix", "")
+        )
 
         self.session_id: str | None = None
         self.persona = None
