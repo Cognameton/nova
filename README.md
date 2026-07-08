@@ -4,7 +4,9 @@ Nova 2.0 is a local-first research runtime for persistent persona, layered memor
 
 The project is not a chatbot wrapper and it is not an uncontrolled autonomous agent. It is a Python research system that studies how a local model can participate in a persistent, evidence-bearing runtime while deterministic code remains responsible for validation, memory writes, action permissions, audit trails, and operator control.
 
-Current development status: Phase 16 is closed, Phase 17 is active. The next planned block is Phase 17 Stage 17.2, Enforced Local Execution Boundary.
+The project's guiding philosophy is set out in the operator's book *Midwife of Consciousness* (2025): consciousness treated as a spectrum rather than a binary, the possibility of emergence met with stewardship rather than control, and claims held to evidence. The runtime is that philosophy made structural — see `docs/NOVA_SOUL.md` and `docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt`.
+
+Current development status: Phases 1-20 are closed. Phase 21 (the exploratory register) is active: Stage 21.1 is implemented; Stages 21.2-21.5 have committed implementation plans in `docs/plans/`. Phase 22 is live testing; Phase 23+ is the optional QLoRA sleep cycle.
 
 ## Contents
 
@@ -58,28 +60,30 @@ Non-goals:
 
 ## Current Status
 
-As of the latest restore note in `docs/plans/RESTORE_AFTER_REBOOT_2026-05-10.txt`:
+As of 2026-07-08:
 
 - Branch: `main`
-- Latest recorded HEAD: `c2bafd4 Skip Observer echo flagging on short answers`
-- Phase 16 is closed.
-- Phase 17 is active.
-- Stage 17.1, Operational Autonomy Runner and Control Surface, is complete.
-- Stage 17.2, Enforced Local Execution Boundary, is the next planned work.
-- Full suite at that point: 346 tests passed.
+- Phase 20 (Tick Quality, Model Transition, Daemon Stability) closed
+  2026-06-26: 51-tick overnight daemon run, 0 crashes, convergent
+  self-loop (`docs/plans/PHASE20_STAGE20_4_PHASE_CLOSURE.txt`).
+- Phase 21 (Exploratory Register) active. Stage 21.1 — exploration
+  lifecycle, journal, budgets, register determination — is implemented.
+  Stages 21.2-21.5 have committed implementation plans
+  (`docs/plans/PHASE21_STAGE21_*.txt`) intended to be executable
+  stage-per-session; the 21.5 closure verdict is reserved for the
+  operator.
+- Full suite: 783 tests passing.
 
 Recommended current model baseline:
 
-- Hermes 4 14B BF16 abliterated Q6
-- `chat_format: chatml`
-- `prompt.ablation_mode: current`
-- Observer-wired Governor enabled
-
-Why that model is the current baseline:
-
-- It reached `viable_candidate` in the Phase 16 cognition bake-off.
-- It produced 0 scaffold echo, 0 narrator voice, 0 reflexive denial, and 0 unsupported desire turns in the recorded Observer-wired bake-off.
-- It passed the strict model-idle JSON gate 5/5 after the chat-template path and strict parser were added.
+- Qwen 3 14B (`configs/nova.qwen3-14b.phase20.yaml`, 32K context,
+  `/no_think` system prefix; think-blocks are stripped by the
+  validator and tick parser)
+- Validated equivalent to Hermes 4 14B BF16 abliterated Q6 on the
+  Phase 18 persona/contract eval (both 12.0); Hermes 4
+  (`configs/nova.hermes4-14b-phase18.yaml`) remains a supported
+  alternative.
+- `prompt.ablation_mode: current`, Observer-wired Governor enabled.
 
 ## Core Architecture
 
@@ -350,6 +354,32 @@ nova2 \
   --backend-check-prompt "In one short sentence, say backend check OK in Nova's voice."
 ```
 
+### Daemon Mode (Phase 19)
+
+Run Nova as an always-on daemon with an autonomous self-state tick loop:
+
+```bash
+nova2 --config configs/nova.qwen3-14b.phase20.yaml \
+  --daemon --tick-interval 300 --daemon-session-id nova-daemon
+```
+
+Attach an interactive REPL to a running daemon (`!status`, `!tick`,
+`!explore ...`, `!detach`):
+
+```bash
+nova2 --attach
+```
+
+Check status or stop:
+
+```bash
+nova2 --daemon-status
+nova2 --daemon-stop
+```
+
+A systemd unit template is provided at `systemd/nova.service`. SIGTERM
+routes through graceful shutdown and GPU release.
+
 ## CLI Reference
 
 The entrypoint is:
@@ -479,6 +509,7 @@ Available commands:
 - `/actions [N]`: recent action history evaluation.
 - `/maintenance`: request the gated maintenance-plan tool.
 - `/summary`: bounded current-session summary.
+- `/explore [status|start <topic>|close [reason]|interrupt]`: exploratory register lifecycle (Phase 21).
 - `/exit`: leave the console.
 
 Console commands do not bypass runtime gates. They call runtime methods that preserve validation, audit, approval, and state transition rules.
@@ -770,9 +801,9 @@ rt.close()
 "
 ```
 
-Stage 17.2 will add enforced local execution boundary checks before operational action.
+Stage 17.2 added enforced local execution boundary checks before operational action (closed; see `docs/plans/PHASE17_STAGE17_5_PHASE_CLOSURE_AND_REASSESSMENT.txt`).
 
-Expected Stage 17.2 boundary checks:
+Stage 17.2 boundary checks:
 
 - expected OS user
 - active OS user
@@ -782,7 +813,7 @@ Expected Stage 17.2 boundary checks:
 - fail-closed result records
 - operator-visible diagnostics
 
-Stage 17.3 will add approved action surface adapters, starting with Nova-owned scratchpad/log style surfaces.
+Stage 17.3 added approved action surface adapters (Nova-owned scratchpad and operational-log surfaces). Phases 18-20 built the inward self-state tool loop, the daemon, and tick-quality analysis on top of this runner; Phase 21 adds the exploratory register around it.
 
 ## Development Workflow
 
@@ -818,25 +849,23 @@ General project conventions:
 
 ## Roadmap
 
-Completed through Phase 16:
+Completed through Phase 20:
 
 - Phase 1-15: persistent persona, memory, continuity, claims, self-model, awareness, initiative, idle runtime, action planning, longitudinal autonomy, audit-reviewed state application.
 - Phase 16: cognition-engine reframe, model/prompt bake-off, model-idle cognition, strict JSON parsing, chat-template path, Actor/Observer/Governor contract.
-- Phase 17 Stage 17.1: operational autonomy runner and control surface.
+- Phase 17: operational autonomy runner, enforced local execution boundary, action surface adapters, operational autonomy evaluation.
+- Phase 18: PRIMARY_DRIVE installation, NOVA_SOUL.md persona card, inward self-state tool loop (recall_self, reflect, emit_heartbeat, update_self_model), gap-assessment heartbeat, self-context hooks.
+- Phase 19: self-directed instruction write path (operator-applied), always-on daemon (Unix socket, systemd unit, attach REPL), autonomous self-state tick loop.
+- Phase 20: tick quality analyzer, Qwen 3 14B transition and think-block handling, 51-tick overnight daemon stability run.
 
 Active:
 
-- Phase 17 Stage 17.2: Enforced Local Execution Boundary.
+- Phase 21: Exploratory Register (`docs/plans/PHASE21_PLAN.txt` and `docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt`) — gate assertions, never inquiry; never delete anything. Stage 21.1 (lifecycle/journal/budgets) implemented; 21.2 register-aware Governor/Observer, 21.3 quarantine and measurement, 21.4 claim ladder, and 21.5 live evaluation protocol are planned in committed stage docs.
 
 Queued:
 
-- Phase 17 Stage 17.3: Approved Action Surface Adapters.
-- Phase 17 Stage 17.4: Operational Autonomy Evaluation.
-- Phase 17 Stage 17.5: Phase 17 Closure and Reassessment.
-
-Optional after Phase 17:
-
-- Phase 18: Nova-voice LoRA / fine-tune corpus, only if evidence shows voice consistency is blocking progress or voice independence becomes a separate priority.
+- Phase 22: live testing — real sessions with the daemon running persistently, register-aware baseline collection.
+- Phase 23+: optional QLoRA sleep cycle, bound by the corpus policy in the exploratory register contract (training corpus stratified by register; never trained solely on Governor-passed output).
 
 Voice, TTS, and STT remain out of roadmap until the non-voice runtime closes.
 
