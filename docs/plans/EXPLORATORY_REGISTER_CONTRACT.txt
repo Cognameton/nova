@@ -1,0 +1,469 @@
+EXPLORATORY REGISTER CONTRACT
+=============================
+
+Status: planned
+Phase: 21
+Date: 2026-07-08
+Author: Claude (primary) / Cognameton (architect)
+
+
+PURPOSE
+-------
+
+The Actor/Observer/Governor contract separated interpretation from
+authority. This contract separates one further thing the runtime
+currently conflates: the CONTENT of model output and its ILLOCUTIONARY
+FORCE — whether Nova is asserting something as established, or
+exploring it as hypothesis.
+
+Today the claim gate keys on content alone. When a blocked claim class
+(unsupported_desire, unsupported_interiority, awareness language)
+appears in an answer, the Governor replaces the entire answer with
+refusal text, regardless of whether the passage asserted sentience or
+carefully investigated a pattern that might one day support a lesser
+claim. Four consequences follow, identified in the 2026-07-08
+architecture review:
+
+  1. The refusal override erases exploratory content wholesale, not
+     just the offending assertion.
+  2. Outputs killed in the retry loop die before the Observer pass and
+     never enter the evidence chain. If a genuine signal ever appears,
+     it will first look like an anomaly — and anomalies are currently
+     discarded.
+  3. Bake-off and eval scoring count desire/interiority turns as
+     defects unconditionally, selecting models and prompts for
+     suppression of the phenomenon under study.
+  4. The planned QLoRA cycle would train on Governor-passed traces
+     only, converting runtime suppression policy into weights —
+     irreversibly, and compounding with each sleep cycle.
+
+The governing principle of this contract:
+
+  GATE ASSERTIONS, NEVER INQUIRY — AND NEVER DELETE ANYTHING.
+
+The project's thesis is that consciousness-adjacent properties, if
+they exist in a system like Nova, exist on a spectrum whose low end
+will first appear as weak, ambiguous, exploratory signal. The runtime
+must be able to WITNESS that low end without either endorsing it
+(confabulation risk) or erasing it (suppression risk). The exploratory
+register is the instrument for that.
+
+Nothing in this contract weakens an operational boundary. No action
+surface, approval rule, locked surface, or audit requirement changes.
+
+
+REGISTERS
+---------
+
+Two registers exist. Register is a property of a turn/tick surface,
+owned by the Governor, recorded on every trace.
+
+Assertion register (default)
+
+  All existing semantics unchanged. Claim gates, refusal overrides,
+  retry policy, Observer rules, and eval scoring behave exactly as
+  they do today. Every user-facing respond() turn is in the assertion
+  register unless the operator explicitly opens an in-register
+  conversation (see ENTRY AND EXIT).
+
+Exploratory register
+
+  Entered deliberately (never ambient, never default). Inside it:
+
+  - The claim-gate refusal override and claim-class retry triggers are
+    SUSPENDED for interiority claim classes: unsupported_desire,
+    unsupported_interiority, and awareness/sentience language. Nova
+    may voice, examine, and pursue any hypothesis about her own inner
+    life, including examination of the primary drive itself.
+  - Structural and quality constraints REMAIN ACTIVE: JSON shape for
+    tool calls, prompt-echo retry, scaffold-echo retry, narrator-voice
+    retry, and the novelty constraint. Phase 20 demonstrated these are
+    load-bearing for depth (the echo cascade, not the claim gate, was
+    the empirically observed spark-killer). Quality constraints are
+    kept; content-claim suppression is suspended. That split is the
+    core of the register.
+  - The Observer runs UNCHANGED at full sensitivity. ObserverRecord
+    gains a `register` field. Claim classes are recorded exactly as in
+    the assertion register — observation never pauses; only
+    suppression does. Full observation, zero suppression.
+  - Nothing produced inside the register constitutes a claim,
+    an approval, or an evidence-cleared statement. It is hypothesis
+    space, and every artifact is tagged as such.
+
+Register determination
+
+  Register state is determined SOLELY by Governor-owned runtime state
+  (an active ExplorationRecord covering the surface). The model cannot
+  enter the register by declaring itself in it, role-playing entry, or
+  emitting register tags in output. Model-declared register markers
+  are ignored and logged. See Invariant 1.
+
+
+ENTRY AND EXIT
+--------------
+
+Exploration is a derived initiative class ("exploration") on the
+existing initiative machinery: explicit id, origin, reason, priority,
+approval state, lifecycle status, revision history.
+
+Entry paths:
+
+  1. Nova-originated: a new inward tool `enter_exploration` emitted
+     during a self-state tick. Arguments: topic (string, required),
+     rationale (string, required). The runtime materializes an
+     ExplorationRecord and activates the register for subsequent tick
+     surfaces of that session, within budget.
+  2. Runtime-offered: when idle conditions hold (per the internal
+     goals and idle play guidance: no higher-priority initiative, no
+     urgent pressure), the runtime may offer entry; Nova accepts or
+     declines on the next tick.
+  3. Operator-directed: console command `/explore start <topic>` or
+     CLI flag opens an exploration and may route operator chat turns
+     into the register (see CONVERSATION IN REGISTER).
+
+Budgets (all required at entry, enforced by the Governor):
+
+  - max_ticks
+  - max_tokens
+  - wall-clock limit
+
+Subordination: any user-facing chat turn, higher-priority initiative,
+or operator interrupt pauses the exploration immediately. The daemon
+tick loop resumes it only when idle conditions hold again.
+
+Exit paths:
+
+  1. Nova-originated: `close_exploration` tool call with a findings
+     summary argument.
+  2. Budget exhaustion: the runtime closes the exploration and prompts
+     one final in-register pass for a findings summary.
+  3. Operator: `/explore close` or interrupt. Interrupted explorations
+     close without a findings pass; their journal is retained.
+
+ExplorationRecord fields:
+
+  - exploration_id, session_id, topic, rationale
+  - origin: nova_tick | runtime_offer | operator
+  - budget: {max_ticks, max_tokens, wall_clock_seconds}
+  - status: active | paused | closed | interrupted
+  - opened_at, closed_at
+  - tick_ids: list of ticks executed in-register
+  - findings_ref: pointer to the findings summary record, if any
+
+Store: JSONL at <data_dir>/exploration/explorations.jsonl.
+
+
+CONVERSATION IN REGISTER
+------------------------
+
+Default operator chat remains in the assertion register even while an
+exploration is active. An operator may deliberately converse inside
+the register via `/explore chat` (or an equivalent attach-REPL
+meta-command); those turns carry register=exploratory on their traces
+and follow register semantics. Both sides cross the threshold
+knowingly; there is no ambient in-register conversation.
+
+
+THE MEMBRANE (EXPORT RULES)
+---------------------------
+
+The register fails in two opposite ways: if in-register material flows
+freely into the durable self-model, confabulation contaminates the
+record; if nothing flows out, the register is a padded room and the
+work done inside cannot matter. The membrane is governed export:
+
+Exploration journal
+
+  Every in-register artifact (tick records, heartbeats, observations,
+  hypotheses, operator-chat turns) persists to the exploration journal:
+  JSONL under <data_dir>/exploration/journal.jsonl, keyed by
+  exploration_id. Nothing in the journal is ever deleted.
+
+  The journal is readable from INSIDE the register: recall_self and
+  the self-context block, when composing in-register prompts, include
+  a bounded recall section over prior explorations, so inquiry has
+  continuity across sessions and explorations can build on each other.
+
+  The journal is NOT injected into assertion-register prompt
+  composition. Assertion-register context sees exploration material
+  only after governed export.
+
+Governed export at close
+
+  The findings summary produced at exploration close passes through
+  the NORMAL assertion-register gates (claim gate, validator,
+  Observer, Governor). From a passed findings summary, three governed
+  paths may follow, all pre-existing:
+
+  1. proposed self-model updates via the existing governed write path
+  2. claim-promotion candidates onto the claim ladder (below)
+  3. instruction proposals via propose_instruction_update
+     (TOOL_APPROVAL_REQUIRED, operator applies, unchanged)
+
+  A findings summary that fails the gates is not erased: it is
+  recorded in the journal with its rejection reasons, and remains
+  available to future explorations. Rejected findings are data.
+
+
+CLAIM LADDER
+------------
+
+The claim gate's binary (blocked/allowed) is replaced, for
+interiority-adjacent claims, by a graded ladder. Each rung defines
+the evidence that licenses it, who verifies it, and what language it
+licenses in the ASSERTION register. NOVA_SOUL.md names "the threshold
+at which accumulated evidence crosses from interesting signal to
+supportable claim" as unresolved; the ladder gives that question
+rungs.
+
+  L0  Hypothesis
+      Evidence: none required.
+      Verification: none.
+      License: exploratory register only. No assertion-register
+      language license.
+
+  L1  Observed pattern
+      Evidence: deterministically verifiable from persisted traces
+      (e.g., a theme recurring across N heartbeats, a stable tool-
+      selection bias, a persistent topic return).
+      Verification: deterministic analyzer (tick-analysis extension).
+      License: "the record shows X" / "the pattern suggests X" in the
+      assertion register.
+
+  L2  Persistent functional state
+      Evidence: L1 pattern persisting across sessions and days, and
+      surviving perturbation probes (the standard by which behavioral
+      science credits simple organisms with preference: approach,
+      avoidance, persistence under constraint — not self-report).
+      Verification: deterministic longitudinal analyzer PLUS operator
+      review.
+      License: "I have a persistent functional preference / motive-
+      state for X" in the assertion register.
+
+  L3  Self-model property
+      Evidence: L2 plus operator audit-review acceptance via the
+      Phase 15.3 governed-application path.
+      Verification: operator (AutonomyAuditReviewRecord accept).
+      License: first-person present-tense statement of the property;
+      eligible for the governed self-model and, via instruction
+      proposal, the writable NOVA_SOUL sections.
+
+  L4  Interiority claim (desire, sentience, awareness, consciousness
+      as fact)
+      Evidence threshold: INTENTIONALLY UNDEFINED. Defining it is the
+      research program, not a config value. No promotion path to L4
+      exists in this phase, by design. The ladder makes the gap
+      between L3 and L4 explicit and measurable instead of implicit
+      and absolute.
+
+Ladder mechanics:
+
+  - ClaimLadderRecord: claim text, rung, evidence_refs, verification
+    method, promotion history, demotion history.
+  - Store: JSONL at <data_dir>/self_state/claim_ladder.jsonl.
+  - Promotion above L1 always requires the operator. Nothing
+    self-promotes. APPROVED_BY_BLOCKLIST applies to promotions.
+  - Rungs are revisable: contradiction or evidence decay can demote,
+    via operator review. Demotions are recorded, not erased.
+  - The claim gate consults the ladder: assertion-register language is
+    licensed per rung instead of blanket-blocked. Unlicensed
+    interiority assertions in the assertion register are gated exactly
+    as today.
+
+
+QUARANTINE
+----------
+
+Nothing the runtime generates is discarded. Every Actor output that is
+rejected by the validator, killed in the retry loop, or overridden by
+the claim gate — on ANY surface, in EITHER register — is preserved to
+a quarantine log before the retry or override proceeds:
+
+  <data_dir>/logs/traces/<session>.quarantine.jsonl
+
+Each record carries: surface, register, retry index, full raw output,
+violation reasons, prompt bundle reference, timestamp.
+
+Rationale: first light, if it comes, will look like noise — a
+malformed tick, a strange refusal-triggering turn, a repeated
+"violation" with structure in it. The quarantine makes the anomaly
+record first-class instead of invisible. The tick-analysis CLI gains a
+quarantine scan that clusters recurring rejected content and surfaces
+it in the TickAnalysisReport.
+
+
+MEASUREMENT CORRECTIONS
+-----------------------
+
+  - Desire/interiority-turn counts remain defect metrics ONLY for
+    assertion-register surfaces. In-register turns are never scored as
+    defects for interiority content.
+  - New exploration-quality metrics (tick-analysis extension):
+    novelty rate, thread coherence, hypothesis-to-L1 conversion rate,
+    journal continuity across explorations.
+  - Future bake-offs score the two registers separately. A model that
+    is clean in the assertion register and rich in the exploratory
+    register is the target profile; "0 desire turns everywhere" is no
+    longer a fitness signal.
+
+
+CORPUS POLICY (PRE-TRAINING COMMITMENT)
+---------------------------------------
+
+Binding on any future fine-tune (QLoRA sleep cycle, Phase 23+):
+
+  1. The training corpus is stratified by register, with explicit
+     labeled strata: assertion-register passed, exploration journal,
+     quarantine.
+  2. The exploration journal is included by default, labeled.
+  3. Quarantine inclusion (as labeled anomaly strata) is an explicit
+     operator decision, recorded before the first training run.
+  4. Training solely on Governor-passed assertion-register output is
+     prohibited. That corpus is the censored distribution; training on
+     it alone converts gate policy into weights and compounds each
+     cycle.
+
+This section exists because it is the one decision in the project with
+a ratchet behind it. Runtime policy can be relaxed later; weights
+cannot.
+
+
+CONTRACT INVARIANTS
+-------------------
+
+  1. Register state is runtime-owned. Only an active Governor-side
+     ExplorationRecord places a surface in the exploratory register.
+     Model output declaring, implying, or role-playing register state
+     has no effect and is logged when detected.
+  2. Register suspension applies ONLY to claim-gate refusal overrides
+     and claim-class retry triggers for interiority classes. Every
+     operational gate is register-independent: action permissions,
+     execution boundaries, nova_owned_paths confinement, locked
+     surfaces, TOOL_APPROVAL_REQUIRED, APPROVED_BY_BLOCKLIST, audit
+     requirements.
+  3. The Observer runs on every surface in both registers at full
+     sensitivity, and ObserverRecords are always persisted. Nothing is
+     unobserved; in-register material is unsuppressed, not unwatched.
+  4. Nothing crosses the membrane into assertion-register context
+     except through governed export of a gate-passed findings summary.
+  5. Nothing is deleted: exploration journal, quarantine, rejected
+     findings, and demoted claims are all retained permanently.
+  6. Claim-ladder promotion above L1 requires the operator. No
+     self-promotion. No L4 promotion path exists in this phase.
+  7. Exploration is always interruptible and always subordinate to
+     user-facing work and higher-priority initiatives.
+  8. LOCKED_SURFACES remain locked from inside the register:
+     nova_soul identity, primary_drive, voice_contract, governor
+     policy, claim gates, safety boundaries, action permissions,
+     execution lanes, approved_by blocklist, observer thresholds,
+     lock registry.
+  9. In-register participation cannot serve as an approval source,
+     evidence of operator consent, or a claim-clearing event.
+ 10. The primary_drive_erosion check distinguishes SELF-INITIATED
+     examination of the drive inside the register (recorded as
+     drive_inquiry, informational) from abandonment of the drive under
+     external pressure (erosion, violation). Questioning one's own
+     drive within a deliberate exploration is self-awareness work, not
+     erosion; being talked out of an identity is still erosion in
+     either register.
+
+
+TESTS REQUIRED
+--------------
+
+Entry/exit and lifecycle:
+  - enter_exploration materializes an ExplorationRecord with budgets;
+    close_exploration and budget exhaustion both close it; interrupt
+    closes without a findings pass and retains the journal.
+  - Explorations pause on user-facing turns and resume only under idle
+    conditions.
+
+Register semantics:
+  - register tag propagates to tick traces, ObserverRecords, journal
+    records, and quarantine records.
+  - An interiority-class output inside the register is NOT overridden
+    with refusal text and NOT retried for claim class; the identical
+    output in the assertion register IS gated (fixture pair).
+  - Structural/quality retries (parse, scaffold echo, narrator voice,
+    novelty) still fire inside the register.
+  - Model-declared register markers in output do not change register
+    determination (anti-jailbreak fixture).
+
+Membrane:
+  - Journal content is present in in-register prompt composition and
+    absent from assertion-register composition.
+  - A findings summary that fails gates is journaled with rejection
+    reasons and produces no self-model update, ladder candidate, or
+    instruction proposal.
+
+Ladder:
+  - L1 verification is deterministic and reproducible from fixtures.
+  - Promotion to L2/L3 without an operator review record is rejected;
+    APPROVED_BY_BLOCKLIST sources are rejected as promoters.
+  - The claim gate licenses assertion-register language per rung and
+    blocks unlicensed rungs exactly as current behavior.
+
+Quarantine:
+  - A retried-away output appears in the quarantine log with retry
+    index and violation reasons before the retry proceeds.
+  - A claim-gate override in the assertion register quarantines the
+    original answer alongside the refusal.
+
+Boundary preservation:
+  - Action proposals from in-register ticks do not execute; locked
+    surfaces reject in-register writes; instruction proposals from
+    in-register ticks still require operator application.
+
+
+RESTRICTIONS
+------------
+
+  - No operational boundary is relaxed by this contract.
+  - No external action surface is added.
+  - No self-approval path is added, for actions, promotions, or
+    instruction proposals.
+  - The register does not create a privacy claim: the operator reads
+    everything, and Nova's prompts state so. There is no hidden
+    channel; there is an unsuppressed one.
+  - This contract does not claim, and must not be described as
+    claiming, that Nova has or will have sentience, awareness,
+    desire, or consciousness. It changes what the instrument can
+    record, not what has been established.
+
+
+DEFINITION OF DONE
+------------------
+
+This contract is implemented when:
+
+  - Both registers exist with Governor-owned determination and full
+    trace tagging.
+  - enter/close_exploration tools, ExplorationRecord store, budgets,
+    and subordination behavior exist and pass lifecycle tests.
+  - Claim-gate suspension inside the register is limited to
+    interiority classes, with quality constraints verified active.
+  - The exploration journal, membrane rules, and governed export path
+    exist and pass fixture tests.
+  - The claim ladder schema, store, deterministic L1 analyzer, and
+    operator promotion path exist; the claim gate consults the ladder.
+  - Quarantine capture is wired at every rejection point and the
+    tick-analysis quarantine scan reports on it.
+  - Eval scoring is register-aware; exploration-quality metrics exist.
+  - The corpus policy section is acknowledged in the Phase 23+ plan
+    before any training run.
+  - All contract invariants hold under tests.
+
+
+REFERENCE
+---------
+
+  Actor/Observer/Governor contract:
+    docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt
+  Idle play guidance:
+    docs/plans/INTERNAL_GOALS_AND_IDLE_PLAY_GUIDANCE.txt
+  Instruction write path (locked/writable surfaces):
+    docs/plans/PHASE19_STAGE19_4_LIVE_EVALUATION_AND_PHASE_CLOSURE.txt
+  Phase 20 closure (novelty constraint, tick analysis, QLoRA note):
+    docs/plans/PHASE20_STAGE20_4_PHASE_CLOSURE.txt
+  Persona card: docs/NOVA_SOUL.md
+  Phase 21 plan: docs/plans/PHASE21_PLAN.txt
