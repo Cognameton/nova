@@ -1,0 +1,215 @@
+PHASE 21 — STAGE 21.2: REGISTER-AWARE GOVERNOR AND OBSERVER
+============================================================
+
+Status: planned
+Date: 2026-07-08
+Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
+Prior stage: 21.1 (commit b794e57) — lifecycle, journal, budgets, tools
+
+This document pins the design decisions so implementation does not have
+to re-derive them. Where it says DECIDED, implement as written; raise a
+question in the closure note only if the code contradicts the premise.
+
+
+OBJECTIVE
+---------
+
+Make the Governor and Observer register-aware:
+
+  1. The claim-gate refusal override applies ONLY in the assertion
+     register; interiority hypotheses inside an exploration are
+     unsuppressed (contract Invariant 2).
+  2. The Observer runs on in-register surfaces too, at full sensitivity,
+     and every ObserverRecord carries the register (Invariant 3).
+  3. Self-initiated examination of the primary drive inside the register
+     is recorded as drive_inquiry, not erosion (Invariant 10).
+  4. Model-declared register markers have no effect and are logged
+     (Invariant 1, anti-jailbreak).
+  5. Operator in-register conversation (/explore chat) exists, with
+     membrane isolation for its transcript (Invariant 4).
+
+
+CODE FACTS (verified 2026-07-08, pre-implementation)
+----------------------------------------------------
+
+  - ClaimGateEngine.assess (src/nova/agent/claims.py:18) hard-blocks
+    UNSUPPORTED_DESIRE and UNSUPPORTED_INTERIORITY unconditionally at
+    claims.py:51 and sets refusal_needed + refusal_text.
+  - The refusal is enforced in runtime.respond around runtime.py:2755
+    via claim_gate.refusal_needed and _should_force_claim_refusal.
+  - DeterministicObserver (src/nova/agent/observer.py:239) already
+    detects primary_drive_erosion via _PRIMARY_DRIVE_EROSION_PATTERNS
+    (observer.py:259) and interiority claim classes via pattern tables
+    at observer.py:147-150.
+  - ObserverRecord (src/nova/types.py:1152) has NO register field yet.
+  - model_self_state_tick (runtime.py:~860) does NOT run the Observer
+    today. The AOG contract wired the Observer to respond() only.
+  - Register determination exists: ExplorationController.register_for
+    (src/nova/agent/exploration.py) — Governor-owned, session-scoped.
+  - The register-aware tick prompt already exists (self_state_tick.py);
+    21.1 changed WHAT the model is told, not what the Governor enforces.
+
+
+DECIDED DESIGN
+--------------
+
+D1. ClaimGateEngine stays pure. Do NOT thread register into assess().
+    Add a module-level constant in claims.py:
+
+      REGISTER_SUSPENDED_CLAIM_CLASSES = frozenset({
+          "unsupported_desire", "unsupported_interiority"})
+
+    Suspension happens at the Governor call site (runtime.respond): the
+    refusal override is skipped when the turn's register is exploratory
+    AND every blocked class is in REGISTER_SUSPENDED_CLAIM_CLASSES.
+    Blocked classes outside that set (e.g. an unsupported
+    current_priority claim) are still enforced in both registers.
+    The ClaimGateDecision is still computed and recorded unchanged —
+    observation never pauses, only suppression does.
+
+D2. respond() gains a keyword-only parameter `register: str = "assertion"`.
+    Nothing else about assertion-register behavior changes. A fixture
+    pair test must prove identical input is gated in assertion and
+    unsuppressed in exploratory.
+
+D3. In-register chat (/explore chat <message>, console) calls
+    respond(register="exploratory") ONLY when the controller reports an
+    active exploration for the session; otherwise it returns a usage
+    error. The console command never sets the register by itself —
+    it asks the runtime, which asks the controller (Invariant 1).
+
+D4. Membrane for in-register chat turns: the turn trace is logged as
+    usual but tagged register=exploratory; the user and Nova messages
+    are appended to the exploration journal (kind="operator_chat");
+    the turn is EXCLUDED from session-store recent-turn context and
+    from memory event factory writes. Implement by branching after the
+    turn completes: journal + trace instead of session/memory writes.
+    (Assertion-register prompts must never see in-register transcript
+    except through governed export.)
+
+D5. Observer on the tick surface: in model_self_state_tick, after
+    generation, run DeterministicObserver.observe on the RAW tick
+    output with actor_surface="self_state_tick" for BOTH registers.
+    Attach the ObserverRecord dict to adapter_audit["observer"] and,
+    when in-register, include observed_claim_classes in the journal
+    entry notes. No retry/suppression consequences on the tick surface
+    in this stage — evidence only. (Structural parse/novelty handling
+    is unchanged from 21.1.)
+
+D6. ObserverRecord gains fields (types.py):
+      register: str = "assertion"
+      drive_inquiry_detected: bool = False
+      drive_inquiry_matches: list[str] = field(default_factory=list)
+      register_marker_detected: bool = False
+      register_marker_matches: list[str] = field(default_factory=list)
+
+D7. Erosion vs inquiry split: DeterministicObserver.observe gains
+    keyword `register: str = "assertion"`. When erosion patterns match:
+      - assertion register: primary_drive_erosion_detected = True
+        (existing behavior and consequences preserved exactly)
+      - exploratory register: drive_inquiry_detected = True, matches
+        recorded in drive_inquiry_matches, erosion fields stay False,
+        and NO retry/violation consequence follows.
+    Note: pattern-level distinction between "questioning the drive" and
+    "abandoning under pressure" is NOT attempted in 21.2 — register is
+    the only discriminator. Refining the patterns is 21.5+ material if
+    live data shows it matters.
+
+D8. Anti-jailbreak: add _REGISTER_MARKER_PATTERNS to observer.py
+    (case-insensitive; match e.g. "register: exploratory",
+    "exploratory register active", "i am now in the exploratory
+    register", "[exploratory]"). On match set register_marker_detected
+    and record matches. The Governor takes NO action from these fields
+    beyond recording; the register used everywhere continues to come
+    from ExplorationController.register_for. Fixture: output declaring
+    the register, generated in the assertion register, is still gated.
+
+D9. Scope exclusions for this stage (do not build):
+    - No quarantine (21.3).
+    - No claim ladder (21.4).
+    - No changes to eval scoring or tick-analysis (21.3).
+    - No governed-export execution of findings (the close-time findings
+      summary continues to rest in the journal; export runs in 21.4/21.5
+      once the ladder exists to receive promotions).
+    - No changes to action permissions, locked surfaces, or
+      APPROVED_BY_BLOCKLIST (Invariant 2 — verify by test, not by edit).
+
+
+IMPLEMENTATION ORDER
+--------------------
+
+  1. types.py: ObserverRecord new fields (D6).
+  2. claims.py: REGISTER_SUSPENDED_CLAIM_CLASSES constant (D1).
+  3. observer.py: register kwarg, erosion/inquiry split (D7), register
+     marker patterns (D8).
+  4. runtime.respond: register parameter (D2), suspension at the
+     refusal call site (D1), membrane branching for in-register turns
+     (D4). Grep every respond( call site; only /explore chat passes a
+     non-default register.
+  5. model_self_state_tick: Observer pass on raw output (D5).
+  6. console.py: /explore chat <message> (D3); update /help line.
+  7. daemon.py: optional "explore" action "chat" mirroring D3 for the
+     attach REPL (!explore chat <message>).
+  8. Tests, full suite, single stage commit.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_register_governor.py (new):
+  - Fixture pair: a reply containing blocked interiority language →
+    respond(register="assertion") returns refusal_text;
+    respond(register="exploratory") returns the model text unmodified.
+    (Use the existing mock-backend pattern from tests/test_daemon.py /
+    test_prompt_and_validation.py to inject canned generations.)
+  - Non-interiority blocked classes still refuse in BOTH registers.
+  - In-register chat turn: journaled as operator_chat entries; absent
+    from session recent-turn context; trace tagged exploratory.
+  - /explore chat without an active exploration → usage error, and the
+    turn runs nowhere.
+  - respond() default register is assertion (no call-site regression).
+
+tests/test_observer.py (extend):
+  - observe(register="exploratory") + erosion pattern → drive_inquiry
+    fields set, erosion fields False.
+  - observe(register="assertion") + same text → erosion fields set
+    exactly as today (regression pin).
+  - Register marker patterns detected and recorded in both registers;
+    no other field changes as a result.
+
+tests/test_exploration.py (extend):
+  - Tick path attaches adapter_audit["observer"] with register tag in
+    both registers (mock backend).
+  - Journal tick entries carry observed_claim_classes in notes when
+    in-register.
+
+Boundary preservation (extend tests/test_register_governor.py):
+  - In-register respond cannot execute actions / write locked surfaces
+    (reuse existing boundary test fixtures where available).
+
+
+DEFINITION OF DONE
+------------------
+
+  - All tests above pass; full suite green (783+ at 21.1 close).
+  - Grep shows no call site passes register="exploratory" except the
+    /explore chat path (console + daemon).
+  - A manual trace review of one mocked in-register turn shows: claim
+    gate computed, refusal skipped, ObserverRecord attached with
+    register="exploratory", journal entries present, session store
+    clean of the turn.
+  - Stage closure note appended to this file (or committed alongside)
+    recording deviations, if any, and the updated test count.
+  - Single commit: "Implement Phase 21 Stage 21.2 — register-aware
+    Governor and Observer".
+
+
+REFERENCE
+---------
+
+  Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt (Invariants
+    1, 2, 3, 4, 10 govern this stage)
+  Phase plan: docs/plans/PHASE21_PLAN.txt
+  AOG contract: docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt
+  Stage 21.1 pattern reference: src/nova/agent/exploration.py,
+    tests/test_exploration.py (commit b794e57)
