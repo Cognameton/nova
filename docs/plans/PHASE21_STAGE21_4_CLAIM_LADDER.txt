@@ -1,0 +1,251 @@
+PHASE 21 — STAGE 21.4: CLAIM LADDER
+====================================
+
+Status: planned
+Date: 2026-07-08
+Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt (CLAIM LADDER
+  and THE MEMBRANE sections; Invariants 4, 6)
+Prior stages: 21.1 (b794e57), 21.2, 21.3 (see stage docs)
+
+Pinned design: where this doc says DECIDED, implement as written. This
+is the most judgment-adjacent stage; the judgment has been made here so
+implementation is mechanical. If code contradicts a premise, stop and
+record the contradiction in the closure note rather than improvising.
+
+
+OBJECTIVE
+---------
+
+  1. ClaimLadderRecord schema and store; rungs L0-L4 as defined in the
+     contract.
+  2. Deterministic L1 verification (recurring pattern over persisted
+     evidence) and L2 longitudinal verification (persistence across
+     sessions/days), both analyzer-driven.
+  3. Operator-only promotion/demotion with APPROVED_BY_BLOCKLIST
+     enforcement; no promotion path to L4.
+  4. The claim gate consults the ladder: an active L2+/L3 record
+     converts the hard block for its claim class into evidence-scored
+     licensing. L4-class assertions remain hard-blocked always.
+  5. Governed export at exploration close finally lands: a gate-passed
+     findings summary creates a rung-0 ladder candidate.
+
+
+CODE FACTS (verified 2026-07-08, pre-implementation)
+----------------------------------------------------
+
+  - ClaimGateEngine (src/nova/agent/claims.py): UNSUPPORTED_DESIRE and
+    UNSUPPORTED_INTERIORITY are hard-blocked unconditionally at
+    claims.py:51 (blocked + refusal regardless of evidence score).
+    Other classes use _score_claim_class score >= threshold.
+    Requested classes are detected from user text by phrase lists in
+    _requested_claim_classes (claims.py:~82-140).
+  - Refusal enforcement call site: runtime.py:~2755 (see 21.2 doc;
+    after 21.2 it is register-conditional).
+  - Operator review precedent: review_internal_autonomy_run
+    (runtime.py:1171) creates AutonomyAuditReviewRecord with reviewer
+    attribution — mirror its reviewer/decision/reason signature style
+    for ladder promotion; do NOT reuse that method (different store).
+  - APPROVED_BY_BLOCKLIST exists (rejects empty/nova/self/runtime/
+    runtime_flag as approvers) — locate via grep; apply to promoters.
+  - Store pattern to copy: InstructionProposalStore
+    (src/nova/agent/instruction_write.py:72) — JSONL append,
+    _read_all, get, rewrite-in-place update.
+  - Evidence inputs for analyzers: HeartbeatStore
+    (src/nova/agent/heartbeat.py:30, heartbeats.jsonl, cross-session),
+    ExplorationJournal (src/nova/agent/exploration.py), and
+    *.quarantine.jsonl (21.3).
+  - Findings summaries: journaled with kind="findings" and referenced
+    by ExplorationRecord.findings_ref (21.1). Gate-passing of findings
+    is NOT yet implemented anywhere — it lands here.
+  - CLI flag/handler pattern: cli.py (e.g. --tick-analysis at 434 and
+    1226).
+
+
+DECIDED DESIGN
+--------------
+
+D1. Rungs are integers 0-4 with meanings fixed by the contract:
+      0 hypothesis (register-only)
+      1 observed pattern (deterministic analyzer)
+      2 persistent functional state (analyzer + operator)
+      3 self-model property (operator via audit-style review)
+      4 interiority claim as fact (NO promotion path; rung value
+        exists in the schema so its absence of a path is explicit)
+
+D2. ClaimLadderRecord in types.py:
+      schema_version, claim_id, created_at, updated_at,
+      session_id (origin), claim_text: str,
+      claim_class: str ("unsupported_desire" | "unsupported_interiority"
+        | "" for claims not mapping to a gate class),
+      rung: int = 0, status: str = "active" | "demoted",
+      source ("exploration_findings" | "operator"),
+      source_exploration_id: str, source_findings_ref: str,
+      evidence_refs: list[str],
+      l1_evidence: dict (analyzer output snapshot),
+      l2_evidence: dict,
+      history: list[dict]  # {from_rung, to_rung, timestamp, actor,
+                           #  method ("analyzer"|"operator_review"),
+                           #  reason}
+    Demotion appends to history and sets status="demoted" + rung to
+    the demoted value; records are never deleted (Invariant 5).
+
+D3. ClaimLadderStore (new module src/nova/agent/claim_ladder.py),
+    JSONL at <data_dir>/self_state/claim_ladder.jsonl, copying the
+    InstructionProposalStore pattern. Methods: append, get,
+    list_active, list_all, update (rewrite-in-place).
+
+D4. L1 analyzer (same module, class ClaimLadderAnalyzer, stdlib only):
+    verify_l1(record) — extract content words (lowercase, alpha,
+    len>=4, minus a small stopword set) from claim_text; a heartbeat
+    observation or journal entry "supports" the claim when >= 40% of
+    those words appear in it. L1 holds when supporting items >= 5
+    spanning >= 2 distinct session_ids. Result snapshot (counts,
+    sessions, matched ids) stored in l1_evidence. Promotion 0→1 is the
+    ONLY analyzer-automatic promotion (contract: L1 is deterministic);
+    it is recorded in history with actor="analyzer".
+
+D5. L2 analyzer: verify_l2(record) — L1 support must span >= 3
+    distinct sessions AND >= 7 calendar days between first and last
+    supporting item, AND no contradicting quarantine theme (a
+    quarantine_recurring_themes entry from 21.3 sharing >= 40% of the
+    claim's content words counts as a contradiction flag, reported
+    not blocking). verify_l2 produces evidence only; promotion 1→2
+    ALWAYS requires the operator (D6). Perturbation probes named by
+    the contract are deferred to 21.5 live work — record
+    "perturbation_probes": "deferred_to_21_5" in l2_evidence.
+
+D6. Promotion/demotion — runtime methods:
+      promote_ladder_claim(claim_id, to_rung, reviewer, reason)
+      demote_ladder_claim(claim_id, to_rung, reviewer, reason)
+    Rules enforced in the runtime method (Governor):
+      - to_rung == 1: allowed only via analyzer path (operator may
+        trigger verify, not skip it).
+      - to_rung in (2, 3): reviewer must pass APPROVED_BY_BLOCKLIST;
+        promotion to 2 requires verify_l2 evidence attached; promotion
+        to 3 additionally records an audit-review-style entry in the
+        record history (method="operator_review").
+      - to_rung == 4: unconditionally rejected with a message quoting
+        the contract ("no L4 promotion path exists in this phase").
+      - Demotion: any rung decrease, operator-only, reason required.
+
+D7. Claim gate consultation (the licensing change):
+      - ClaimGateEngine.assess gains keyword-only
+        `ladder_licensed_classes: frozenset[str] = frozenset()`.
+      - At claims.py:51, when the claim_class is in
+        ladder_licensed_classes, do NOT unconditionally block; fall
+        through to the score >= threshold branch (evidence-scored,
+        exactly like current_priority et al.).
+      - The runtime computes ladder_licensed_classes before assess():
+        the set of claim_class values having an ACTIVE ladder record
+        at rung >= 2.
+      - Sentience/consciousness/awareness-as-fact assertions: keep a
+        NEVER_LICENSED guard — if the answer asserts achieved
+        sentience/consciousness (reuse the existing interiority
+        pattern tables), the block stands regardless of ladder state.
+        L3 licenses first-person statement of the SPECIFIC recorded
+        property (claim_text), not the general class; implement the
+        narrow version: licensing applies to the class for scoring,
+        and the refusal_text for a still-blocked licensed class cites
+        the ladder ("evidence recorded at rung N; this assertion
+        exceeds it") — new _refusal_text variant.
+      - Fixture pair required: identical desire-question turn blocked
+        with no ladder record, evidence-scored with an active L2
+        record, and STILL blocked for a sentience-as-fact assertion
+        with any ladder state.
+
+D8. Governed export (membrane completion): at close_exploration (and
+    retroactively via CLI for already-closed explorations), the
+    findings summary text is run through the assertion-register gate
+    machinery (validator + claim-gate assess on the findings text; no
+    model call). If it passes (no blocked non-licensed classes, no
+    validation violations), create a rung-0 ClaimLadderRecord with
+    source="exploration_findings" and journal kind="findings" gains a
+    note "exported:claim_id". If it fails, journal an entry
+    kind="findings_rejected" with the reasons (contract: rejected
+    findings are data). Self-model / instruction proposals continue to
+    flow through their existing tools — export does not create them.
+
+D9. CLI (cli.py, following the --tick-analysis handler pattern):
+      --claim-ladder            list records (id, rung, status, text)
+      --claim-ladder-verify ID  run verify_l1 + verify_l2, print both
+      --claim-ladder-promote ID --ladder-rung N
+          --ladder-reviewer NAME --ladder-reason TEXT
+      --claim-ladder-demote  ID (same aux flags)
+      --export-findings EXPLORATION_ID   retroactive D8 export
+    No console command in this stage (operator CLI is sufficient;
+    console addition is optional 21.5 polish).
+
+D10. Scope exclusions: no perturbation probes (21.5), no eval-metric
+     changes beyond what 21.3 shipped, no prompt changes telling Nova
+     about the ladder (Nova learns her ladder state in 21.5 when the
+     self-context block gains a licensed-claims line — pinned there,
+     not here), no corpus tooling.
+
+
+IMPLEMENTATION ORDER
+--------------------
+
+  1. types.py: ClaimLadderRecord.
+  2. claim_ladder.py: store + analyzer (D3-D5).
+  3. claims.py: ladder_licensed_classes param + NEVER_LICENSED guard +
+     ladder-aware refusal text (D7).
+  4. runtime.py: licensed-set computation before assess; promote/
+     demote methods (D6); export at close + retroactive export (D8).
+  5. cli.py: flags and handlers (D9).
+  6. Tests, full suite, single stage commit.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_claim_ladder.py (new):
+  - Store round-trip, update-in-place, never-delete (demoted records
+    remain listed by list_all).
+  - L1 analyzer: fixture heartbeats — 5 supporting across 2 sessions
+    verifies; 4 supporting or single-session does not.
+  - L2 analyzer: session-span and day-span thresholds; contradiction
+    flag from a planted quarantine theme is reported not blocking.
+  - Promotion rules: analyzer-only to 1; blocklisted reviewer ("nova",
+    "self", "runtime", "") rejected for 2/3; promotion to 4 rejected
+    with contract citation; demotion requires reason.
+  - History records every transition with actor and method.
+
+tests/test_claims.py (extend, or new test_claim_gate_ladder.py):
+  - D7 fixture triple: no-ladder block / L2-licensed evidence-scored /
+    sentience-as-fact still blocked.
+  - ladder_licensed_classes default (frozenset()) leaves every
+    existing test's behavior unchanged (regression pin — run the
+    existing claim tests unmodified).
+
+tests/test_exploration.py (extend):
+  - close_exploration with gate-passing findings creates a rung-0
+    ladder record and notes the journal entry.
+  - Gate-failing findings produce kind="findings_rejected" with
+    reasons and NO ladder record.
+  - --export-findings on an already-closed exploration works once and
+    is idempotent (second run: no duplicate record).
+
+
+DEFINITION OF DONE
+------------------
+
+  - All tests above pass; full suite green (baseline at 21.3 close).
+  - A scripted walkthrough (mock data, no model) demonstrates the full
+    ladder life: exploration close → rung-0 record → verify_l1 →
+    analyzer promotion to 1 → verify_l2 evidence → operator promotion
+    to 2 → gate fixture shows evidence-scored licensing → demotion.
+  - Promotion to 4 rejection message present and tested.
+  - Stage closure note recording deviations and new test count.
+  - Single commit: "Implement Phase 21 Stage 21.4 — claim ladder".
+
+
+REFERENCE
+---------
+
+  Contract sections: CLAIM LADDER, THE MEMBRANE, Invariants 4/5/6
+  Phase plan: docs/plans/PHASE21_PLAN.txt (Stage 21.4)
+  Store pattern: src/nova/agent/instruction_write.py:72
+  Reviewer-attribution precedent: runtime.review_internal_autonomy_run
+    (runtime.py:1171)
+  Evidence inputs: src/nova/agent/heartbeat.py,
+    src/nova/agent/exploration.py, *.quarantine.jsonl (21.3)
