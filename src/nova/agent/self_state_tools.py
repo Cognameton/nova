@@ -16,6 +16,7 @@ from nova.agent.tools import ToolRequest
 from nova.types import HeartbeatRecord, InstructionProposal, MotiveState, SelfModelProposal, SelfState
 
 if TYPE_CHECKING:
+    from nova.agent.exploration import ExplorationController
     from nova.agent.heartbeat import HeartbeatStore, SelfModelProposalStore
     from nova.agent.instruction_write import InstructionProposalStore, InstructionWriteEngine
 
@@ -37,6 +38,8 @@ SELF_STATE_TOOL_NAMES: frozenset[str] = frozenset({
     "emit_heartbeat",
     "update_self_model",
     "propose_instruction_update",
+    "enter_exploration",
+    "close_exploration",
 })
 
 
@@ -54,6 +57,7 @@ class SelfStateToolDispatcher:
         proposal_store: SelfModelProposalStore | None = None,
         instruction_proposal_store: InstructionProposalStore | None = None,
         instruction_write_engine: InstructionWriteEngine | None = None,
+        exploration_controller: ExplorationController | None = None,
     ) -> None:
         self._self_state = self_state
         self._motive_state = motive_state
@@ -63,6 +67,7 @@ class SelfStateToolDispatcher:
         self._proposal_store = proposal_store
         self._instruction_proposal_store = instruction_proposal_store
         self._instruction_write_engine = instruction_write_engine
+        self._exploration_controller = exploration_controller
 
     def dispatch(self, request: ToolRequest) -> dict[str, Any]:
         if request.tool_name == "recall_self":
@@ -90,6 +95,17 @@ class SelfStateToolDispatcher:
                 section=str(args.get("section", "")),
                 proposed_content=str(args.get("proposed_content", "")),
                 rationale=str(args.get("rationale", "")),
+            )
+        if request.tool_name == "enter_exploration":
+            args = request.arguments or {}
+            return self.enter_exploration(
+                topic=str(args.get("topic", "")),
+                rationale=str(args.get("rationale", "")),
+            )
+        if request.tool_name == "close_exploration":
+            args = request.arguments or {}
+            return self.close_exploration(
+                findings_summary=str(args.get("findings_summary", "")),
             )
         raise ValueError(f"Unknown self-state tool: {request.tool_name!r}")
 
@@ -211,3 +227,56 @@ class SelfStateToolDispatcher:
         if self._instruction_proposal_store is not None:
             self._instruction_proposal_store.append(proposal)
         return proposal.to_dict()
+
+    def enter_exploration(self, *, topic: str, rationale: str) -> dict[str, Any]:
+        """Nova-originated deliberate entry into the exploratory register.
+
+        Phase 21 Stage 21.1: the controller (Governor-side) validates, clamps
+        budgets, enforces one-open-exploration-per-session, and owns register
+        state. This tool call is a request; the ExplorationRecord is the fact.
+        """
+        if self._exploration_controller is None:
+            raise ValueError("Exploration is not available in this runtime.")
+        record = self._exploration_controller.open(
+            session_id=self._session_id,
+            topic=topic,
+            rationale=rationale,
+            origin="nova_tick",
+        )
+        self._exploration_controller.journal_entry(
+            exploration_id=record.exploration_id,
+            session_id=self._session_id,
+            kind="tick_output",
+            content=f"Exploration opened. Topic: {record.topic}. Rationale: {record.rationale}",
+        )
+        return record.to_dict()
+
+    def close_exploration(self, *, findings_summary: str) -> dict[str, Any]:
+        """Nova-originated deliberate close with a findings summary.
+
+        The findings summary is journaled as kind="findings". Governed export
+        of findings through the assertion-register gates is Stage 21.2 work;
+        until then the summary rests in the journal on the exploratory side of
+        the membrane.
+        """
+        if self._exploration_controller is None:
+            raise ValueError("Exploration is not available in this runtime.")
+        record = self._exploration_controller.active_exploration(self._session_id)
+        if record is None:
+            raise ValueError("No active exploration to close for this session.")
+        findings_summary = (findings_summary or "").strip()
+        if not findings_summary:
+            raise ValueError("close_exploration requires a findings_summary.")
+        entry = self._exploration_controller.journal_entry(
+            exploration_id=record.exploration_id,
+            session_id=self._session_id,
+            kind="findings",
+            content=findings_summary,
+        )
+        closed = self._exploration_controller.close(
+            session_id=self._session_id,
+            close_reason="nova_close",
+            findings_ref=entry.entry_id,
+        )
+        assert closed is not None
+        return closed.to_dict()

@@ -1266,3 +1266,55 @@ class InstructionProposal:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class ExplorationRecord:
+    """Governor-owned lifecycle record for one exploratory-register initiative.
+
+    Register state is determined SOLELY by these records (Exploratory Register
+    Contract, Invariant 1). Model output cannot create, activate, or close one.
+    """
+    schema_version: str = SCHEMA_VERSION
+    exploration_id: str = ""
+    session_id: str = ""
+    topic: str = ""
+    rationale: str = ""
+    origin: str = ""  # nova_tick | runtime_offer | operator
+    max_ticks: int = 0
+    max_tokens: int = 0
+    wall_clock_seconds: int = 0
+    status: str = "active"  # active | paused | closed | interrupted
+    opened_at: str = ""
+    closed_at: str = ""
+    close_reason: str = ""  # nova_close | budget_exhausted | operator_close | interrupted
+    ticks_used: int = 0
+    tokens_used: int = 0
+    tick_ids: list[str] = field(default_factory=list)
+    findings_ref: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ExplorationJournalEntry:
+    """One in-register artifact persisted to the exploration journal.
+
+    Journal entries never enter assertion-register prompt composition; they are
+    readable only from inside the exploratory register (membrane rule).
+    Nothing in the journal is ever deleted.
+    """
+    schema_version: str = SCHEMA_VERSION
+    entry_id: str = ""
+    exploration_id: str = ""
+    session_id: str = ""
+    tick_id: str = ""
+    timestamp: str = ""
+    register: str = "exploratory"
+    kind: str = ""  # tick_output | tool_result | findings | findings_rejected | operator_note
+    content: str = ""
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

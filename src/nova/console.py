@@ -101,6 +101,8 @@ class InteractionConsole:
             return ConsoleResult(handled=True, output=self._maintenance())
         if command.name == "summary":
             return ConsoleResult(handled=True, output=self._summary())
+        if command.name == "explore":
+            return ConsoleResult(handled=True, output=self._explore(command.argument))
 
         return ConsoleResult(
             handled=True,
@@ -127,6 +129,7 @@ class InteractionConsole:
                 "/actions [N] - show recent action history evaluation",
                 "/maintenance - request the gated maintenance-plan tool",
                 "/summary - show a bounded current-session summary",
+                "/explore [status|start <topic>|close [reason]|interrupt] - exploratory register lifecycle",
                 "/exit - leave the console",
             ]
         )
@@ -598,6 +601,79 @@ class InteractionConsole:
                 f"next_pickup: {summary.next_pickup}",
             ]
         )
+
+    def _explore(self, argument: str) -> str:
+        """Exploratory register lifecycle — Phase 21 Stage 21.1.
+
+        Calls runtime methods only; the ExplorationController preserves
+        budgets, one-open-per-session, and Governor-owned register state.
+        """
+        action, _, rest = argument.strip().partition(" ")
+        action = (action or "status").lower()
+        rest = rest.strip()
+
+        if action == "status":
+            status = self.runtime.exploration_status()
+            lines = [
+                "Nova Exploration Status",
+                f"session_id: {status['session_id']}",
+                f"register: {status['register']}",
+            ]
+            open_exp = status.get("open_exploration")
+            if open_exp:
+                lines.extend(
+                    [
+                        f"open_topic: {open_exp['topic']}",
+                        f"open_status: {open_exp['status']}",
+                        f"ticks_used: {open_exp['ticks_used']}/{open_exp['max_ticks']}",
+                        f"tokens_used: {open_exp['tokens_used']}/{open_exp['max_tokens']}",
+                    ]
+                )
+            else:
+                lines.append("open_exploration: none")
+            for item in status.get("recent_explorations", []):
+                lines.append(
+                    f"recent: {item['topic'][:48]} — {item['status']}"
+                    + (f" ({item['close_reason']})" if item["close_reason"] else "")
+                )
+            return "\n".join(lines)
+
+        if action == "start":
+            if not rest:
+                return "Usage: /explore start <topic>"
+            try:
+                record = self.runtime.start_exploration(
+                    topic=rest,
+                    rationale="operator-directed exploration",
+                    origin="operator",
+                )
+            except ValueError as exc:
+                return f"Exploration not started: {exc}"
+            return (
+                f"Exploration opened: {record.topic}\n"
+                f"budget: {record.max_ticks} ticks / {record.max_tokens} tokens / "
+                f"{record.wall_clock_seconds}s\n"
+                "Subsequent self-state ticks run in the exploratory register."
+            )
+
+        if action == "close":
+            try:
+                record = self.runtime.close_exploration(
+                    reason=rest or "operator_close"
+                )
+            except ValueError as exc:
+                return f"Exploration not closed: {exc}"
+            if record is None:
+                return "No open exploration to close."
+            return f"Exploration closed: {record.topic} ({record.close_reason})"
+
+        if action == "interrupt":
+            record = self.runtime.close_exploration(reason="interrupted")
+            if record is None:
+                return "No open exploration to interrupt."
+            return f"Exploration interrupted: {record.topic} (journal retained)"
+
+        return "Usage: /explore [status|start <topic>|close [reason]|interrupt]"
 
 
 def _parse_positive_int(value: str, *, default: int) -> int:

@@ -184,4 +184,48 @@ def default_tool_registry() -> ToolRegistry:
             },
         )
     )
+    # Phase 21 Stage 21.1 — exploratory register lifecycle tools.
+    # Entering/closing is a request; the ExplorationController (Governor-side)
+    # owns register state, budgets, and lifecycle (contract Invariant 1).
+    registry.register_spec(
+        ToolSpec(
+            name="enter_exploration",
+            description=(
+                "Deliberately enter a bounded, budgeted, fully-observed "
+                "exploratory-register self-inquiry. The runtime owns the "
+                "exploration lifecycle; entry is subordinate to user-facing work."
+            ),
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string"},
+                    "rationale": {"type": "string"},
+                },
+                "required": ["topic", "rationale"],
+            },
+        )
+    )
+    registry.register_spec(
+        ToolSpec(
+            name="close_exploration",
+            description=(
+                "Deliberately close the current exploration with a findings "
+                "summary. The summary is journaled; findings earn standing only "
+                "through governed export at the membrane."
+            ),
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "findings_summary": {"type": "string"},
+                },
+                "required": ["findings_summary"],
+            },
+        )
+    )
     return registry

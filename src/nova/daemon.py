@@ -76,6 +76,10 @@ class NovaDaemon:
         self._last_tick_at: str = ""
         self._client_count: int = 0
         self._client_lock = threading.Lock()
+        # Phase 21 Stage 21.1 — exploration subordination: chat pauses an
+        # active exploration; the tick loop resumes it after a full idle
+        # tick interval. 0.0 means no chat has occurred this run.
+        self._last_chat_monotonic: float = 0.0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -152,6 +156,14 @@ class NovaDaemon:
                 break
             with self._model_lock:
                 try:
+                    # Resume a chat-paused exploration once the session has
+                    # been idle for a full tick interval (subordination rule).
+                    if (
+                        self._last_chat_monotonic == 0.0
+                        or time.monotonic() - self._last_chat_monotonic
+                        >= self.tick_interval_seconds
+                    ):
+                        self.runtime.resume_exploration()
                     self.runtime.model_self_state_tick(trigger="daemon_tick")
                     self._tick_count += 1
                     self._last_tick_at = datetime.now(timezone.utc).isoformat()
@@ -254,6 +266,10 @@ class NovaDaemon:
                 return {"type": "error", "message": "prompt required"}
             with self._model_lock:
                 try:
+                    # User-facing work subordinates exploration: pause any
+                    # active exploration before responding.
+                    self._last_chat_monotonic = time.monotonic()
+                    self.runtime.pause_exploration()
                     turn = self.runtime.respond(prompt)
                     return {
                         "type": "chat",
@@ -263,6 +279,32 @@ class NovaDaemon:
                     }
                 except Exception as exc:
                     return {"type": "error", "message": str(exc)}
+
+        if msg_type == "explore":
+            action = str(msg.get("action", "status"))
+            try:
+                if action == "status":
+                    return {"type": "explore", **self.runtime.exploration_status()}
+                if action == "start":
+                    topic = str(msg.get("topic", "")).strip()
+                    rationale = (
+                        str(msg.get("rationale", "")).strip()
+                        or "operator-directed exploration"
+                    )
+                    record = self.runtime.start_exploration(
+                        topic=topic, rationale=rationale, origin="operator"
+                    )
+                    return {"type": "explore", "opened": record.to_dict()}
+                if action == "close":
+                    reason = str(msg.get("reason", "operator_close"))
+                    record = self.runtime.close_exploration(reason=reason)
+                    return {
+                        "type": "explore",
+                        "closed": record.to_dict() if record else None,
+                    }
+                return {"type": "error", "message": f"unknown explore action: {action!r}"}
+            except Exception as exc:
+                return {"type": "error", "message": str(exc)}
 
         return {"type": "error", "message": f"unknown message type: {msg_type!r}"}
 
@@ -328,6 +370,18 @@ class NovaAttachClient:
                 t = self.send(sock, {"type": "tick"})
                 if t:
                     print(f"[tick] {t}")
+                continue
+            if prompt.strip().startswith("!explore"):
+                parts = prompt.strip().split(None, 2)
+                action = parts[1] if len(parts) > 1 else "status"
+                msg: dict[str, Any] = {"type": "explore", "action": action}
+                if action == "start" and len(parts) > 2:
+                    msg["topic"] = parts[2]
+                if action == "close" and len(parts) > 2:
+                    msg["reason"] = parts[2]
+                r = self.send(sock, msg)
+                if r:
+                    print(json.dumps(r, indent=2))
                 continue
             if not prompt.strip():
                 continue

@@ -79,6 +79,12 @@ from nova.agent.boundary import check_operational_boundary
 from nova.agent.heartbeat import DriveGapEngine, HeartbeatStore, SelfModelProposalStore
 from nova.agent.instruction_write import InstructionProposalStore, InstructionWriteEngine
 from nova.agent.self_context import SelfContextEngine
+from nova.agent.exploration import (
+    REGISTER_EXPLORATORY,
+    ExplorationController,
+    ExplorationJournal,
+    ExplorationStore,
+)
 from nova.agent.self_state_tick import SelfStateTickEngine
 from nova.agent.self_state_tools import SelfStateToolDispatcher, _UPDATABLE_SELF_STATE_FIELDS
 from nova.agent.soul import load_soul_block
@@ -126,6 +132,7 @@ from nova.types import (
     AutonomousActionObservation,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
+    ExplorationRecord,
     InstructionProposal,
     PrivateCognitionPacket,
     SelectedInternalGoal,
@@ -328,6 +335,12 @@ class NovaRuntime:
         self.drive_gap_engine = drive_gap_engine or DriveGapEngine()
         self.self_state_tick_engine = self_state_tick_engine or SelfStateTickEngine(
             system_prefix=getattr(config.model, "system_prefix", "")
+        )
+        # Phase 21 Stage 21.1 — exploratory register lifecycle and journal
+        exploration_dir = Path(self.config.app.data_dir) / "exploration"
+        self.exploration_controller = ExplorationController(
+            store=ExplorationStore(exploration_dir),
+            journal=ExplorationJournal(exploration_dir),
         )
 
         self.session_id: str | None = None
@@ -877,6 +890,21 @@ class NovaRuntime:
         tick_sequence = state.tick_count + 1
         tick_id = f"{self.session_id}:self_state:{tick_sequence}"
 
+        # Phase 21 Stage 21.1 — register determination is Governor-owned:
+        # only an active ExplorationRecord places this tick in the exploratory
+        # register. Wall-clock exhaustion is checked before the tick runs.
+        exploration = self.exploration_controller.active_exploration(self.session_id)
+        if exploration is not None and self.exploration_controller.budget_exhausted(
+            exploration
+        ):
+            self.exploration_controller.close(
+                session_id=self.session_id, close_reason="budget_exhausted"
+            )
+            exploration = None
+        register = (
+            REGISTER_EXPLORATORY if exploration is not None else "assertion"
+        )
+
         self_context_block = self.self_context_engine.prefetch(
             self_state=self.self_state,
             motive_state=self.motive_state,
@@ -885,12 +913,29 @@ class NovaRuntime:
         )
         recent_heartbeats = self.heartbeat_store.list_recent(limit=3)
 
+        exploration_block = ""
+        if exploration is not None:
+            recall = self.exploration_controller.journal.recall_block(
+                current_exploration_id=exploration.exploration_id
+            )
+            exploration_block = "\n".join(
+                [
+                    "[Exploration]",
+                    f"topic: {exploration.topic}",
+                    f"rationale: {exploration.rationale}",
+                    f"budget: tick {exploration.ticks_used + 1} of {exploration.max_ticks}",
+                    recall,
+                ]
+            )
+
         messages = self.self_state_tick_engine.build_messages(
             session_id=self.session_id,
             tick_id=tick_id,
             trigger=trigger,
             self_context_block=self_context_block,
             recent_heartbeats=recent_heartbeats,
+            register=register,
+            exploration_block=exploration_block,
         )
         generation = self.backend.generate(
             self._generation_request(prompt="", messages=messages)
@@ -906,7 +951,10 @@ class NovaRuntime:
             "raw_output_length": len(generation.raw_text or ""),
             "parse_ok": tool_request is not None,
             "tool_executed": False,
+            "register": register,
         }
+        if exploration is not None:
+            adapter_audit["exploration_id"] = exploration.exploration_id
 
         if tool_request is not None:
             dispatcher = SelfStateToolDispatcher(
@@ -918,6 +966,7 @@ class NovaRuntime:
                 proposal_store=self.proposal_store,
                 instruction_proposal_store=self.instruction_proposal_store,
                 instruction_write_engine=self.instruction_write_engine,
+                exploration_controller=self.exploration_controller,
             )
             try:
                 result = dispatcher.dispatch(tool_request)
@@ -925,6 +974,31 @@ class NovaRuntime:
                 adapter_audit["tool_executed"] = True
             except Exception as exc:
                 adapter_audit["tool_error"] = str(exc)
+
+        # In-register ticks are journaled and charged against the exploration
+        # budget. Charging happens after dispatch so a close_exploration tick
+        # is not charged to an already-closed record.
+        if exploration is not None:
+            tool_name = tool_request.tool_name if tool_request else "none"
+            summary = f"tool={tool_name} parse_ok={tool_request is not None}"
+            if adapter_audit.get("tool_error"):
+                summary += f" error={adapter_audit['tool_error']}"
+            self.exploration_controller.journal_entry(
+                exploration_id=exploration.exploration_id,
+                session_id=self.session_id,
+                tick_id=tick_id,
+                kind="tick_output",
+                content=(generation.raw_text or "")[:2000],
+                notes=[summary],
+            )
+            tokens_used = generation.completion_tokens or (
+                len(generation.raw_text or "") // 4
+            )
+            self.exploration_controller.record_tick(
+                session_id=self.session_id,
+                tick_id=tick_id,
+                tokens_used=tokens_used,
+            )
 
         drive_gap = self.drive_gap_engine.assess(
             self_state=self.self_state,
@@ -947,6 +1021,7 @@ class NovaRuntime:
                 "stage18_4_self_state_tick",
                 f"drive_gap:{drive_gap.gap_summary[:80]}",
                 f"tool:{tool_request.tool_name if tool_request else 'none'}",
+                f"register:{register}",
             ],
         )
         self.trace_logger.log_operational_tick(
@@ -1015,6 +1090,83 @@ class NovaRuntime:
 
         applied_at = utc_now_iso()
         return self.instruction_proposal_store.mark_applied(proposal_id, applied_at)
+
+    # ── Phase 21 Stage 21.1 — exploration lifecycle (operator surface) ──────
+
+    def exploration_status(self) -> dict:
+        """Current exploration state for this session plus recent history."""
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        open_record = self.exploration_controller.store.open_for_session(self.session_id)
+        recent = self.exploration_controller.store.list_recent(limit=5)
+        return {
+            "session_id": self.session_id,
+            "register": self.exploration_controller.register_for(self.session_id),
+            "open_exploration": open_record.to_dict() if open_record else None,
+            "recent_explorations": [
+                {
+                    "exploration_id": r.exploration_id,
+                    "topic": r.topic,
+                    "status": r.status,
+                    "close_reason": r.close_reason,
+                    "ticks_used": r.ticks_used,
+                }
+                for r in recent
+            ],
+        }
+
+    def start_exploration(
+        self,
+        *,
+        topic: str,
+        rationale: str,
+        origin: str = "operator",
+        max_ticks: int | None = None,
+        max_tokens: int | None = None,
+        wall_clock_seconds: int | None = None,
+    ) -> ExplorationRecord:
+        """Operator-directed exploration entry (console /explore start)."""
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        kwargs: dict = {}
+        if max_ticks is not None:
+            kwargs["max_ticks"] = max_ticks
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        if wall_clock_seconds is not None:
+            kwargs["wall_clock_seconds"] = wall_clock_seconds
+        return self.exploration_controller.open(
+            session_id=self.session_id,
+            topic=topic,
+            rationale=rationale,
+            origin=origin,
+            **kwargs,
+        )
+
+    def close_exploration(self, *, reason: str = "operator_close") -> ExplorationRecord | None:
+        """Operator-directed close of the session's open exploration."""
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        if reason == "interrupted":
+            return self.exploration_controller.interrupt(self.session_id)
+        return self.exploration_controller.close(
+            session_id=self.session_id, close_reason=reason
+        )
+
+    def pause_exploration(self) -> ExplorationRecord | None:
+        """Pause the session's active exploration (subordination rule)."""
+        if self.session_id is None:
+            return None
+        return self.exploration_controller.pause(self.session_id)
+
+    def resume_exploration(self) -> ExplorationRecord | None:
+        """Resume the session's paused exploration when idle conditions hold."""
+        if self.session_id is None:
+            return None
+        return self.exploration_controller.resume(self.session_id)
 
     def review_internal_autonomy_run(
         self,

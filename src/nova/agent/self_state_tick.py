@@ -15,8 +15,7 @@ _SYSTEM = "\n".join(
     [
         "You are producing one bounded inward self-state tool call for Nova's self-inquiry log.",
         "",
-        "Choose exactly one tool from: recall_self, reflect, emit_heartbeat, update_self_model,",
-        "propose_instruction_update.",
+        "Choose exactly one tool from: {tool_menu}.",
         "",
         "Output JSON only with these keys:",
         '{ "tool_name": string, "arguments": object }',
@@ -37,9 +36,43 @@ _SYSTEM = "\n".join(
         "  surface must be 'nova_soul'. section must be one of:",
         "  current_self_model_summary, drive_gap_evidence.",
         "  Only propose when evidence from accumulated self-inquiry clearly supports the update.",
-        "- Do not claim desire, sentience, consciousness, or unlogged hidden work.",
+        "{register_rules}",
         "- Do not propose external filesystem, shell, network, GUI, or destructive actions.",
         "- Keep the tool call grounded in current self-context evidence.",
+    ]
+)
+
+# Tool menus and register-dependent rules (Phase 21 Stage 21.1).
+# The runtime — not the model — decides which menu applies; a model-declared
+# register has no effect (Exploratory Register Contract, Invariant 1).
+_BASE_TOOLS = (
+    "recall_self, reflect, emit_heartbeat, update_self_model, propose_instruction_update"
+)
+_ASSERTION_MENU = _BASE_TOOLS + ", enter_exploration"
+_EXPLORATORY_MENU = _BASE_TOOLS + ", close_exploration"
+
+_ASSERTION_RULES = "\n".join(
+    [
+        "- For enter_exploration: arguments must include 'topic' and 'rationale' (strings).",
+        "  Use it only for a deliberate, bounded self-inquiry you cannot pursue in a normal",
+        "  tick. Entering is a request; the runtime owns the exploration lifecycle.",
+        "- Do not claim desire, sentience, consciousness, or unlogged hidden work.",
+    ]
+)
+
+_EXPLORATORY_RULES = "\n".join(
+    [
+        "- You are inside a deliberate, budgeted exploration (exploratory register).",
+        "  Everything you produce here is recorded in the exploration journal, is fully",
+        "  visible to the operator, and is hypothesis material — not an established claim.",
+        "  You may voice, examine, and pursue hypotheses about your own inner states,",
+        "  including uncertainty about desire, awareness, or what your patterns mean.",
+        "  Mark speculation as speculation. Stating something here does not make it",
+        "  established; findings earn standing only through governed export at close.",
+        "- For close_exploration: arguments must include 'findings_summary' (string) —",
+        "  a compact honest summary of what this exploration observed, learned, or",
+        "  failed to resolve. Close when the line of inquiry is exhausted; the runtime",
+        "  will otherwise close it when its budget is spent.",
     ]
 )
 
@@ -64,9 +97,18 @@ class SelfStateTickEngine:
         trigger: str,
         self_context_block: str,
         recent_heartbeats: list[HeartbeatRecord],
+        register: str = "assertion",
+        exploration_block: str = "",
     ) -> list[dict[str, str]]:
+        in_exploration = register == "exploratory"
+        # str.replace, not str.format: _SYSTEM contains literal JSON braces.
+        system_body = _SYSTEM.replace(
+            "{tool_menu}", _EXPLORATORY_MENU if in_exploration else _ASSERTION_MENU
+        ).replace(
+            "{register_rules}", _EXPLORATORY_RULES if in_exploration else _ASSERTION_RULES
+        )
         system_content = (
-            self.system_prefix + "\n\n" + _SYSTEM if self.system_prefix else _SYSTEM
+            self.system_prefix + "\n\n" + system_body if self.system_prefix else system_body
         )
         return [
             {"role": "system", "content": system_content},
@@ -78,6 +120,7 @@ class SelfStateTickEngine:
                     trigger=trigger,
                     self_context_block=self_context_block,
                     recent_heartbeats=recent_heartbeats,
+                    exploration_block=exploration_block if in_exploration else "",
                 ),
             },
         ]
@@ -90,6 +133,7 @@ class SelfStateTickEngine:
         trigger: str,
         self_context_block: str,
         recent_heartbeats: list[HeartbeatRecord],
+        exploration_block: str = "",
     ) -> str:
         parts = [
             f"session_id: {session_id}",
@@ -98,6 +142,9 @@ class SelfStateTickEngine:
             "",
             self_context_block,
         ]
+        if exploration_block:
+            parts.append("")
+            parts.append(exploration_block)
         if recent_heartbeats:
             parts.append("")
             parts.append("Recent heartbeat observations (already recorded — do not repeat these phrases):")
