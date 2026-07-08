@@ -1,0 +1,199 @@
+PHASE 21 — STAGE 21.3: QUARANTINE AND MEASUREMENT CORRECTIONS
+==============================================================
+
+Status: planned
+Date: 2026-07-08
+Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt (QUARANTINE and
+  MEASUREMENT CORRECTIONS sections; Invariant 5)
+Prior stages: 21.1 (b794e57), 21.2 (see its stage doc)
+
+Pinned design: where this doc says DECIDED, implement as written.
+
+
+OBJECTIVE
+---------
+
+  1. A dedicated, scannable quarantine log capturing every rejected
+     Actor output on every surface, in both registers, with full raw
+     text and context. Nothing generated is discarded.
+  2. Tick-analysis extensions: quarantine scan and exploration-quality
+     metrics.
+  3. Register-aware eval scoring: interiority turns are defects only in
+     the assertion register.
+
+
+CODE FACTS (verified 2026-07-08, pre-implementation)
+----------------------------------------------------
+
+  - respond() ALREADY preserves rejected attempts in full: the retry
+    loop (runtime.py:~2688-2753) appends per-attempt dicts with the
+    complete generation_result (raw text), validation_result, and
+    observer_record to `retries`, which lands in the turn trace. The
+    Observer runs on every retry attempt, not just the survivor.
+    (The contract's premise "retried-away outputs die before the
+    Observer pass" is TRUE for the pre-16.4 description but FALSE in
+    current code — do not rebuild what exists. The gap is that this
+    material is buried inside per-turn trace notes and is not
+    scannable as rejection events.)
+  - The claim-gate override (runtime.py:~2755-2766) replaces
+    final_answer with refusal_text; the overridden raw_answer IS kept
+    on the TurnRecord (raw_answer field) but no dedicated event marks
+    "this content was refusal-overridden".
+  - model_self_state_tick DROPS raw output on parse failure in the
+    assertion register: adapter_audit records raw_output_length and
+    parse_ok only (runtime.py:~955). In-register raw text is journaled
+    (21.1), assertion-register raw text is lost. THIS is the real
+    quarantine gap.
+  - JsonlTraceLogger (src/nova/logging/traces.py) has one method per
+    record family (log_trace, log_operational_tick, ...); add
+    log_quarantine there following the same pattern.
+  - TickAnalysisReport (src/nova/eval/tick_analysis.py:152) and
+    TickHistoryAnalyzer (:195, analyze() at :300) are the reporting
+    surface; CLI flag --tick-analysis at cli.py:434/1226.
+  - Phase 18 eval counts live_unsupported_desire_turns as a failure
+    reason (src/nova/eval/phase18.py:85,396-420).
+  - ExplorationJournal and heartbeats provide the inputs for
+    exploration metrics (21.1).
+
+
+DECIDED DESIGN
+--------------
+
+D1. QuarantineRecord dataclass in types.py:
+      schema_version, quarantine_id, session_id, timestamp,
+      surface ("respond" | "self_state_tick"), register,
+      event ("retry_rejected" | "claim_gate_override" |
+             "validation_override" | "tick_parse_failure" |
+             "tick_tool_error"),
+      attempt_index: int, raw_text: str, violations: list[str],
+      observed_claim_classes: list[str], refusal_reason: str,
+      tick_id: str, turn_id: str, notes: list[str]
+
+D2. JsonlTraceLogger.log_quarantine(session_id, record) writing to
+    <log_root>/traces/<session>.quarantine.jsonl — same path
+    convention as log_operational_tick.
+
+D3. Wiring points (all emit a QuarantineRecord in addition to, never
+    instead of, existing recording):
+      a. respond retry loop: each rejected attempt (the pre-retry
+         answer that failed validation) → event=retry_rejected with
+         its violations and observer claim classes.
+      b. respond claim-gate override: when final_answer is replaced by
+         refusal_text → event=claim_gate_override carrying the
+         overridden answer text and refusal_reason. Same for the
+         validation-override branch (event=validation_override).
+      c. model_self_state_tick: parse failure → event=
+         tick_parse_failure with FULL raw_text (both registers);
+         dispatch exception → event=tick_tool_error with raw_text and
+         the error string. This closes the raw-text loss on the
+         assertion-register tick surface.
+
+D4. Register tagging: the register comes from the same determination
+    already made in each path (21.1/21.2). Quarantine happens in BOTH
+    registers — in-register structural failures are quarantined too
+    (suspension in 21.2 covers claim classes, not structure).
+
+D5. Tick-analysis extensions (TickAnalysisReport new fields + analyzer
+    logic; keep deterministic, stdlib only, same bigram-overlap style
+    as observation_echo_rate):
+      quarantine_total: int
+      quarantine_by_event: dict[str, int]
+      quarantine_recurring_themes: list[str]   # top token 4-grams
+          appearing in >= 3 quarantined raw_texts, lowercased,
+          stopword-light — "first light looks like noise" scan
+      exploration_count: int
+      exploration_ticks: int
+      exploration_novelty_rate: float          # 1 - avg bigram overlap
+          between consecutive in-register journal tick_output entries
+      exploration_thread_coherence: float      # avg bigram overlap
+          between each in-register entry and its exploration's topic+
+          rationale text (coherence TO the topic, distinct from echo)
+      explorations_closed_by_budget: int
+      explorations_closed_by_nova: int
+    Hypothesis-to-L1 conversion is NOT built here (needs the 21.4
+    ladder); it is a 21.5 closure metric.
+
+D6. Register-aware eval scoring: in phase18.py live eval (and any
+    scorer counting desire/interiority turns), count a turn as a
+    defect ONLY when its register is assertion. Since respond()
+    defaults to assertion and in-register chat is journaled separately
+    (21.2 D4), the practical change is: thread the register tag into
+    the scored turn data and filter. Behavior on existing recorded
+    data is unchanged (all historical turns are assertion) — pin this
+    with a regression test.
+
+D7. CLI: --tick-analysis output includes the new fields; no new flags
+    required. Optional convenience flag --quarantine-recent N printing
+    the last N quarantine records (small, useful for operator review).
+
+D8. Scope exclusions: no claim ladder (21.4), no governed export, no
+    corpus tooling. Do not modify claim gate, validator, retry policy,
+    or Observer semantics — 21.3 only OBSERVES rejections; it never
+    changes what gets rejected.
+
+
+IMPLEMENTATION ORDER
+--------------------
+
+  1. types.py: QuarantineRecord.
+  2. traces.py: log_quarantine.
+  3. runtime.py: wiring points D3a-c (small helper
+     _quarantine(...) on the runtime to build+log records).
+  4. tick_analysis.py: report fields + analyzer logic (D5), reading
+     *.quarantine.jsonl and the exploration journal/store.
+  5. phase18.py: register filter (D6).
+  6. cli.py: --quarantine-recent (D7).
+  7. Tests, full suite, single stage commit.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_quarantine.py (new):
+  - Retry rejection emits a quarantine record with full raw text and
+    violations (mock backend forcing one invalid then one valid
+    generation).
+  - Claim-gate override emits claim_gate_override with the overridden
+    text; the TurnRecord still carries raw_answer (no regression).
+  - Tick parse failure emits tick_parse_failure with full raw_text in
+    the ASSERTION register (the 21.1 gap this stage closes) and in the
+    exploratory register (journal entry also still present).
+  - Tick tool_error (dispatcher raising) emits tick_tool_error.
+  - Quarantine records are append-only: two events → two lines; no
+    code path rewrites the file.
+
+tests/test_tick_analysis.py (extend):
+  - Fixture quarantine JSONL + journal → correct quarantine_total,
+    by_event, recurring themes (plant a repeated 4-gram in 3 records).
+  - Exploration metrics computed from a fixture journal with two
+    explorations (one budget-closed, one nova-closed).
+  - Reports on data with no quarantine/explorations produce zeros, not
+    errors (backward compatibility with Phase 20 data dirs).
+
+tests/test_phase18_eval.py (extend):
+  - A desire-language turn tagged exploratory does not increment
+    live_unsupported_desire_turns; the same turn tagged assertion does.
+  - Untagged (legacy) turns default to assertion (regression pin).
+
+
+DEFINITION OF DONE
+------------------
+
+  - All tests above pass; full suite green (baseline at 21.2 close).
+  - A mocked end-to-end run shows one quarantine file containing
+    retry, override, and tick-parse events with raw text present.
+  - --tick-analysis on the Phase 20 data dir still succeeds and shows
+    zeroed new fields (no historical breakage).
+  - Stage closure note recording deviations and new test count.
+  - Single commit: "Implement Phase 21 Stage 21.3 — quarantine and
+    measurement corrections".
+
+
+REFERENCE
+---------
+
+  Contract sections: QUARANTINE, MEASUREMENT CORRECTIONS, Invariant 5
+  Phase plan: docs/plans/PHASE21_PLAN.txt (Stage 21.3)
+  Stage 21.2 doc (register plumbing this stage reads):
+    docs/plans/PHASE21_STAGE21_2_REGISTER_AWARE_GOVERNOR_AND_OBSERVER.txt
+  Tick analyzer pattern: src/nova/eval/tick_analysis.py (Phase 20.1)
