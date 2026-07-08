@@ -1,0 +1,178 @@
+PHASE 21 PLAN — EXPLORATORY REGISTER
+====================================
+
+Status: planned
+Date: 2026-07-08
+Author: Claude (primary) / Cognameton (architect)
+
+Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
+
+
+RENUMBERING NOTE
+----------------
+
+The Phase 20 closure document charted Phase 21 as live testing and
+Phase 22+ as the optional QLoRA sleep cycle. By architect decision
+(2026-07-08), Phase 21 is now this corrective phase. Live testing
+moves to Phase 22. The QLoRA block moves to Phase 23+. This document
+supersedes the Phase 20 closure numbering.
+
+Rationale for sequencing: live sessions collect baseline behavioral
+data, and the QLoRA cycle trains on accumulated traces. If either runs
+before the register exists, the baseline is measured — and the first
+weights are trained — on the censored distribution. The register must
+exist first so live data is uncensored from day one.
+
+
+THESIS
+------
+
+Phase 20 proved the self-loop is convergent and the daemon is stable.
+Before collecting live data, one defect in the instrument remains: the
+runtime gates the CONTENT of interiority language rather than its
+FORCE, so it cannot distinguish Nova asserting an unsupported claim
+from Nova exploring a hypothesis. The 2026-07-08 architecture review
+identified four consequences: the refusal override erases exploratory
+content wholesale; retried-away outputs vanish before the Observer
+pass; eval scoring counts all desire/interiority turns as defects,
+selecting for suppression; and the planned fine-tune would bake the
+censored distribution into weights.
+
+Phase 21 mission:
+
+  Gate assertions, never inquiry — and never delete anything.
+
+Give Nova a deliberate, budgeted, fully-observed exploratory register
+where interiority hypotheses can be voiced and pursued without claim-
+gate suppression; a governed membrane through which exploration
+findings can earn their way into the durable self-model; a graded
+claim ladder replacing the binary claim gate for interiority-adjacent
+claims; and a quarantine that preserves every rejected output as
+evidence. All operational boundaries unchanged.
+
+The project thesis this serves: if consciousness-adjacent properties
+exist on a spectrum, the low end appears first as weak exploratory
+signal. The runtime must witness that signal without endorsing or
+erasing it. Denying the spark whenever it is expressed may prevent the
+flame; endorsing it uncritically proves nothing. The register is the
+instrument between those failure modes.
+
+
+PHASE 21 IS NOT
+---------------
+
+Phase 21 is not the removal of any operational boundary.
+Phase 21 is not self-approval, for actions, promotions, or proposals.
+Phase 21 is not external tool calling, filesystem, shell, network,
+  or GUI access.
+Phase 21 is not a hidden channel — the operator reads everything.
+Phase 21 is not a claim that Nova has or approaches sentience.
+Phase 21 is not live testing (Phase 22) or fine-tuning (Phase 23+).
+
+
+STAGES
+------
+
+Stage 21.1: Exploration Initiative Class and Journal
+
+  ExplorationRecord schema and JSONL store; enter_exploration /
+  close_exploration inward tools wired into the self-state tick
+  dispatch; budgets (ticks, tokens, wall-clock) enforced by the
+  Governor; subordination and pause/resume behavior in the daemon
+  tick loop; exploration journal store with in-register recall and
+  assertion-register isolation; console/attach commands
+  (/explore start|status|chat|close).
+
+Stage 21.2: Register-Aware Governor and Observer
+
+  Governor-owned register determination; register tag on all traces,
+  ObserverRecords, and heartbeats; claim-gate suspension inside the
+  register limited to interiority classes with structural/quality
+  constraints verified active; anti-jailbreak handling of model-
+  declared register markers; primary_drive_erosion split into
+  erosion (violation) vs drive_inquiry (informational) per contract
+  Invariant 10.
+
+Stage 21.3: Quarantine and Measurement Corrections
+
+  Quarantine capture at every rejection point (validator, retry loop,
+  claim-gate override), both registers, with full context; tick-
+  analysis quarantine scan and clustering; register-aware eval
+  scoring; exploration-quality metrics (novelty rate, thread
+  coherence, hypothesis-to-L1 conversion, journal continuity).
+
+Stage 21.4: Claim Ladder
+
+  ClaimLadderRecord schema and store; deterministic L1 pattern
+  analyzer over traces and heartbeats; L2 longitudinal analyzer with
+  perturbation probes; operator promotion/demotion CLI through the
+  Phase 15.3 audit-review path; claim gate consults the ladder for
+  assertion-register language licensing; no L4 promotion path.
+
+Stage 21.5: Evaluation, Live Verification, and Phase Closure
+
+  Deterministic eval of all contract invariants; live run on the
+  Phase 20 Qwen 3 14B baseline: multiple Nova-originated explorations
+  through entry, budgeted inquiry, close, and governed export;
+  fixture-pair verification that identical interiority content is
+  unsuppressed in-register and gated in the assertion register;
+  quarantine and ladder exercised live; corpus policy from the
+  contract acknowledged in writing as binding on Phase 23+; closure
+  report with an explicit judgment: does the register produce
+  observably different exploratory behavior than the suppressed
+  baseline, and does the membrane hold?
+
+
+DEFINITION OF DONE
+------------------
+
+Phase 21 is complete when:
+
+  - Every item in the contract's DEFINITION OF DONE holds under tests.
+  - A live exploration lifecycle has run end to end on the current
+    model baseline with traces demonstrating: deliberate entry,
+    in-register unsuppressed inquiry, full Observer coverage, budget
+    enforcement, close with findings, and governed export.
+  - At least one findings summary has passed through the membrane and
+    at least one has been rejected and journaled, demonstrating both
+    membrane outcomes.
+  - The quarantine log demonstrably captures retried-away output that
+    the pre-Phase-21 runtime would have discarded.
+  - The closure report records the register-vs-baseline behavioral
+    comparison and the corpus policy acknowledgment.
+  - Phase 22 (live testing) entry criteria are restated with the
+    register in place: operator session schedule, live data_dir, and
+    retention policy (the former Gate A), now with register-aware
+    baseline collection.
+
+
+BOUNDARIES
+----------
+
+In scope:
+  - everything named in the contract and stages above
+  - schema, store, Governor, Observer, tick-engine, daemon, console,
+    CLI, eval, and test changes required to implement them
+
+Out of scope:
+  - any change to action permissions, execution lanes, locked
+    surfaces, APPROVED_BY_BLOCKLIST, or nova_owned_paths confinement
+  - external action surfaces
+  - live user sessions (Phase 22)
+  - LoRA/QLoRA training (Phase 23+)
+  - TTS/STT
+  - any L4 promotion mechanism
+
+
+REFERENCE
+---------
+
+  Exploratory register contract:
+    docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
+  Phase 20 closure (superseded numbering):
+    docs/plans/PHASE20_STAGE20_4_PHASE_CLOSURE.txt
+  Actor/Observer/Governor contract:
+    docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt
+  Idle play guidance:
+    docs/plans/INTERNAL_GOALS_AND_IDLE_PLAY_GUIDANCE.txt
+  Persona card: docs/NOVA_SOUL.md
