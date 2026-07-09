@@ -302,6 +302,25 @@ class NovaDaemon:
                         "type": "explore",
                         "closed": record.to_dict() if record else None,
                     }
+                if action == "chat":
+                    # Phase 21 Stage 21.2 (D3): unlike msg_type "chat", this
+                    # does NOT call pause_exploration() first — it is a
+                    # deliberate conversation INSIDE the active exploration,
+                    # not outward work that should subordinate it. Model
+                    # access still goes through _model_lock like every
+                    # other generation path.
+                    message = str(msg.get("message", "")).strip()
+                    if not message:
+                        return {"type": "error", "message": "message required"}
+                    with self._model_lock:
+                        turn = self.runtime.explore_chat(message)
+                    return {
+                        "type": "explore",
+                        "chat": {
+                            "answer": turn.final_answer,
+                            "turn_id": getattr(turn, "turn_id", ""),
+                        },
+                    }
                 return {"type": "error", "message": f"unknown explore action: {action!r}"}
             except Exception as exc:
                 return {"type": "error", "message": str(exc)}
@@ -379,6 +398,8 @@ class NovaAttachClient:
                     msg["topic"] = parts[2]
                 if action == "close" and len(parts) > 2:
                     msg["reason"] = parts[2]
+                if action == "chat" and len(parts) > 2:
+                    msg["message"] = parts[2]
                 r = self.send(sock, msg)
                 if r:
                     print(json.dumps(r, indent=2))

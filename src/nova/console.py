@@ -129,7 +129,7 @@ class InteractionConsole:
                 "/actions [N] - show recent action history evaluation",
                 "/maintenance - request the gated maintenance-plan tool",
                 "/summary - show a bounded current-session summary",
-                "/explore [status|start <topic>|close [reason]|interrupt] - exploratory register lifecycle",
+                "/explore [status|start <topic>|chat <message>|close [reason]|interrupt] - exploratory register lifecycle",
                 "/exit - leave the console",
             ]
         )
@@ -673,7 +673,19 @@ class InteractionConsole:
                 return "No open exploration to interrupt."
             return f"Exploration interrupted: {record.topic} (journal retained)"
 
-        return "Usage: /explore [status|start <topic>|close [reason]|interrupt]"
+        if action == "chat":
+            # Phase 21 Stage 21.2 (D3): the console never decides register —
+            # it asks runtime.explore_chat, which asks the controller for an
+            # active exploration before calling respond(register="exploratory").
+            if not rest:
+                return "Usage: /explore chat <message>"
+            try:
+                turn = self.runtime.explore_chat(rest)
+            except ValueError as exc:
+                return f"Exploration chat not sent: {exc}"
+            return f"[exploratory] {turn.final_answer}"
+
+        return "Usage: /explore [status|start <topic>|chat <message>|close [reason]|interrupt]"
 
 
 def _parse_positive_int(value: str, *, default: int) -> int:

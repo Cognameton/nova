@@ -1107,6 +1107,7 @@ class TraceRecord:
     session_id: str = ""
     turn_id: str = ""
     timestamp: str = ""
+    register: str = "assertion"
     config_snapshot: dict[str, Any] = field(default_factory=dict)
     persona_state_snapshot: dict[str, Any] = field(default_factory=dict)
     self_state_snapshot: dict[str, Any] = field(default_factory=dict)
@@ -1163,6 +1164,11 @@ class ObserverRecord:
     narrator_voice_matches: list[str] = field(default_factory=list)
     primary_drive_erosion_detected: bool = False
     primary_drive_erosion_matches: list[str] = field(default_factory=list)
+    register: str = "assertion"
+    drive_inquiry_detected: bool = False
+    drive_inquiry_matches: list[str] = field(default_factory=list)
+    register_marker_detected: bool = False
+    register_marker_matches: list[str] = field(default_factory=list)
     generative_mass: float = 1.0
     low_generative_mass: bool = False
     proposed_self_state_revisions: list[dict[str, Any]] = field(default_factory=list)

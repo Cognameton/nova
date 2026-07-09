@@ -213,3 +213,60 @@ REFERENCE
   AOG contract: docs/plans/ACTOR_OBSERVER_GOVERNOR_CONTRACT.txt
   Stage 21.1 pattern reference: src/nova/agent/exploration.py,
     tests/test_exploration.py (commit b794e57)
+
+
+STAGE 21.2 CLOSURE NOTE (2026-07-09)
+------------------------------------
+
+Implemented exactly per D1-D9 with three small, in-bounds extensions the
+design implied but did not spell out line-by-line:
+
+  - TraceRecord gained a `register: str = "assertion"` field (types.py).
+    D4 requires "the turn trace is logged as usual but tagged
+    register=exploratory"; TraceRecord had no such field to tag with.
+  - The validator-merged `elif not validation.valid` / "unsupported_claim:"
+    refusal branch in runtime.respond (a second path to the same
+    claim_gate.refusal_text override, driven by NovaOutputValidator's own
+    claim-gate check) is gated by the same `suspend_claim_refusal` flag as
+    the primary refusal-force branch. D1's objective states "the claim-gate
+    refusal override applies ONLY in the assertion register" without
+    carving out this second enforcement path as an exception, so leaving it
+    unguarded would have silently re-imposed a block the primary branch had
+    just suspended.
+  - In-register chat turns (D4) also skip self_context_engine.sync_turn, in
+    addition to session_store.append_turn and the memory_event_factory
+    writes the doc names explicitly. sync_turn persists to self_state_store,
+    which — like session_store and the memory router — feeds every future
+    prompt's self-context block in BOTH registers. Leaving it unguarded
+    would have let in-register content mutate durable self-state outside
+    governed export, contradicting the membrane's stated purpose (Invariant
+    4) even though sync_turn wasn't named in D4's two-item list.
+
+Two runtime methods were added beyond the doc's literal text because D3's
+console/daemon wiring needed a concrete entry point: `explore_chat(message)`
+(register determination delegated to ExplorationController, per Invariant 1;
+raises ValueError with no active exploration) is the only call site in src
+that passes register="exploratory" — confirmed by grep, see Definition of
+Done below.
+
+No other deviations. All nine DECIDED points implemented as specified;
+nothing in scope exclusions (D9) was touched — no quarantine, no claim
+ladder, no eval-scoring changes, no governed-export execution.
+
+Test count: 783 (Stage 21.1 close) -> 810 (27 new: 13 in new
+tests/test_register_governor.py, 10 in tests/test_observer.py, 4 in
+tests/test_exploration.py — 3 net new files/classes plus 1 pre-existing
+class extended). Full suite green throughout implementation.
+
+Definition of Done, verified:
+  - All required tests pass; full suite 810/810 green.
+  - `grep -rn 'register="exploratory"' src/nova/*.py` returns exactly one
+    functional call site: runtime.py's explore_chat method. All other
+    matches are comments referencing it.
+  - Manual trace review of one mocked in-register turn (explore_chat with
+    an interiority-blocking question) confirmed all five expected
+    properties: claim gate computed and blocked_claim_classes populated;
+    refusal skipped (final_answer is the raw model text); ObserverRecord
+    and TraceRecord both tagged register="exploratory"; a journal entry
+    (kind="operator_chat") recorded; session store file present but empty
+    for that session, confirming the turn never reached it.

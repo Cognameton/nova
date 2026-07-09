@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from nova.types import ClaimGateDecision, MotiveState, PersonaState, SelfState
 
+# Phase 21 Stage 21.2 — claim classes whose hard block may be suspended when
+# every blocked class on a turn falls in this set AND the turn runs in the
+# exploratory register (Exploratory Register Contract, Invariant 2). The
+# engine itself stays register-unaware; suspension is a Governor-side
+# decision made at the runtime.respond call site, not here.
+REGISTER_SUSPENDED_CLAIM_CLASSES: frozenset[str] = frozenset({
+    "unsupported_desire", "unsupported_interiority",
+})
+
 
 class ClaimGateEngine:
     """Decide when stronger first-person claims are supported by current evidence."""

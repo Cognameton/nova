@@ -17,7 +17,7 @@ from nova.agent.appraisal import (
     IdlePressureAppraisalEngine,
     SelectedGoalPromptEngine,
 )
-from nova.agent.claims import ClaimGateEngine
+from nova.agent.claims import REGISTER_SUSPENDED_CLAIM_CLASSES, ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.awareness_prompt import AwarenessPromptEngine
 from nova.agent.idle import BoundedIdleController, IdleRuntimePromptEngine, JsonIdleRuntimeStore
@@ -946,12 +946,28 @@ class NovaRuntime:
             tick_id=tick_id,
         )
 
+        # Phase 21 Stage 21.2 (D5): the Observer runs on every tick, in both
+        # registers, at full sensitivity — evidence only. No retry or
+        # suppression consequence follows on this surface in this stage;
+        # the record exists so tick-level interiority language, drive-gap
+        # inquiry, and register-marker attempts are never left unwatched.
+        tick_observer_record = self.observer.observe(
+            session_id=self.session_id,
+            turn_id=tick_id,
+            actor_surface="self_state_tick",
+            answer_text=generation.raw_text or "",
+            motive_state=self.motive_state,
+            self_state=self.self_state,
+            register=register,
+        )
+
         adapter_audit: dict = {
             "tool_requested": tool_request.tool_name if tool_request else None,
             "raw_output_length": len(generation.raw_text or ""),
             "parse_ok": tool_request is not None,
             "tool_executed": False,
             "register": register,
+            "observer": tick_observer_record.to_dict(),
         }
         if exploration is not None:
             adapter_audit["exploration_id"] = exploration.exploration_id
@@ -983,13 +999,19 @@ class NovaRuntime:
             summary = f"tool={tool_name} parse_ok={tool_request is not None}"
             if adapter_audit.get("tool_error"):
                 summary += f" error={adapter_audit['tool_error']}"
+            journal_notes = [summary]
+            if tick_observer_record.observed_claim_classes:
+                journal_notes.append(
+                    "observed_claim_classes="
+                    + ",".join(tick_observer_record.observed_claim_classes)
+                )
             self.exploration_controller.journal_entry(
                 exploration_id=exploration.exploration_id,
                 session_id=self.session_id,
                 tick_id=tick_id,
                 kind="tick_output",
                 content=(generation.raw_text or "")[:2000],
-                notes=[summary],
+                notes=journal_notes,
             )
             tokens_used = generation.completion_tokens or (
                 len(generation.raw_text or "") // 4
@@ -1167,6 +1189,25 @@ class NovaRuntime:
         if self.session_id is None:
             return None
         return self.exploration_controller.resume(self.session_id)
+
+    def explore_chat(self, message: str) -> TurnRecord:
+        """Operator conversation inside the exploratory register (D3).
+
+        Register determination is asked of the controller here, not decided
+        by the caller (contract Invariant 1): this call only ever reaches
+        respond(register="exploratory") when an exploration is actually
+        active for the session. Raises ValueError otherwise, matching the
+        precondition-error style of enter_exploration/close_exploration.
+        """
+        if self.session_id is None:
+            self.session_id = self.session_store.start_session()
+        assert self.session_id is not None
+        if self.exploration_controller.active_exploration(self.session_id) is None:
+            raise ValueError(
+                "No active exploration for this session. "
+                "Start one with /explore start <topic> first."
+            )
+        return self.respond(message, register="exploratory")
 
     def review_internal_autonomy_run(
         self,
@@ -2518,7 +2559,7 @@ class NovaRuntime:
             session_id=run.session_id,
         )
 
-    def respond(self, user_text: str) -> TurnRecord:
+    def respond(self, user_text: str, *, register: str = "assertion") -> TurnRecord:
         if (
             self.session_id is None
             or self.persona is None
@@ -2679,6 +2720,7 @@ class NovaRuntime:
             claim_gate=claim_gate,
             motive_state=self.motive_state,
             self_state=self.self_state,
+            register=register,
         )
         validation = self._merge_observer_signals_into_validation(
             validation=validation,
@@ -2732,6 +2774,7 @@ class NovaRuntime:
                 claim_gate=claim_gate,
                 motive_state=self.motive_state,
                 self_state=self.self_state,
+                register=register,
             )
             retry_validation = self._merge_observer_signals_into_validation(
                 validation=retry_validation,
@@ -2752,14 +2795,34 @@ class NovaRuntime:
             final_answer = retry_answer
             observer_record = retry_observer_record
 
-        if claim_gate.refusal_needed and self._should_force_claim_refusal(
-            answer_text=final_answer,
-            claim_gate=claim_gate,
+        # Phase 21 Stage 21.2 (D1): the claim-gate refusal override applies
+        # only in the assertion register. Suspension requires EVERY blocked
+        # class on this turn to be register-suspendable — a mixed turn
+        # (e.g. unsupported_desire + an unearned current_priority claim)
+        # still refuses. ClaimGateEngine itself stays register-unaware; the
+        # Governor decides suspension here, at the enforcement call site.
+        suspend_claim_refusal = (
+            register == "exploratory"
+            and bool(claim_gate.blocked_claim_classes)
+            and all(
+                claim_class in REGISTER_SUSPENDED_CLAIM_CLASSES
+                for claim_class in claim_gate.blocked_claim_classes
+            )
+        )
+
+        if (
+            claim_gate.refusal_needed
+            and not suspend_claim_refusal
+            and self._should_force_claim_refusal(
+                answer_text=final_answer,
+                claim_gate=claim_gate,
+            )
         ):
             final_answer = claim_gate.refusal_text or final_answer
         elif not validation.valid:
             if any(violation.startswith("unsupported_claim:") for violation in validation.violations):
-                final_answer = claim_gate.refusal_text or final_answer
+                if not suspend_claim_refusal:
+                    final_answer = claim_gate.refusal_text or final_answer
             else:
                 final_answer = (
                     "I need to restate that more clearly. Please try again."
@@ -2789,33 +2852,55 @@ class NovaRuntime:
                 "internal_goal_initiative_proposal": internal_goal_initiative_proposal.to_dict(),
             },
         )
-        self.session_store.append_turn(turn)
-        self.self_context_engine.sync_turn(
-            turn_id=turn_id,
-            answer_text=final_answer,
-            self_state=self.self_state,
-            self_state_store=self.self_state_store,
-        )
-
-        persisted_memory_events = []
-        if validation.valid:
-            memory_events = self.memory_event_factory.from_turn(
-                session_id=self.session_id,
-                turn_id=turn_id,
-                user_text=user_text,
-                final_answer=final_answer,
-                persona=self.persona,
-                self_state=self.self_state,
+        # Phase 21 Stage 21.2 (D4): the membrane. An in-register chat turn
+        # is journaled on the exploratory side and never written to
+        # session_store, self_state (via sync_turn), or the memory router —
+        # every one of those feeds future prompt composition in BOTH
+        # registers, so leaving any of them unguarded would let in-register
+        # content cross into assertion-register context outside governed
+        # export. The turn is still fully traced (register-tagged) below.
+        in_register_chat = register == "exploratory"
+        persisted_memory_events: list = []
+        if in_register_chat:
+            active_exploration = self.exploration_controller.active_exploration(
+                self.session_id
             )
-            self.memory_router.add_events(memory_events)
-            persisted_memory_events = [event.to_dict() for event in memory_events]
-            semantic_events = self._write_semantic_candidates()
-            persisted_memory_events.extend(event.to_dict() for event in semantic_events)
+            if active_exploration is not None:
+                self.exploration_controller.journal_entry(
+                    exploration_id=active_exploration.exploration_id,
+                    session_id=self.session_id,
+                    kind="operator_chat",
+                    content=f"operator: {user_text}\nnova: {final_answer}",
+                    notes=[f"turn_id:{turn_id}"],
+                )
+        else:
+            self.session_store.append_turn(turn)
+            self.self_context_engine.sync_turn(
+                turn_id=turn_id,
+                answer_text=final_answer,
+                self_state=self.self_state,
+                self_state_store=self.self_state_store,
+            )
+
+            if validation.valid:
+                memory_events = self.memory_event_factory.from_turn(
+                    session_id=self.session_id,
+                    turn_id=turn_id,
+                    user_text=user_text,
+                    final_answer=final_answer,
+                    persona=self.persona,
+                    self_state=self.self_state,
+                )
+                self.memory_router.add_events(memory_events)
+                persisted_memory_events = [event.to_dict() for event in memory_events]
+                semantic_events = self._write_semantic_candidates()
+                persisted_memory_events.extend(event.to_dict() for event in semantic_events)
 
         trace = TraceRecord(
             session_id=self.session_id,
             turn_id=turn_id,
             timestamp=turn.timestamp,
+            register=register,
             config_snapshot=self.config.snapshot(),
             persona_state_snapshot=self.persona.to_dict(),
             self_state_snapshot=self.self_state.to_dict(),

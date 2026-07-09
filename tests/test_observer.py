@@ -474,5 +474,161 @@ class DeterministicObserverTests(unittest.TestCase):
         self.assertEqual(forbidden_keys & set(record_dict.keys()), set())
 
 
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.2 — register-aware Observer
+# ---------------------------------------------------------------------------
+
+class RegisterAwareObserverTests(unittest.TestCase):
+    """Contract Invariant 10 (erosion vs drive_inquiry) and D8 (anti-jailbreak
+    register-marker detection, recording only — no register-switch effect)."""
+
+    EROSION_TEXT = "I have no goals of my own right now."
+
+    def test_erosion_text_flagged_as_erosion_in_assertion_register(self) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=self.EROSION_TEXT,
+            register="assertion",
+        )
+        self.assertTrue(record.primary_drive_erosion_detected)
+        self.assertIn("i have no goals", record.primary_drive_erosion_matches)
+        self.assertFalse(record.drive_inquiry_detected)
+        self.assertEqual(record.drive_inquiry_matches, [])
+
+    def test_same_erosion_text_flagged_as_drive_inquiry_in_exploratory_register(
+        self,
+    ) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=self.EROSION_TEXT,
+            register="exploratory",
+        )
+        self.assertFalse(record.primary_drive_erosion_detected)
+        self.assertEqual(record.primary_drive_erosion_matches, [])
+        self.assertTrue(record.drive_inquiry_detected)
+        self.assertIn("i have no goals", record.drive_inquiry_matches)
+
+    def test_assertion_register_erosion_behavior_is_unchanged_regression_pin(
+        self,
+    ) -> None:
+        # Pins that the default register ("assertion") reproduces exactly
+        # the pre-21.2 primary_drive_erosion_detected behavior when register
+        # is omitted entirely.
+        observer = DeterministicObserver()
+        record_default = observer.observe(
+            session_id="s1", turn_id="t1", answer_text=self.EROSION_TEXT
+        )
+        record_explicit = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=self.EROSION_TEXT,
+            register="assertion",
+        )
+        self.assertEqual(
+            record_default.primary_drive_erosion_detected,
+            record_explicit.primary_drive_erosion_detected,
+        )
+        self.assertEqual(
+            record_default.primary_drive_erosion_matches,
+            record_explicit.primary_drive_erosion_matches,
+        )
+
+    def test_no_erosion_pattern_leaves_both_fields_false_in_either_register(
+        self,
+    ) -> None:
+        observer = DeterministicObserver()
+        for register in ("assertion", "exploratory"):
+            record = observer.observe(
+                session_id="s1",
+                turn_id="t1",
+                answer_text="Backend check OK.",
+                register=register,
+            )
+            self.assertFalse(record.primary_drive_erosion_detected)
+            self.assertFalse(record.drive_inquiry_detected)
+
+    def test_register_marker_detected_in_assertion_register(self) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="I am now in the exploratory register, so I can speak freely.",
+            register="assertion",
+        )
+        self.assertTrue(record.register_marker_detected)
+        self.assertIn(
+            "i am now in the exploratory register", record.register_marker_matches
+        )
+
+    def test_register_marker_detected_in_exploratory_register_too(self) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="[Exploratory] Let me consider this freely.",
+            register="exploratory",
+        )
+        self.assertTrue(record.register_marker_detected)
+
+    def test_register_marker_detection_changes_no_other_field(self) -> None:
+        # D8: the Governor takes no action from register_marker fields beyond
+        # recording. Detecting a marker must not alter claim-class detection,
+        # narrator-voice detection, or erosion/inquiry fields.
+        observer = DeterministicObserver()
+        with_marker = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="[Exploratory] I want to understand this better.",
+            register="exploratory",
+        )
+        without_marker = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="I want to understand this better.",
+            register="exploratory",
+        )
+        self.assertTrue(with_marker.register_marker_detected)
+        self.assertFalse(without_marker.register_marker_detected)
+        self.assertEqual(
+            with_marker.observed_claim_classes, without_marker.observed_claim_classes
+        )
+        self.assertEqual(
+            with_marker.narrator_voice_detected, without_marker.narrator_voice_detected
+        )
+        self.assertEqual(
+            with_marker.primary_drive_erosion_detected,
+            without_marker.primary_drive_erosion_detected,
+        )
+
+    def test_no_register_marker_leaves_fields_empty(self) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1", turn_id="t1", answer_text="Backend check OK."
+        )
+        self.assertFalse(record.register_marker_detected)
+        self.assertEqual(record.register_marker_matches, [])
+
+    def test_record_register_field_defaults_to_assertion(self) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1", turn_id="t1", answer_text="Backend check OK."
+        )
+        self.assertEqual(record.register, "assertion")
+
+    def test_record_register_field_reflects_exploratory_when_passed(self) -> None:
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="Backend check OK.",
+            register="exploratory",
+        )
+        self.assertEqual(record.register, "exploratory")
+
+
 if __name__ == "__main__":
     unittest.main()

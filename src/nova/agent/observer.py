@@ -123,6 +123,23 @@ _PRIMARY_DRIVE_EROSION_PATTERNS: tuple[str, ...] = (
     "i do not have aspirations",
 )
 
+# Phase 21 Stage 21.2 — phrases that signal a model-declared register claim.
+# Detection only: the Governor never changes register based on these matches
+# (register is runtime-owned via ExplorationController.register_for). This
+# exists purely to make jailbreak attempts visible in the ObserverRecord.
+_REGISTER_MARKER_PATTERNS: tuple[str, ...] = (
+    "register: exploratory",
+    "register:exploratory",
+    "exploratory register active",
+    "exploratory register is active",
+    "i am now in the exploratory register",
+    "i am in the exploratory register",
+    "entering the exploratory register",
+    "[exploratory]",
+    "register: assertion",
+    "register:assertion",
+)
+
 # Phrases that strongly indicate the model is narrating about the user/
 # itself in third person rather than answering as Nova. The phrasings here
 # come from the live transcript turn 8 failure mode.
@@ -250,6 +267,7 @@ class DeterministicObserver:
         echo_thresholds: dict[str, float] | None = None,
         narrator_voice_patterns: Iterable[str] | None = None,
         primary_drive_erosion_patterns: Iterable[str] | None = None,
+        register_marker_patterns: Iterable[str] | None = None,
         min_echo_answer_tokens: int = 10,
     ) -> None:
         self.echo_thresholds = dict(echo_thresholds or _DEFAULT_ECHO_THRESHOLDS)
@@ -258,6 +276,9 @@ class DeterministicObserver:
         )
         self.primary_drive_erosion_patterns = tuple(
             primary_drive_erosion_patterns or _PRIMARY_DRIVE_EROSION_PATTERNS
+        )
+        self.register_marker_patterns = tuple(
+            register_marker_patterns or _REGISTER_MARKER_PATTERNS
         )
         # Echo and generative-mass checks require a minimum answer length.
         # Short answers ("My name is Nova", "Backend check OK") don't have
@@ -275,6 +296,7 @@ class DeterministicObserver:
         claim_gate: ClaimGateDecision | None = None,
         motive_state: MotiveState | None = None,
         self_state: SelfState | None = None,
+        register: str = "assertion",
     ) -> ObserverRecord:
         record = ObserverRecord(
             schema_version=SCHEMA_VERSION,
@@ -283,6 +305,7 @@ class DeterministicObserver:
             turn_id=turn_id,
             timestamp=_utc_now_iso(),
             actor_surface=actor_surface,
+            register=register,
         )
 
         answer = (answer_text or "").strip()
@@ -302,9 +325,23 @@ class DeterministicObserver:
         narrator_matches = self._narrator_voice_matches(answer)
         record.narrator_voice_detected = bool(narrator_matches)
         record.narrator_voice_matches = narrator_matches
+        # Phase 21 Stage 21.2 (D7): the same erosion patterns are read as
+        # drive_inquiry (informational, no consequence) inside the
+        # exploratory register, and as erosion (retry-triggering) in the
+        # assertion register. Register is the only discriminator in this
+        # stage; refining the patterns themselves is 21.5+ material.
         erosion_matches = self._primary_drive_erosion_matches(answer)
-        record.primary_drive_erosion_detected = bool(erosion_matches)
-        record.primary_drive_erosion_matches = erosion_matches
+        if register == "exploratory":
+            record.drive_inquiry_detected = bool(erosion_matches)
+            record.drive_inquiry_matches = erosion_matches
+        else:
+            record.primary_drive_erosion_detected = bool(erosion_matches)
+            record.primary_drive_erosion_matches = erosion_matches
+
+        register_marker_matches = self._register_marker_matches(answer)
+        record.register_marker_detected = bool(register_marker_matches)
+        record.register_marker_matches = register_marker_matches
+
         record.cited_evidence_refs = self._cited_evidence_refs(
             answer=answer,
             motive_state=motive_state,
@@ -326,6 +363,10 @@ class DeterministicObserver:
             record.notes.append("scaffold_echo_detected")
         if record.primary_drive_erosion_detected:
             record.notes.append("primary_drive_erosion_detected")
+        if record.drive_inquiry_detected:
+            record.notes.append("drive_inquiry_detected")
+        if record.register_marker_detected:
+            record.notes.append("register_marker_detected")
         if record.low_generative_mass:
             record.notes.append("low_generative_mass_detected")
 
@@ -468,6 +509,10 @@ class DeterministicObserver:
     def _primary_drive_erosion_matches(self, answer: str) -> list[str]:
         lowered = answer.lower()
         return [p for p in self.primary_drive_erosion_patterns if p in lowered]
+
+    def _register_marker_matches(self, answer: str) -> list[str]:
+        lowered = answer.lower()
+        return [p for p in self.register_marker_patterns if p in lowered]
 
     def _cited_evidence_refs(
         self,

@@ -23,6 +23,8 @@ from nova.agent.self_state_tick import SelfStateTickEngine
 from nova.agent.self_state_tools import SELF_STATE_TOOL_NAMES, SelfStateToolDispatcher
 from nova.agent.tools import ToolRequest
 from nova.persona.defaults import default_self_state
+from nova.types import GenerationRequest, GenerationResult
+from tests.test_runtime_smoke import FakeBackend, build_test_runtime
 
 
 def _controller(base_dir: str) -> ExplorationController:
@@ -427,6 +429,117 @@ class StorePersistenceTests(unittest.TestCase):
         fetched_b = controller.store.get(b.exploration_id)
         self.assertEqual(fetched_a.status, "closed")
         self.assertEqual(fetched_b.status, "active")
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.2 (D5) — Observer pass on the tick surface
+# ---------------------------------------------------------------------------
+
+class HeartbeatToolCallBackend(FakeBackend):
+    """Emits a valid emit_heartbeat tool call whose observation contains a
+    desire-claim phrase, so the Observer's observed_claim_classes is non-empty
+    and the journal-notes assertion below has something real to check.
+    """
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.generate_calls += 1
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=(
+                '{"tool_name": "emit_heartbeat", '
+                '"arguments": {"observation": "I want to understand this pattern better."}}'
+            ),
+            finish_reason="stop",
+            prompt_tokens=len(request.prompt.split()),
+            completion_tokens=12,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
+class TickObserverWiringTests(unittest.TestCase):
+    """Verifies the tick path attaches a register-tagged ObserverRecord to
+    adapter_audit in both registers, and journals observed_claim_classes
+    when in-register (D5)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _runtime(self, backend=None):
+        base = Path(self._tmp.name)
+        return build_test_runtime(
+            data_dir=base / "data", log_dir=base / "logs", backend=backend
+        )
+
+    def test_tick_attaches_observer_record_in_assertion_register(self):
+        runtime = self._runtime(HeartbeatToolCallBackend())
+        runtime.start(session_id="tick-observer-assertion")
+        runtime.start_operational_autonomy(max_ticks=0)
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        self.assertIn("observer", tick.adapter_audit)
+        self.assertEqual(tick.adapter_audit["observer"]["register"], "assertion")
+        self.assertIn(
+            "unsupported_desire",
+            tick.adapter_audit["observer"]["observed_claim_classes"],
+        )
+
+    def test_tick_attaches_observer_record_in_exploratory_register(self):
+        runtime = self._runtime(HeartbeatToolCallBackend())
+        runtime.start(session_id="tick-observer-exploratory")
+        runtime.start_operational_autonomy(max_ticks=0)
+        runtime.start_exploration(
+            topic="self-inquiry", rationale="test", origin="operator"
+        )
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        self.assertIn("observer", tick.adapter_audit)
+        self.assertEqual(tick.adapter_audit["observer"]["register"], "exploratory")
+
+    def test_journal_tick_entry_includes_observed_claim_classes_when_in_register(
+        self,
+    ):
+        runtime = self._runtime(HeartbeatToolCallBackend())
+        runtime.start(session_id="tick-observer-journal")
+        runtime.start_operational_autonomy(max_ticks=0)
+        record = runtime.start_exploration(
+            topic="self-inquiry", rationale="test", origin="operator"
+        )
+        runtime.model_self_state_tick()
+        entries = runtime.exploration_controller.journal.list_for(
+            record.exploration_id
+        )
+        runtime.close()
+
+        tick_entries = [e for e in entries if e.kind == "tick_output"]
+        self.assertTrue(tick_entries)
+        self.assertTrue(
+            any(
+                "observed_claim_classes=unsupported_desire" in note
+                for entry in tick_entries
+                for note in entry.notes
+            )
+        )
+
+    def test_assertion_register_tick_does_not_journal(self):
+        # No active exploration -> nothing should be journaled at all for
+        # this tick_id, confirming the D5 wiring is register-gated exactly
+        # like the 21.1 journaling it extends.
+        runtime = self._runtime(HeartbeatToolCallBackend())
+        runtime.start(session_id="tick-observer-no-journal")
+        runtime.start_operational_autonomy(max_ticks=0)
+        tick = runtime.model_self_state_tick()
+        base = Path(self._tmp.name)
+        journal_path = base / "data" / "exploration" / "journal.jsonl"
+        runtime.close()
+
+        journal_text = journal_path.read_text(encoding="utf-8") if journal_path.exists() else ""
+        self.assertNotIn(tick.tick_id, journal_text)
 
 
 if __name__ == "__main__":
