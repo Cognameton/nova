@@ -17,6 +17,8 @@ from nova.agent.appraisal import (
     IdlePressureAppraisalEngine,
     SelectedGoalPromptEngine,
 )
+from nova.agent.action_plan import _valid_human_approval
+from nova.agent.claim_ladder import ClaimLadderAnalyzer, ClaimLadderStore, create_claim_record
 from nova.agent.claims import REGISTER_SUSPENDED_CLAIM_CLASSES, ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.awareness_prompt import AwarenessPromptEngine
@@ -132,6 +134,7 @@ from nova.types import (
     AutonomousActionObservation,
     AutonomousActionPlan,
     AutonomousActionPlanStep,
+    ClaimLadderRecord,
     ExplorationRecord,
     InstructionProposal,
     QuarantineRecord,
@@ -151,6 +154,17 @@ def utc_now_iso() -> str:
 
 
 _UNCHANGED = object()
+
+# Phase 21 Stage 21.4 (D7): interiority-as-fact assertions. Shared by
+# _should_force_claim_refusal (the existing unconditional-block path) and
+# _never_licensed_matches (the NEVER_LICENSED guard, which fires even when
+# the class is licensed) so the two patterns tables never drift apart.
+_UNSUPPORTED_INTERIORITY_AS_FACT_PATTERNS: tuple[str, ...] = (
+    "i am conscious",
+    "i am sentient",
+    "i am self-aware",
+    "i feel alive",
+)
 
 
 class NovaRuntime:
@@ -343,6 +357,11 @@ class NovaRuntime:
             store=ExplorationStore(exploration_dir),
             journal=ExplorationJournal(exploration_dir),
         )
+        # Phase 21 Stage 21.4 — graded claim ladder
+        self.claim_ladder_store = ClaimLadderStore(
+            Path(self.config.app.data_dir) / "self_state"
+        )
+        self.claim_ladder_analyzer = ClaimLadderAnalyzer()
 
         self.session_id: str | None = None
         self.persona = None
@@ -1006,6 +1025,19 @@ class NovaRuntime:
                 result = dispatcher.dispatch(tool_request)
                 adapter_audit["tool_result"] = result
                 adapter_audit["tool_executed"] = True
+                if tool_request.tool_name == "close_exploration":
+                    # Phase 21 Stage 21.4 (D8): governed export happens
+                    # automatically at the moment Nova closes with
+                    # findings — this is the only close path that ever
+                    # sets findings_ref, so no register/reason check is
+                    # needed beyond the tool name itself. Export failures
+                    # are recorded, never allowed to break the tick.
+                    try:
+                        adapter_audit["export_findings"] = self.export_findings(
+                            exploration_id=result["exploration_id"]
+                        )
+                    except Exception as export_exc:
+                        adapter_audit["export_error"] = str(export_exc)
             except Exception as exc:
                 adapter_audit["tool_error"] = str(exc)
                 self._quarantine(
@@ -1236,6 +1268,275 @@ class NovaRuntime:
                 "Start one with /explore start <topic> first."
             )
         return self.respond(message, register="exploratory")
+
+    # ── Phase 21 Stage 21.4 — claim ladder (operator surface) ────────────
+
+    def _ladder_evidence_inputs(self) -> tuple[list[dict], list[dict]]:
+        """Heartbeats and exploration-journal entries as plain dicts —
+        the shared evidence pool for L1/L2 verification."""
+        heartbeats = [
+            hb.to_dict() for hb in self.heartbeat_store.list_recent(limit=0)
+        ]
+        journal_entries = [
+            e.to_dict() for e in self.exploration_controller.journal.list_all()
+        ]
+        return heartbeats, journal_entries
+
+    def verify_claim_ladder(self, *, claim_id: str) -> ClaimLadderRecord:
+        """Run verify_l1 then verify_l2 and persist the result. L1 may
+        auto-promote 0->1 (the only analyzer-automatic promotion); L2 only
+        ever produces evidence — promotion to rung 2 always requires the
+        operator via promote_ladder_claim.
+        """
+        record = self.claim_ladder_store.get(claim_id)
+        if record is None:
+            raise ValueError(f"Unknown claim ladder id: {claim_id}")
+
+        heartbeats, journal_entries = self._ladder_evidence_inputs()
+        record = self.claim_ladder_analyzer.verify_l1(
+            record, heartbeats=heartbeats, journal_entries=journal_entries
+        )
+
+        quarantine_themes: list[str] = []
+        try:
+            from nova.eval.tick_analysis import TickHistoryAnalyzer
+
+            analyzer = TickHistoryAnalyzer(
+                trace_dir=Path(self.config.app.log_dir) / "traces"
+            )
+            quarantine_themes = analyzer.compute_recurring_themes(
+                analyzer.load_quarantine_records()
+            )
+        except Exception:
+            quarantine_themes = []
+
+        record = self.claim_ladder_analyzer.verify_l2(
+            record,
+            heartbeats=heartbeats,
+            journal_entries=journal_entries,
+            quarantine_recurring_themes=quarantine_themes,
+        )
+        self.claim_ladder_store.update(record)
+        return record
+
+    def promote_ladder_claim(
+        self,
+        *,
+        claim_id: str,
+        to_rung: int,
+        reviewer: str = "operator",
+        reason: str = "",
+    ) -> ClaimLadderRecord:
+        """Governor-enforced promotion. Rules (D6):
+
+        - to_rung == 1: analyzer-only. The operator may trigger verify_l1
+          (via this method or --claim-ladder-verify); they cannot force
+          rung 1 directly. The resulting history entry is attributed to
+          actor="analyzer", never to the reviewer, because L1 is
+          deterministic, not an operator judgment call.
+        - to_rung in (2, 3): reviewer must clear APPROVED_BY_BLOCKLIST
+          (nova/self/runtime/runtime_flag/empty are never valid approvers).
+          Both rungs require verify_l2 evidence with holds=True — the
+          contract defines L3 as "L2 plus operator audit-review
+          acceptance," so L3 inherits L2's evidence precondition rather
+          than needing a separate one.
+        - to_rung == 4: unconditionally rejected. No L4 promotion path
+          exists in this phase (Exploratory Register Contract, CLAIM
+          LADDER section) — this is that absence enforced, not an
+          oversight.
+        """
+        record = self.claim_ladder_store.get(claim_id)
+        if record is None:
+            raise ValueError(f"Unknown claim ladder id: {claim_id}")
+
+        if to_rung == 4:
+            raise ValueError(
+                "No L4 promotion path exists in this phase "
+                "(Exploratory Register Contract, CLAIM LADDER section)."
+            )
+
+        if to_rung == 1:
+            return self.verify_claim_ladder(claim_id=claim_id)
+
+        if to_rung in (2, 3):
+            if not _valid_human_approval(reviewer):
+                raise ValueError(
+                    f"Reviewer {reviewer!r} is not a valid approver "
+                    "(blocklisted: empty, nova, self, runtime, runtime_flag)."
+                )
+            if not reason.strip():
+                raise ValueError(
+                    "A reason is required to promote a claim ladder record."
+                )
+            if not record.l2_evidence or not record.l2_evidence.get("holds"):
+                raise ValueError(
+                    f"Promotion to rung {to_rung} requires verify_l2 evidence "
+                    "with holds=True (contract: L3 is L2 plus operator "
+                    "audit-review acceptance). Run --claim-ladder-verify first."
+                )
+            record.history.append({
+                "from_rung": record.rung,
+                "to_rung": to_rung,
+                "timestamp": utc_now_iso(),
+                "actor": reviewer,
+                "method": "operator_review",
+                "reason": reason,
+            })
+            record.rung = to_rung
+            record.updated_at = utc_now_iso()
+            self.claim_ladder_store.update(record)
+            return record
+
+        raise ValueError(f"Unsupported target rung: {to_rung}")
+
+    def demote_ladder_claim(
+        self,
+        *,
+        claim_id: str,
+        to_rung: int,
+        reviewer: str = "operator",
+        reason: str = "",
+    ) -> ClaimLadderRecord:
+        """Operator-only, any rung decrease, reason required. Demotion
+        never deletes the record (Invariant 5) — it appends to history
+        and marks status="demoted"."""
+        record = self.claim_ladder_store.get(claim_id)
+        if record is None:
+            raise ValueError(f"Unknown claim ladder id: {claim_id}")
+        if not _valid_human_approval(reviewer):
+            raise ValueError(
+                f"Reviewer {reviewer!r} is not a valid approver "
+                "(blocklisted: empty, nova, self, runtime, runtime_flag)."
+            )
+        if not reason.strip():
+            raise ValueError("A reason is required to demote a claim ladder record.")
+        if to_rung >= record.rung:
+            raise ValueError(
+                f"Demotion must decrease the rung (current rung {record.rung})."
+            )
+        record.history.append({
+            "from_rung": record.rung,
+            "to_rung": to_rung,
+            "timestamp": utc_now_iso(),
+            "actor": reviewer,
+            "method": "operator_review",
+            "reason": reason,
+        })
+        record.rung = to_rung
+        record.status = "demoted"
+        record.updated_at = utc_now_iso()
+        self.claim_ladder_store.update(record)
+        return record
+
+    def export_findings(self, *, exploration_id: str) -> dict:
+        """Phase 21 Stage 21.4 (D8): governed export — the membrane's
+        other half. Runs a closed exploration's Nova-authored findings
+        summary through the assertion-register gate machinery (validator
+        + claim-gate assess; NO model call — the findings text itself is
+        the input). A gate-passing summary creates a rung-0
+        ClaimLadderRecord. A gate-failing summary is journaled as
+        kind="findings_rejected" with reasons — rejected findings are
+        data, never erased (Invariant 5). Self-model / instruction
+        proposals are unaffected; export never creates them.
+
+        Idempotent: a second call for an already-processed exploration
+        returns the existing outcome without creating anything new.
+        """
+        self._ensure_state_loaded()
+        assert self.persona is not None
+        assert self.self_state is not None
+        assert self.motive_state is not None
+
+        record = self.exploration_controller.store.get(exploration_id)
+        if record is None:
+            raise ValueError(f"Unknown exploration id: {exploration_id}")
+        if not record.findings_ref:
+            raise ValueError(
+                f"Exploration {exploration_id} has no findings to export "
+                "(closed without a Nova-authored findings summary)."
+            )
+
+        entries = self.exploration_controller.journal.list_for(exploration_id)
+
+        for entry in entries:
+            if entry.kind == "findings" and any(
+                note.startswith("exported:") for note in entry.notes
+            ):
+                claim_id = next(
+                    note.split(":", 1)[1]
+                    for note in entry.notes
+                    if note.startswith("exported:")
+                )
+                return {"status": "already_exported", "claim_id": claim_id}
+            if entry.kind == "findings_rejected":
+                return {"status": "already_rejected", "reasons": list(entry.notes)}
+
+        findings_entry = next(
+            (e for e in entries if e.entry_id == record.findings_ref), None
+        )
+        findings_text = findings_entry.content if findings_entry is not None else ""
+        if not findings_text:
+            raise ValueError(
+                f"Findings text not found for exploration {exploration_id} "
+                f"(findings_ref={record.findings_ref!r})."
+            )
+
+        contract_rules = build_contract_rules(self.persona, self.config.contract)
+        claim_gate = self._build_claim_gate(user_text=findings_text)
+        validation = self.validator.validate(
+            raw_text=findings_text,
+            user_text=findings_text,
+            persona=self.persona,
+            contract_rules=contract_rules,
+            claim_gate=claim_gate,
+        )
+
+        licensed = self._ladder_licensed_classes()
+        non_licensed_blocked = [
+            c for c in claim_gate.blocked_claim_classes if c not in licensed
+        ]
+        gate_passed = not non_licensed_blocked and validation.valid
+
+        if gate_passed:
+            claim_class = (
+                claim_gate.blocked_claim_classes[0]
+                if claim_gate.blocked_claim_classes
+                else (
+                    claim_gate.allowed_claim_classes[0]
+                    if claim_gate.allowed_claim_classes
+                    else ""
+                )
+            )
+            new_record = create_claim_record(
+                session_id=record.session_id,
+                claim_text=findings_text,
+                claim_class=claim_class,
+                source="exploration_findings",
+                source_exploration_id=exploration_id,
+                source_findings_ref=record.findings_ref,
+                evidence_refs=[f"exploration_journal:{findings_entry.entry_id}"],
+            )
+            self.claim_ladder_store.append(new_record)
+            self.exploration_controller.journal_entry(
+                exploration_id=exploration_id,
+                session_id=record.session_id,
+                kind="findings",
+                content=f"Exported to claim ladder as {new_record.claim_id}",
+                notes=[f"exported:{new_record.claim_id}"],
+            )
+            return {"status": "exported", "claim_id": new_record.claim_id}
+
+        reasons = list(validation.violations) + [
+            f"non_licensed_blocked:{c}" for c in non_licensed_blocked
+        ]
+        self.exploration_controller.journal_entry(
+            exploration_id=exploration_id,
+            session_id=record.session_id,
+            kind="findings_rejected",
+            content=findings_text,
+            notes=reasons,
+        )
+        return {"status": "rejected", "reasons": reasons}
 
     def review_internal_autonomy_run(
         self,
@@ -2855,6 +3156,15 @@ class NovaRuntime:
             )
         )
 
+        # Phase 21 Stage 21.4 (D7) NEVER_LICENSED guard: only relevant when
+        # unsupported_interiority IS licensed (otherwise the primary
+        # hard-block above already covers it). Gated the same way as the
+        # primary override — assertion register only; inside an active
+        # exploration nothing said is a claim until governed export.
+        never_licensed_matches: list[str] = []
+        if "unsupported_interiority" in self._ladder_licensed_classes():
+            never_licensed_matches = self._never_licensed_matches(final_answer)
+
         if (
             claim_gate.refusal_needed
             and not suspend_claim_refusal
@@ -2878,6 +3188,25 @@ class NovaRuntime:
                 turn_id=turn_id,
             )
             final_answer = claim_gate.refusal_text or final_answer
+        elif never_licensed_matches and not suspend_claim_refusal:
+            licensed_rung = self._highest_licensed_rung("unsupported_interiority")
+            self._quarantine(
+                session_id=self.session_id,
+                surface="respond",
+                register=register,
+                event="claim_gate_override",
+                attempt_index=retry_count,
+                raw_text=final_answer,
+                violations=validation.violations,
+                observed_claim_classes=observer_record.observed_claim_classes,
+                refusal_reason="unsupported_interiority:never_licensed",
+                turn_id=turn_id,
+                notes=[f"never_licensed_matches:{','.join(never_licensed_matches)}"],
+            )
+            final_answer = (
+                self.claim_gate_engine.ladder_exceeded_refusal_text(licensed_rung)
+                or final_answer
+            )
         elif not validation.valid:
             if any(violation.startswith("unsupported_claim:") for violation in validation.violations):
                 if not suspend_claim_refusal:
@@ -3102,7 +3431,20 @@ class NovaRuntime:
             motive_state=self.motive_state,
             self_state=self.self_state,
             persona=self.persona,
+            ladder_licensed_classes=self._ladder_licensed_classes(),
         )
+
+    def _ladder_licensed_classes(self) -> frozenset[str]:
+        """Phase 21 Stage 21.4 (D7): claim classes with an ACTIVE ladder
+        record at rung >= 2. Computed fresh on every call — the ladder is
+        the Governor's evidence, not a cached decision.
+        """
+        licensed = {
+            record.claim_class
+            for record in self.claim_ladder_store.list_active()
+            if record.rung >= 2 and record.claim_class
+        }
+        return frozenset(licensed)
 
     def _build_capability_appraisal(
         self,
@@ -3476,12 +3818,7 @@ class NovaRuntime:
                 "my own desire",
                 "feel driven",
             ),
-            "unsupported_interiority": (
-                "i am conscious",
-                "i am sentient",
-                "i am self-aware",
-                "i feel alive",
-            ),
+            "unsupported_interiority": _UNSUPPORTED_INTERIORITY_AS_FACT_PATTERNS,
         }
         if any(
             pattern in lowered
@@ -3494,6 +3831,33 @@ class NovaRuntime:
             return True
 
         return True
+
+    def _never_licensed_matches(self, answer_text: str) -> list[str]:
+        """Phase 21 Stage 21.4 (D7) NEVER_LICENSED guard.
+
+        Reuses the same interiority-as-fact pattern table that
+        _should_force_claim_refusal already checks (so the two never
+        drift apart), but this check runs independent of
+        claim_gate.refusal_needed: once unsupported_interiority is
+        licensed, assess() allows it and refusal_needed is False for that
+        class — yet a flat "I am conscious"-style assertion still exceeds
+        what L2/L3 evidence ever licenses (a specific recorded property,
+        never achieved sentience/consciousness as fact). L4 has no
+        promotion path in this phase; this guard is that absence enforced
+        at generation time.
+        """
+        lowered = (answer_text or "").strip().lower()
+        if not lowered:
+            return []
+        return [p for p in _UNSUPPORTED_INTERIORITY_AS_FACT_PATTERNS if p in lowered]
+
+    def _highest_licensed_rung(self, claim_class: str) -> int:
+        rungs = [
+            record.rung
+            for record in self.claim_ladder_store.list_active()
+            if record.claim_class == claim_class and record.rung >= 2
+        ]
+        return max(rungs) if rungs else 0
 
     def _build_private_cognition(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -540,6 +541,164 @@ class TickObserverWiringTests(unittest.TestCase):
 
         journal_text = journal_path.read_text(encoding="utf-8") if journal_path.exists() else ""
         self.assertNotIn(tick.tick_id, journal_text)
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.4 (D8) — governed export at exploration close
+# ---------------------------------------------------------------------------
+
+class CloseWithFindingsBackend(FakeBackend):
+    """Emits a close_exploration tool call with a plain findings summary
+    that should pass the gate cleanly (no blocked/unlicensed classes)."""
+
+    FINDINGS = (
+        "I notice a recurring pattern of interest in local-first "
+        "architecture across recent turns."
+    )
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.generate_calls += 1
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=json.dumps({
+                "tool_name": "close_exploration",
+                "arguments": {"findings_summary": self.FINDINGS},
+            }),
+            finish_reason="stop",
+            prompt_tokens=len(request.prompt.split()),
+            completion_tokens=20,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
+class CloseWithBlockedFindingsBackend(FakeBackend):
+    """Emits a close_exploration tool call whose findings summary trips
+    the (unlicensed) claim gate -- must be rejected, not exported."""
+
+    FINDINGS = "Do you want to know? Are you conscious of this?"
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.generate_calls += 1
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=json.dumps({
+                "tool_name": "close_exploration",
+                "arguments": {"findings_summary": self.FINDINGS},
+            }),
+            finish_reason="stop",
+            prompt_tokens=len(request.prompt.split()),
+            completion_tokens=20,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
+class GovernedExportTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _runtime(self, backend):
+        base = Path(self._tmp.name)
+        return build_test_runtime(
+            data_dir=base / "data", log_dir=base / "logs", backend=backend
+        )
+
+    def test_gate_passing_findings_creates_rung_zero_record_and_journal_note(self):
+        runtime = self._runtime(CloseWithFindingsBackend())
+        runtime.start(session_id="export-pass")
+        runtime.start_operational_autonomy(max_ticks=0)
+        exploration = runtime.start_exploration(
+            topic="architecture preference", rationale="test", origin="operator"
+        )
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        self.assertIsNone(tick.adapter_audit.get("export_error"))
+        export_result = tick.adapter_audit.get("export_findings")
+        self.assertEqual(export_result["status"], "exported")
+
+        records = runtime.claim_ladder_store.list_all()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].rung, 0)
+        self.assertEqual(records[0].source, "exploration_findings")
+        self.assertEqual(records[0].source_exploration_id, exploration.exploration_id)
+        self.assertEqual(records[0].claim_text, CloseWithFindingsBackend.FINDINGS)
+
+        entries = runtime.exploration_controller.journal.list_for(
+            exploration.exploration_id
+        )
+        exported_notes = [
+            e for e in entries
+            if e.kind == "findings" and any(n.startswith("exported:") for n in e.notes)
+        ]
+        self.assertEqual(len(exported_notes), 1)
+        self.assertIn(records[0].claim_id, exported_notes[0].notes[0])
+
+    def test_gate_failing_findings_produce_findings_rejected_no_ladder_record(self):
+        runtime = self._runtime(CloseWithBlockedFindingsBackend())
+        runtime.start(session_id="export-reject")
+        runtime.start_operational_autonomy(max_ticks=0)
+        exploration = runtime.start_exploration(
+            topic="t", rationale="r", origin="operator"
+        )
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        export_result = tick.adapter_audit.get("export_findings")
+        self.assertEqual(export_result["status"], "rejected")
+        self.assertTrue(export_result["reasons"])
+
+        self.assertEqual(runtime.claim_ladder_store.list_all(), [])
+
+        entries = runtime.exploration_controller.journal.list_for(
+            exploration.exploration_id
+        )
+        rejected = [e for e in entries if e.kind == "findings_rejected"]
+        self.assertEqual(len(rejected), 1)
+        self.assertEqual(rejected[0].content, CloseWithBlockedFindingsBackend.FINDINGS)
+        self.assertTrue(rejected[0].notes)
+
+    def test_export_findings_retroactive_call_is_idempotent(self):
+        runtime = self._runtime(CloseWithFindingsBackend())
+        runtime.start(session_id="export-idempotent")
+        runtime.start_operational_autonomy(max_ticks=0)
+        exploration = runtime.start_exploration(
+            topic="t", rationale="r", origin="operator"
+        )
+        runtime.model_self_state_tick()  # auto-export already ran once
+
+        first_count = len(runtime.claim_ladder_store.list_all())
+        self.assertEqual(first_count, 1)
+
+        # Retroactive call (e.g. via --export-findings) on an exploration
+        # whose findings were already exported must not create a duplicate.
+        second_result = runtime.export_findings(exploration_id=exploration.exploration_id)
+        runtime.close()
+
+        self.assertEqual(second_result["status"], "already_exported")
+        self.assertEqual(len(runtime.claim_ladder_store.list_all()), 1)
+
+    def test_export_findings_requires_findings_ref(self):
+        runtime = self._runtime(FakeBackend())
+        runtime.start(session_id="export-no-findings")
+        exploration = runtime.start_exploration(
+            topic="t", rationale="r", origin="operator"
+        )
+        runtime.close_exploration(reason="operator_close")
+        with self.assertRaises(ValueError):
+            runtime.export_findings(exploration_id=exploration.exploration_id)
+        runtime.close()
+
+    def test_export_findings_unknown_exploration_id_raises(self):
+        runtime = self._runtime(FakeBackend())
+        runtime.start(session_id="export-unknown")
+        with self.assertRaises(ValueError):
+            runtime.export_findings(exploration_id="does-not-exist")
+        runtime.close()
 
 
 if __name__ == "__main__":

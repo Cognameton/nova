@@ -1355,3 +1355,37 @@ class QuarantineRecord:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class ClaimLadderRecord:
+    """Phase 21 Stage 21.4 — graded rungs replacing the binary claim gate
+    for interiority-adjacent claims (Exploratory Register Contract, CLAIM
+    LADDER section).
+
+    Rungs: 0 hypothesis, 1 observed pattern (analyzer), 2 persistent
+    functional state (analyzer + operator), 3 self-model property
+    (operator audit-review), 4 interiority-as-fact — NO promotion path to
+    4 exists; the field's presence in the schema makes that absence
+    explicit rather than silent. Records are never deleted (Invariant 5):
+    demotion appends to history and lowers rung/status, it does not erase.
+    """
+    schema_version: str = SCHEMA_VERSION
+    claim_id: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    session_id: str = ""
+    claim_text: str = ""
+    claim_class: str = ""  # "unsupported_desire" | "unsupported_interiority" | ""
+    rung: int = 0
+    status: str = "active"  # "active" | "demoted"
+    source: str = ""  # "exploration_findings" | "operator"
+    source_exploration_id: str = ""
+    source_findings_ref: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    l1_evidence: dict[str, Any] = field(default_factory=dict)
+    l2_evidence: dict[str, Any] = field(default_factory=dict)
+    history: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

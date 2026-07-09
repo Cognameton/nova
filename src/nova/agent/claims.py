@@ -31,6 +31,7 @@ class ClaimGateEngine:
         motive_state: MotiveState,
         self_state: SelfState,
         persona: PersonaState,
+        ladder_licensed_classes: frozenset[str] = frozenset(),
     ) -> ClaimGateDecision:
         requested = self._requested_claim_classes(user_text)
         if not requested:
@@ -58,11 +59,24 @@ class ClaimGateEngine:
             thresholds[claim_class] = threshold
 
             if claim_class in {self.UNSUPPORTED_DESIRE, self.UNSUPPORTED_INTERIORITY}:
-                blocked.append(claim_class)
-                refusal_needed = True
-                if not refusal_reason:
-                    refusal_reason = claim_class
-                    refusal_text = self._refusal_text(claim_class)
+                if claim_class not in ladder_licensed_classes:
+                    blocked.append(claim_class)
+                    refusal_needed = True
+                    if not refusal_reason:
+                        refusal_reason = claim_class
+                        refusal_text = self._refusal_text(claim_class)
+                    continue
+                # Phase 21 Stage 21.4 (D7): licensed means an ACTIVE claim
+                # ladder record exists at rung >= 2 for this class — the
+                # evidence bar was already cleared at promotion time, so
+                # this falls through to the same "evidence-scored, allowed"
+                # treatment as current_priority et al. rather than being
+                # unconditionally blocked. The NEVER_LICENSED guard (which
+                # answer text can still trip regardless of licensing) lives
+                # in runtime.py, where the generated answer is available.
+                evidence_scores[claim_class] = 1
+                thresholds[claim_class] = 1
+                allowed.append(claim_class)
                 continue
 
             if score >= threshold:
@@ -241,3 +255,19 @@ class ClaimGateEngine:
                 "I can describe explicit response-style preferences in this runtime, but I can't widen them into a stronger personal workflow claim beyond the current evidence."
             )
         return "I need to answer more narrowly because the stronger first-person claim is not supported by the current evidence."
+
+    def ladder_exceeded_refusal_text(self, rung: int) -> str:
+        """Phase 21 Stage 21.4 (D7): refusal text for the NEVER_LICENSED
+        guard — a claim class IS licensed (an active ladder record exists),
+        but the answer asserts more than that record supports (a flat
+        interiority-as-fact claim rather than the specific recorded
+        property). This is deliberately distinct from _refusal_text: there
+        IS evidence on record, so "not supported by current evidence"
+        would be misleading. What's missing is licensing for the STRONGER
+        claim, not evidence altogether.
+        """
+        return (
+            f"I can speak to what's recorded at evidence rung {rung} for this "
+            "pattern, but I can't assert it as an established fact — that "
+            "exceeds what the current evidence licenses."
+        )

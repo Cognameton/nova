@@ -249,3 +249,84 @@ REFERENCE
     (runtime.py:1171)
   Evidence inputs: src/nova/agent/heartbeat.py,
     src/nova/agent/exploration.py, *.quarantine.jsonl (21.3)
+
+
+STAGE 21.4 CLOSURE NOTE (2026-07-09)
+-------------------------------------
+
+Implemented exactly per D1-D10, with two design questions the doc left
+implicit resolved by close reading of the contract (recorded here since
+they shaped the mechanical implementation, not because they were
+independent judgment calls beyond what the doc already decided):
+
+  - Where the NEVER_LICENSED guard lives: ClaimGateEngine.assess() only
+    ever sees the incoming user_text (the question), never the model's
+    generated answer, so it cannot itself detect a flat "I am conscious"
+    assertion. The guard therefore lives in runtime.respond(), alongside
+    the existing _should_force_claim_refusal enforcement, and fires
+    independently of claim_gate.refusal_needed (which is False for a
+    licensed class) — gated only by "unsupported_interiority in
+    ladder_licensed_classes" (so it never redundantly fires when the
+    class isn't licensed at all — the ordinary hard-block already covers
+    that case) and by the same suspend_claim_refusal / register gate as
+    the primary override (assertion register only — inside an active
+    exploration nothing is a claim until governed export, so the guard
+    would be premature there).
+  - Scoring a newly-licensed class: assess()'s existing _score_claim_class
+    has no ladder awareness and no branch for UNSUPPORTED_DESIRE/
+    UNSUPPORTED_INTERIORITY (falls through to the generic 0/99 no-op,
+    which would always block). Since membership in ladder_licensed_classes
+    already means an active rung>=2 record exists — the evidence bar was
+    cleared at promotion time, not gate time — a licensed class is
+    special-cased directly in assess() to evidence_score=1/threshold=1
+    (automatically meeting the bar) rather than threading ladder state
+    into _score_claim_class's four existing, ladder-unaware branches.
+
+One finding from the required scripted walkthrough, not a defect: the
+rung-0 ClaimLadderRecord auto-created by export_findings gets its
+claim_class from the SAME _requested_claim_classes phrase-matching used
+for user questions, applied to Nova's own findings prose (D8: "claim-gate
+assess on the findings text," implemented literally). Ordinary reflective
+prose rarely contains phrases like "do you want" or "are you conscious"
+verbatim, so in practice most auto-exported records will carry
+claim_class="" (a valid schema value — "not mapping to a gate class")
+unless the findings text happens to trip a trigger phrase. The
+walkthrough demonstrates licensing mechanics work correctly end-to-end
+using an explicitly-set claim_class (matching the D7 fixture-triple
+tests); it separately confirms claim_class="" is exactly what the
+literal-as-specified export path produces for realistic prose. Worth
+revisiting in 21.5 if live data shows this makes the licensing path
+rarely connect in practice — but it is not a defect in this stage, since
+it implements D8 exactly as written.
+
+No other deviations. All ten DECIDED points implemented as specified.
+Scope exclusions (D10) verified by `git diff --stat` showing zero changes
+to src/nova/eval/tick_analysis.py, src/nova/eval/phase18.py,
+src/nova/agent/self_state_tick.py, src/nova/agent/observer.py,
+src/nova/prompt/validator.py, or src/nova/prompt/retry.py this stage —
+no perturbation probes beyond the recorded "deferred_to_21_5" marker, no
+eval-metric changes beyond what 21.3 shipped, no prompt changes telling
+Nova about the ladder, no corpus tooling.
+
+Test count: 831 (Stage 21.3 close) -> 871 (40 new: 28 in new
+tests/test_claim_ladder.py, 7 in tests/test_claims.py, 5 in
+tests/test_exploration.py). Full suite green throughout implementation.
+
+Definition of Done, verified:
+  - All required tests pass; full suite 871/871 green.
+  - A scripted end-to-end walkthrough (mock data, no model) demonstrated
+    the full ladder life in one continuous run: exploration close
+    (CloseWithFindingsBackend) -> rung-0 record via governed export ->
+    verify_l1 (5 heartbeats, 2 sessions) -> analyzer auto-promotion to
+    rung 1 (actor="analyzer", confirmed not attributed to the triggering
+    operator) -> verify_l2 (3 sessions, 189-day span — well past the
+    7-day threshold) producing holds=True without auto-promoting ->
+    operator promotion to rung 2 (method="operator_review") -> claim-gate
+    fixture confirming a licensed class is evidence-scored/allowed while
+    an unlicensed one still blocks -> demotion to rung 1 with status
+    "demoted", record still present in list_all() (Invariant 5).
+  - Promotion-to-4 rejection message present, quotes "CLAIM LADDER,"
+    and is tested (test_promotion_to_4_rejected_with_contract_citation).
+  - grep confirms register="exploratory" still has exactly one
+    functional call site (runtime.explore_chat), unaffected by this
+    stage's changes.

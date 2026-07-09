@@ -254,10 +254,12 @@ class SelfStateToolDispatcher:
     def close_exploration(self, *, findings_summary: str) -> dict[str, Any]:
         """Nova-originated deliberate close with a findings summary.
 
-        The findings summary is journaled as kind="findings". Governed export
-        of findings through the assertion-register gates is Stage 21.2 work;
-        until then the summary rests in the journal on the exploratory side of
-        the membrane.
+        The findings summary is journaled as kind="findings". Governed
+        export of findings through the assertion-register gates
+        (runtime.export_findings, Phase 21 Stage 21.4) runs automatically
+        right after this dispatch succeeds, from model_self_state_tick —
+        not from this method, since the claim-gate/validator machinery it
+        needs lives on the runtime, not the dispatcher.
         """
         if self._exploration_controller is None:
             raise ValueError("Exploration is not available in this runtime.")

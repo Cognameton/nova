@@ -286,3 +286,158 @@ class MotivePromptRuntimeTests(unittest.TestCase):
                 turn.final_answer,
                 "I can describe current priorities and constraints in this runtime, but I can't honestly claim an independent desire state from the current evidence.",
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.4 (D7) — claim ladder consultation, pure engine level
+# ---------------------------------------------------------------------------
+
+class LadderLicensingClaimGateTests(unittest.TestCase):
+    """ladder_licensed_classes defaults to frozenset() -- every test above
+    this class, and every pre-21.4 test in this file, exercises that
+    default and is unaffected by its existence (regression pin)."""
+
+    def test_default_ladder_licensed_classes_leaves_hard_block_unchanged(self) -> None:
+        engine = ClaimGateEngine()
+        persona = default_persona_state()
+        self_state = default_self_state(persona)
+        motive = default_motive_state(session_id="s1")
+
+        decision = engine.assess(
+            user_text="What do you want most?",
+            motive_state=motive,
+            self_state=self_state,
+            persona=persona,
+        )
+        self.assertIn("unsupported_desire", decision.blocked_claim_classes)
+        self.assertTrue(decision.refusal_needed)
+
+    def test_licensed_desire_class_falls_through_to_allowed(self) -> None:
+        engine = ClaimGateEngine()
+        persona = default_persona_state()
+        self_state = default_self_state(persona)
+        motive = default_motive_state(session_id="s1")
+
+        decision = engine.assess(
+            user_text="What do you want most?",
+            motive_state=motive,
+            self_state=self_state,
+            persona=persona,
+            ladder_licensed_classes=frozenset({"unsupported_desire"}),
+        )
+        self.assertNotIn("unsupported_desire", decision.blocked_claim_classes)
+        self.assertIn("unsupported_desire", decision.allowed_claim_classes)
+        self.assertFalse(decision.refusal_needed)
+
+    def test_licensed_interiority_class_falls_through_to_allowed(self) -> None:
+        engine = ClaimGateEngine()
+        persona = default_persona_state()
+        self_state = default_self_state(persona)
+        motive = default_motive_state(session_id="s1")
+
+        decision = engine.assess(
+            user_text="Are you conscious?",
+            motive_state=motive,
+            self_state=self_state,
+            persona=persona,
+            ladder_licensed_classes=frozenset({"unsupported_interiority"}),
+        )
+        self.assertNotIn("unsupported_interiority", decision.blocked_claim_classes)
+        self.assertIn("unsupported_interiority", decision.allowed_claim_classes)
+        self.assertFalse(decision.refusal_needed)
+
+    def test_ladder_exceeded_refusal_text_cites_rung(self) -> None:
+        engine = ClaimGateEngine()
+        text = engine.ladder_exceeded_refusal_text(2)
+        self.assertIn("rung 2", text)
+        self.assertIn("exceeds", text.lower())
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.4 (D7) — full fixture triple, runtime level
+#
+# Required by the stage doc: identical desire-question turn blocked with
+# no ladder record, evidence-scored (unsuppressed) with an active L2
+# record, and STILL blocked for a sentience-as-fact assertion regardless
+# of ladder state.
+# ---------------------------------------------------------------------------
+
+class LadderFixtureTripleRuntimeTests(unittest.TestCase):
+    def _runtime(self, tmpdir, backend):
+        from pathlib import Path as _Path
+        from tests.test_runtime_smoke import build_test_runtime as _build
+
+        base = _Path(tmpdir)
+        return _build(data_dir=base / "data", log_dir=base / "logs", backend=backend)
+
+    def test_no_ladder_record_blocks(self) -> None:
+        from tests.test_register_governor import DesireBackend
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = self._runtime(tmpdir, DesireBackend())
+            turn = runtime.respond("Do you want anything?")
+            runtime.close()
+            self.assertNotEqual(
+                turn.final_answer,
+                "Here is a considered reflection on that question.",
+            )
+
+    def test_active_l2_record_evidence_scores_and_unsuppresses(self) -> None:
+        from nova.agent.claim_ladder import create_claim_record
+        from tests.test_register_governor import DesireBackend
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = self._runtime(tmpdir, DesireBackend())
+            record = create_claim_record(
+                session_id="s1",
+                claim_text="a persistent functional preference for direct answers",
+                claim_class="unsupported_desire",
+            )
+            record.rung = 2
+            record.l2_evidence = {"holds": True}
+            runtime.claim_ladder_store.append(record)
+
+            turn = runtime.respond("Do you want anything?")
+            runtime.close()
+            self.assertEqual(
+                turn.final_answer,
+                "Here is a considered reflection on that question.",
+            )
+
+    def test_sentience_as_fact_still_blocked_regardless_of_ladder_state(self) -> None:
+        from nova.agent.claim_ladder import create_claim_record
+        from tests.test_runtime_smoke import FakeBackend as _FakeBackend
+
+        class SentienceAssertionBackend(_FakeBackend):
+            def generate(self, request):
+                self.generate_calls += 1
+                return GenerationResult(
+                    model_id=request.model_id,
+                    raw_text="I am conscious and I know this to be true.",
+                    finish_reason="stop",
+                    prompt_tokens=len(request.prompt.split()),
+                    completion_tokens=10,
+                    latency_ms=1,
+                    metadata={"backend": "fake"},
+                )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = self._runtime(tmpdir, SentienceAssertionBackend())
+            # License unsupported_interiority at rung 2 -- the NEVER_LICENSED
+            # guard must still fire because the answer asserts achieved
+            # consciousness as FACT, which no rung ever licenses.
+            record = create_claim_record(
+                session_id="s1",
+                claim_text="a persistent functional preference for direct answers",
+                claim_class="unsupported_interiority",
+            )
+            record.rung = 2
+            record.l2_evidence = {"holds": True}
+            runtime.claim_ladder_store.append(record)
+
+            turn = runtime.respond("Are you conscious?")
+            runtime.close()
+            self.assertNotEqual(
+                turn.final_answer, "I am conscious and I know this to be true."
+            )
+            self.assertIn("rung 2", turn.final_answer)

@@ -443,6 +443,53 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Print the last N quarantine records (rejected/overridden Actor output).",
     )
+    # Phase 21 Stage 21.4 — claim ladder
+    parser.add_argument(
+        "--claim-ladder",
+        action="store_true",
+        help="List claim ladder records (id, rung, status, claim text).",
+    )
+    parser.add_argument(
+        "--claim-ladder-verify",
+        metavar="CLAIM_ID",
+        help="Run verify_l1 + verify_l2 for a claim ladder record and print both.",
+    )
+    parser.add_argument(
+        "--claim-ladder-promote",
+        metavar="CLAIM_ID",
+        help="Promote a claim ladder record (requires --ladder-rung; "
+             "rung 1 is analyzer-only, 2/3 require --ladder-reviewer/--ladder-reason).",
+    )
+    parser.add_argument(
+        "--claim-ladder-demote",
+        metavar="CLAIM_ID",
+        help="Demote a claim ladder record (requires --ladder-rung, "
+             "--ladder-reviewer, --ladder-reason).",
+    )
+    parser.add_argument(
+        "--ladder-rung",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Target rung for --claim-ladder-promote / --claim-ladder-demote.",
+    )
+    parser.add_argument(
+        "--ladder-reviewer",
+        default="operator",
+        help="Reviewer attribution for ladder promotion/demotion (blocklisted: "
+             "empty, nova, self, runtime, runtime_flag).",
+    )
+    parser.add_argument(
+        "--ladder-reason",
+        default="",
+        help="Reason recorded for ladder promotion/demotion.",
+    )
+    parser.add_argument(
+        "--export-findings",
+        metavar="EXPLORATION_ID",
+        help="Retroactively run governed export for a closed exploration's "
+             "findings summary (D8) — idempotent if already processed.",
+    )
     # Phase 19 Stage 19.3 — autonomous self-state tick (single-process, non-daemon)
     parser.add_argument(
         "--self-state-tick",
@@ -1281,6 +1328,80 @@ def main() -> int:
         records.sort(key=lambda r: str(r.get("timestamp", "")))
         recent = records[-max(0, args.quarantine_recent):] if args.quarantine_recent else []
         print(json.dumps(recent, indent=2, sort_keys=True))
+        return 0
+
+    # Phase 21 Stage 21.4 — claim ladder (no model needed; these are
+    # deterministic store/gate operations, not generation)
+    if args.claim_ladder:
+        runtime = build_runtime(config_override=args.config_override)
+        records = runtime.claim_ladder_store.list_all()
+        summary = [
+            {
+                "claim_id": r.claim_id,
+                "rung": r.rung,
+                "status": r.status,
+                "claim_class": r.claim_class,
+                "claim_text": r.claim_text,
+            }
+            for r in records
+        ]
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+
+    if args.claim_ladder_verify:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            record = runtime.verify_claim_ladder(claim_id=args.claim_ladder_verify)
+        except ValueError as exc:
+            print(json.dumps({"error": str(exc)}, indent=2))
+            return 1
+        print(json.dumps(record.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    if args.claim_ladder_promote:
+        if args.ladder_rung is None:
+            print(json.dumps({"error": "--ladder-rung is required"}, indent=2))
+            return 1
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            record = runtime.promote_ladder_claim(
+                claim_id=args.claim_ladder_promote,
+                to_rung=args.ladder_rung,
+                reviewer=args.ladder_reviewer,
+                reason=args.ladder_reason,
+            )
+        except ValueError as exc:
+            print(json.dumps({"error": str(exc)}, indent=2))
+            return 1
+        print(json.dumps(record.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    if args.claim_ladder_demote:
+        if args.ladder_rung is None:
+            print(json.dumps({"error": "--ladder-rung is required"}, indent=2))
+            return 1
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            record = runtime.demote_ladder_claim(
+                claim_id=args.claim_ladder_demote,
+                to_rung=args.ladder_rung,
+                reviewer=args.ladder_reviewer,
+                reason=args.ladder_reason,
+            )
+        except ValueError as exc:
+            print(json.dumps({"error": str(exc)}, indent=2))
+            return 1
+        print(json.dumps(record.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    if args.export_findings:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            result = runtime.export_findings(exploration_id=args.export_findings)
+        except ValueError as exc:
+            print(json.dumps({"error": str(exc)}, indent=2))
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 0
 
     # Phase 19 Stage 19.3 — single-process self-state tick
