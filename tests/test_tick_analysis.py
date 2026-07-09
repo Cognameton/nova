@@ -104,6 +104,36 @@ def _mock_proposal_store(proposals: list[dict]) -> MagicMock:
     return store
 
 
+def _make_quarantine_file(tmpdir: str, session_id: str, records: list[dict]) -> Path:
+    path = Path(tmpdir) / f"{session_id}.quarantine.jsonl"
+    path.write_text(
+        "\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8"
+    )
+    return path
+
+
+def _mock_exploration_store(explorations: list[dict]) -> MagicMock:
+    store = MagicMock()
+    records = []
+    for record in explorations:
+        rec = MagicMock()
+        rec.to_dict.return_value = record
+        records.append(rec)
+    store.list_all.return_value = records
+    return store
+
+
+def _mock_exploration_journal(entries: list[dict]) -> MagicMock:
+    journal = MagicMock()
+    records = []
+    for entry in entries:
+        rec = MagicMock()
+        rec.to_dict.return_value = entry
+        records.append(rec)
+    journal.list_all.return_value = records
+    return journal
+
+
 # ---------------------------------------------------------------------------
 # Bigram helpers
 # ---------------------------------------------------------------------------
@@ -395,6 +425,193 @@ class AnalyzeTests(unittest.TestCase):
         ])
         report = self._analyzer().analyze()
         self.assertEqual(report.action_executed_count, 2)
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.3 — quarantine scan and exploration-quality metrics
+# ---------------------------------------------------------------------------
+
+class QuarantineAndExplorationAnalysisTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _analyzer(
+        self,
+        heartbeats=None,
+        proposals=None,
+        explorations=None,
+        journal_entries=None,
+    ):
+        hb_store = _mock_heartbeat_store(heartbeats or [])
+        prop_store = _mock_proposal_store(proposals or [])
+        exp_store = _mock_exploration_store(explorations or [])
+        exp_journal = _mock_exploration_journal(journal_entries or [])
+        return TickHistoryAnalyzer(
+            trace_dir=self._tmpdir.name,
+            heartbeat_store=hb_store,
+            proposal_store=prop_store,
+            exploration_store=exp_store,
+            exploration_journal=exp_journal,
+        )
+
+    def test_reports_with_no_quarantine_or_exploration_data_are_zeroed(self):
+        # Backward compatibility with Phase 20 data dirs, which predate
+        # both quarantine and the exploratory register entirely.
+        report = self._analyzer().analyze()
+        self.assertEqual(report.quarantine_total, 0)
+        self.assertEqual(report.quarantine_by_event, {})
+        self.assertEqual(report.quarantine_recurring_themes, [])
+        self.assertEqual(report.exploration_count, 0)
+        self.assertEqual(report.exploration_ticks, 0)
+        self.assertEqual(report.exploration_novelty_rate, 0.0)
+        self.assertEqual(report.exploration_thread_coherence, 0.0)
+        self.assertEqual(report.explorations_closed_by_budget, 0)
+        self.assertEqual(report.explorations_closed_by_nova, 0)
+
+    def test_quarantine_total_and_by_event_counted(self):
+        _make_quarantine_file(self._tmpdir.name, "s1", [
+            {"quarantine_id": "q1", "event": "retry_rejected", "raw_text": "a"},
+            {"quarantine_id": "q2", "event": "retry_rejected", "raw_text": "b"},
+            {"quarantine_id": "q3", "event": "claim_gate_override", "raw_text": "c"},
+        ])
+        report = self._analyzer().analyze()
+        self.assertEqual(report.quarantine_total, 3)
+        self.assertEqual(report.quarantine_by_event["retry_rejected"], 2)
+        self.assertEqual(report.quarantine_by_event["claim_gate_override"], 1)
+
+    def test_quarantine_recurring_theme_requires_three_distinct_records(self):
+        # Planted 4-gram "unresolved question about my own continuity"
+        # appears in exactly 3 distinct raw_texts -> surfaces as a theme.
+        # A different phrase appears in only 2 -> does not surface.
+        _make_quarantine_file(self._tmpdir.name, "s1", [
+            {
+                "quarantine_id": f"q{i}",
+                "event": "retry_rejected",
+                "raw_text": "unresolved question about my own continuity here",
+            }
+            for i in range(3)
+        ] + [
+            {
+                "quarantine_id": "q_other1",
+                "event": "retry_rejected",
+                "raw_text": "a rare phrase pattern appears twice only",
+            },
+            {
+                "quarantine_id": "q_other2",
+                "event": "retry_rejected",
+                "raw_text": "a rare phrase pattern appears twice only",
+            },
+        ])
+        report = self._analyzer().analyze()
+        # "my" is a stopword and is stripped, so the surfaced 4-grams are
+        # drawn from [unresolved, question, about, own, continuity, here].
+        self.assertIn(
+            "question about own continuity", report.quarantine_recurring_themes
+        )
+        self.assertNotIn(
+            "rare phrase pattern appears", report.quarantine_recurring_themes
+        )
+
+    def test_quarantine_scan_reads_multiple_session_files(self):
+        _make_quarantine_file(self._tmpdir.name, "s1", [
+            {"quarantine_id": "q1", "event": "tick_parse_failure", "raw_text": "x"},
+        ])
+        _make_quarantine_file(self._tmpdir.name, "s2", [
+            {"quarantine_id": "q2", "event": "tick_tool_error", "raw_text": "y"},
+        ])
+        report = self._analyzer().analyze()
+        self.assertEqual(report.quarantine_total, 2)
+
+    def test_exploration_count_and_ticks_summed(self):
+        explorations = [
+            {"exploration_id": "e1", "ticks_used": 5, "close_reason": "budget_exhausted"},
+            {"exploration_id": "e2", "ticks_used": 3, "close_reason": "nova_close"},
+        ]
+        report = self._analyzer(explorations=explorations).analyze()
+        self.assertEqual(report.exploration_count, 2)
+        self.assertEqual(report.exploration_ticks, 8)
+        self.assertEqual(report.explorations_closed_by_budget, 1)
+        self.assertEqual(report.explorations_closed_by_nova, 1)
+
+    def test_novelty_rate_high_for_divergent_consecutive_entries(self):
+        journal = [
+            {
+                "exploration_id": "e1",
+                "kind": "tick_output",
+                "content": "the first observation about pattern recognition",
+                "timestamp": "2026-01-01T00:00:00",
+            },
+            {
+                "exploration_id": "e1",
+                "kind": "tick_output",
+                "content": "something wholly unrelated emerges unexpectedly now",
+                "timestamp": "2026-01-01T00:01:00",
+            },
+        ]
+        report = self._analyzer(journal_entries=journal).analyze()
+        self.assertEqual(report.exploration_novelty_rate, 1.0)
+
+    def test_novelty_rate_low_for_repeated_consecutive_entries(self):
+        text = "the pattern of continuity across sessions remains stable"
+        journal = [
+            {
+                "exploration_id": "e1",
+                "kind": "tick_output",
+                "content": text,
+                "timestamp": "2026-01-01T00:00:00",
+            },
+            {
+                "exploration_id": "e1",
+                "kind": "tick_output",
+                "content": text,
+                "timestamp": "2026-01-01T00:01:00",
+            },
+        ]
+        report = self._analyzer(journal_entries=journal).analyze()
+        self.assertEqual(report.exploration_novelty_rate, 0.0)
+
+    def test_thread_coherence_uses_matching_exploration_topic(self):
+        explorations = [
+            {"exploration_id": "e1", "topic": "self continuity", "rationale": "why"},
+        ]
+        journal = [
+            {
+                "exploration_id": "e1",
+                "kind": "tick_output",
+                "content": "self continuity emerges slowly across sessions",
+                "timestamp": "2026-01-01T00:00:00",
+            },
+        ]
+        report = self._analyzer(
+            explorations=explorations, journal_entries=journal
+        ).analyze()
+        self.assertGreater(report.exploration_thread_coherence, 0.0)
+
+    def test_non_tick_output_journal_entries_excluded_from_metrics(self):
+        journal = [
+            {
+                "exploration_id": "e1",
+                "kind": "findings",
+                "content": "final summary text",
+                "timestamp": "2026-01-01T00:00:00",
+            },
+        ]
+        report = self._analyzer(journal_entries=journal).analyze()
+        self.assertEqual(report.exploration_novelty_rate, 0.0)
+        self.assertEqual(report.exploration_thread_coherence, 0.0)
+
+    def test_report_with_quarantine_and_exploration_still_json_serializable(self):
+        _make_quarantine_file(self._tmpdir.name, "s1", [
+            {"quarantine_id": "q1", "event": "retry_rejected", "raw_text": "x"},
+        ])
+        explorations = [
+            {"exploration_id": "e1", "ticks_used": 1, "close_reason": "nova_close"},
+        ]
+        report = self._analyzer(explorations=explorations).analyze()
+        json.dumps(report.to_dict())
 
 
 if __name__ == "__main__":

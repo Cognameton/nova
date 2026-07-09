@@ -1324,3 +1324,34 @@ class ExplorationJournalEntry:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class QuarantineRecord:
+    """Phase 21 Stage 21.3 — a rejected Actor output, preserved never discarded.
+
+    Every output the Governor rejects or overrides — on any surface, in
+    either register — is captured here in full before the rejection takes
+    effect. First light, if it ever comes, will look like noise; this is
+    the record that keeps the noise instead of throwing it away
+    (Exploratory Register Contract, Invariant 5).
+    """
+    schema_version: str = SCHEMA_VERSION
+    quarantine_id: str = ""
+    session_id: str = ""
+    timestamp: str = ""
+    surface: str = ""  # "respond" | "self_state_tick"
+    register: str = "assertion"
+    event: str = ""  # retry_rejected | claim_gate_override | validation_override
+                      # | tick_parse_failure | tick_tool_error
+    attempt_index: int = 0
+    raw_text: str = ""
+    violations: list[str] = field(default_factory=list)
+    observed_claim_classes: list[str] = field(default_factory=list)
+    refusal_reason: str = ""
+    tick_id: str = ""
+    turn_id: str = ""
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

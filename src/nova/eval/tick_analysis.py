@@ -48,6 +48,10 @@ def _bigrams(text: str) -> set[tuple[str, str]]:
     return set(zip(seq, seq[1:]))
 
 
+def _ngrams(tokens: list[str], n: int) -> list[tuple[str, ...]]:
+    return [tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1)]
+
+
 def _bigram_overlap(a: str, b: str) -> float:
     """Fraction of bigrams in the shorter text that appear in the longer.
 
@@ -174,6 +178,19 @@ class TickAnalysisReport:
     pending_self_model_proposals: int = 0
     applied_self_model_proposals: int = 0
 
+    # Phase 21 Stage 21.3 — quarantine scan ("first light looks like noise")
+    quarantine_total: int = 0
+    quarantine_by_event: dict[str, int] = field(default_factory=dict)
+    quarantine_recurring_themes: list[str] = field(default_factory=list)
+
+    # Phase 21 Stage 21.3 — exploratory-register quality metrics
+    exploration_count: int = 0
+    exploration_ticks: int = 0
+    exploration_novelty_rate: float = 0.0        # 1 - avg consecutive echo
+    exploration_thread_coherence: float = 0.0    # avg overlap with topic
+    explorations_closed_by_budget: int = 0
+    explorations_closed_by_nova: int = 0
+
     # Session coverage
     sessions_with_ticks: list[str] = field(default_factory=list)
     first_tick_at: str = ""
@@ -207,10 +224,14 @@ class TickHistoryAnalyzer:
         trace_dir: str | Path,
         heartbeat_store=None,
         proposal_store=None,
+        exploration_store=None,
+        exploration_journal=None,
     ) -> None:
         self.trace_dir = Path(trace_dir)
         self.heartbeat_store = heartbeat_store
         self.proposal_store = proposal_store
+        self.exploration_store = exploration_store
+        self.exploration_journal = exploration_journal
 
     # ------------------------------------------------------------------
     # Load raw records
@@ -270,6 +291,47 @@ class TickHistoryAnalyzer:
         except Exception:
             return []
 
+    def load_quarantine_records(self) -> list[dict]:
+        """Load all quarantine records from *.quarantine.jsonl trace files."""
+        records: list[dict] = []
+        if not self.trace_dir.exists():
+            return records
+        for path in sorted(self.trace_dir.glob("*.quarantine.jsonl")):
+            try:
+                for line in path.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(record, dict):
+                        records.append(record)
+            except OSError:
+                continue
+        return records
+
+    def load_explorations(self) -> list[dict]:
+        """Load all ExplorationRecords, for exploration-quality metrics."""
+        if self.exploration_store is None:
+            return []
+        try:
+            records = self.exploration_store.list_all()
+        except Exception:
+            return []
+        return [r.to_dict() if hasattr(r, "to_dict") else r for r in records]
+
+    def load_exploration_journal(self) -> list[dict]:
+        """Load all exploration journal entries."""
+        if self.exploration_journal is None:
+            return []
+        try:
+            entries = self.exploration_journal.list_all()
+        except Exception:
+            return []
+        return [e.to_dict() if hasattr(e, "to_dict") else e for e in entries]
+
     # ------------------------------------------------------------------
     # Echo detection
     # ------------------------------------------------------------------
@@ -294,6 +356,89 @@ class TickHistoryAnalyzer:
         return round(sum(overlaps) / len(overlaps), 3)
 
     # ------------------------------------------------------------------
+    # Phase 21 Stage 21.3 — quarantine scan and exploration-quality metrics
+    # ------------------------------------------------------------------
+
+    def compute_recurring_themes(
+        self,
+        quarantine_records: list[dict],
+        *,
+        min_occurrences: int = 3,
+        top_n: int = 10,
+    ) -> list[str]:
+        """Token 4-grams appearing in >= min_occurrences DISTINCT quarantined
+        raw_texts (record-level presence, not raw occurrence count).
+
+        "First light looks like noise": this is the scan that surfaces
+        recurring structure in rejected output instead of letting it stay
+        invisible inside a rejection nobody re-reads.
+        """
+        ngram_record_ids: dict[tuple[str, ...], set[str]] = {}
+        for index, rec in enumerate(quarantine_records):
+            text = str(rec.get("raw_text", ""))
+            record_id = str(rec.get("quarantine_id", "")) or f"_idx{index}"
+            for ngram in set(_ngrams(_tokens(text), 4)):
+                ngram_record_ids.setdefault(ngram, set()).add(record_id)
+        counted = [
+            (ngram, len(ids))
+            for ngram, ids in ngram_record_ids.items()
+            if len(ids) >= min_occurrences
+        ]
+        counted.sort(key=lambda item: (-item[1], item[0]))
+        return [" ".join(ngram) for ngram, _ in counted[:top_n]]
+
+    def compute_exploration_novelty_rate(self, journal_entries: list[dict]) -> float:
+        """1 - avg bigram overlap between consecutive in-register
+        tick_output journal entries, across all explorations in timestamp
+        order. High novelty (close to 1.0) means each tick's content
+        diverges from the one before it rather than echoing it.
+        """
+        tick_entries = sorted(
+            (e for e in journal_entries if e.get("kind") == "tick_output"),
+            key=lambda e: str(e.get("timestamp", "")),
+        )
+        contents = [
+            str(e.get("content", "")).strip()
+            for e in tick_entries
+            if str(e.get("content", "")).strip()
+        ]
+        if len(contents) < 2:
+            return 0.0
+        overlaps = [
+            _bigram_overlap(contents[i], contents[i + 1])
+            for i in range(len(contents) - 1)
+        ]
+        return round(1.0 - (sum(overlaps) / len(overlaps)), 3)
+
+    def compute_exploration_thread_coherence(
+        self,
+        journal_entries: list[dict],
+        explorations: list[dict],
+    ) -> float:
+        """Avg bigram overlap between each in-register tick_output entry and
+        its OWN exploration's topic+rationale text — coherence TO the topic,
+        distinct from novelty (which measures repetition across entries).
+        """
+        by_id = {str(r.get("exploration_id", "")): r for r in explorations}
+        scores: list[float] = []
+        for entry in journal_entries:
+            if entry.get("kind") != "tick_output":
+                continue
+            record = by_id.get(str(entry.get("exploration_id", "")))
+            if record is None:
+                continue
+            topic_text = (
+                f"{record.get('topic', '')} {record.get('rationale', '')}"
+            ).strip()
+            content = str(entry.get("content", "")).strip()
+            if not topic_text or not content:
+                continue
+            scores.append(_bigram_overlap(content, topic_text))
+        if not scores:
+            return 0.0
+        return round(sum(scores) / len(scores), 3)
+
+    # ------------------------------------------------------------------
     # Main analysis
     # ------------------------------------------------------------------
 
@@ -301,6 +446,9 @@ class TickHistoryAnalyzer:
         ticks = self.load_ticks()
         heartbeats = self.load_heartbeats()
         proposals = self.load_proposals()
+        quarantine_records = self.load_quarantine_records()
+        explorations = self.load_explorations()
+        journal_entries = self.load_exploration_journal()
 
         report = TickAnalysisReport()
 
@@ -358,6 +506,36 @@ class TickHistoryAnalyzer:
         applied = [p for p in proposals if p.get("applied")]
         report.pending_self_model_proposals = len(pending)
         report.applied_self_model_proposals = len(applied)
+
+        # -- Quarantine scan (Phase 21 Stage 21.3) --
+        report.quarantine_total = len(quarantine_records)
+        by_event: dict[str, int] = {}
+        for rec in quarantine_records:
+            event = str(rec.get("event", ""))
+            if event:
+                by_event[event] = by_event.get(event, 0) + 1
+        report.quarantine_by_event = by_event
+        report.quarantine_recurring_themes = self.compute_recurring_themes(
+            quarantine_records
+        )
+
+        # -- Exploration-quality metrics (Phase 21 Stage 21.3) --
+        report.exploration_count = len(explorations)
+        report.exploration_ticks = sum(
+            int(r.get("ticks_used", 0) or 0) for r in explorations
+        )
+        report.exploration_novelty_rate = self.compute_exploration_novelty_rate(
+            journal_entries
+        )
+        report.exploration_thread_coherence = self.compute_exploration_thread_coherence(
+            journal_entries, explorations
+        )
+        report.explorations_closed_by_budget = sum(
+            1 for r in explorations if r.get("close_reason") == "budget_exhausted"
+        )
+        report.explorations_closed_by_nova = sum(
+            1 for r in explorations if r.get("close_reason") == "nova_close"
+        )
 
         # -- Quality flags --
         reasons: list[str] = []

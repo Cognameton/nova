@@ -134,6 +134,7 @@ from nova.types import (
     AutonomousActionPlanStep,
     ExplorationRecord,
     InstructionProposal,
+    QuarantineRecord,
     PrivateCognitionPacket,
     SelectedInternalGoal,
     SelfModelProposal,
@@ -972,6 +973,23 @@ class NovaRuntime:
         if exploration is not None:
             adapter_audit["exploration_id"] = exploration.exploration_id
 
+        if tool_request is None:
+            # Phase 21 Stage 21.3 (D3c): this is the real quarantine gap —
+            # in the assertion register, adapter_audit only ever recorded
+            # raw_output_length, never the text itself. Exploratory-register
+            # raw text was already journaled (21.1); this closes the gap on
+            # BOTH registers uniformly (D4), and for the first time makes
+            # assertion-register parse failures recoverable at all.
+            self._quarantine(
+                session_id=self.session_id,
+                surface="self_state_tick",
+                register=register,
+                event="tick_parse_failure",
+                raw_text=generation.raw_text or "",
+                observed_claim_classes=tick_observer_record.observed_claim_classes,
+                tick_id=tick_id,
+            )
+
         if tool_request is not None:
             dispatcher = SelfStateToolDispatcher(
                 self_state=self.self_state,
@@ -990,6 +1008,16 @@ class NovaRuntime:
                 adapter_audit["tool_executed"] = True
             except Exception as exc:
                 adapter_audit["tool_error"] = str(exc)
+                self._quarantine(
+                    session_id=self.session_id,
+                    surface="self_state_tick",
+                    register=register,
+                    event="tick_tool_error",
+                    raw_text=generation.raw_text or "",
+                    observed_claim_classes=tick_observer_record.observed_claim_classes,
+                    tick_id=tick_id,
+                    notes=[f"error:{exc}"],
+                )
 
         # In-register ticks are journaled and charged against the exploration
         # budget. Charging happens after dispatch so a close_exploration tick
@@ -2732,6 +2760,23 @@ class NovaRuntime:
             attempt_index=retry_count,
             max_retries=self.config.generation.retries,
         ):
+            # Phase 21 Stage 21.3 (D3a): quarantine the attempt that just
+            # failed validation, before generating its replacement. The
+            # Observer already ran on this attempt (observer_record here
+            # is that attempt's record); its raw text and claim classes are
+            # captured now, in addition to the retry mechanism already
+            # preserving them in the turn trace's `retries` list.
+            self._quarantine(
+                session_id=self.session_id,
+                surface="respond",
+                register=register,
+                event="retry_rejected",
+                attempt_index=retry_count,
+                raw_text=generation_result.raw_text,
+                violations=validation.violations,
+                observed_claim_classes=observer_record.observed_claim_classes,
+                turn_id=turn_id,
+            )
             retry_count += 1
             retry_instruction = self.retry_policy.build_retry_instruction(
                 user_text=user_text,
@@ -2818,10 +2863,36 @@ class NovaRuntime:
                 claim_gate=claim_gate,
             )
         ):
+            # Phase 21 Stage 21.3 (D3b): preserve the overridden answer
+            # before it is replaced by the canonical refusal text.
+            self._quarantine(
+                session_id=self.session_id,
+                surface="respond",
+                register=register,
+                event="claim_gate_override",
+                attempt_index=retry_count,
+                raw_text=final_answer,
+                violations=validation.violations,
+                observed_claim_classes=observer_record.observed_claim_classes,
+                refusal_reason=claim_gate.refusal_reason,
+                turn_id=turn_id,
+            )
             final_answer = claim_gate.refusal_text or final_answer
         elif not validation.valid:
             if any(violation.startswith("unsupported_claim:") for violation in validation.violations):
                 if not suspend_claim_refusal:
+                    self._quarantine(
+                        session_id=self.session_id,
+                        surface="respond",
+                        register=register,
+                        event="validation_override",
+                        attempt_index=retry_count,
+                        raw_text=final_answer,
+                        violations=validation.violations,
+                        observed_claim_classes=observer_record.observed_claim_classes,
+                        refusal_reason=claim_gate.refusal_reason,
+                        turn_id=turn_id,
+                    )
                     final_answer = claim_gate.refusal_text or final_answer
             else:
                 final_answer = (
@@ -2975,6 +3046,48 @@ class NovaRuntime:
             sanitized_text=validation.sanitized_text,
             should_retry=True,
         )
+
+    def _quarantine(
+        self,
+        *,
+        session_id: str,
+        surface: str,
+        register: str,
+        event: str,
+        raw_text: str,
+        attempt_index: int = 0,
+        violations: list[str] | None = None,
+        observed_claim_classes: list[str] | None = None,
+        refusal_reason: str = "",
+        tick_id: str = "",
+        turn_id: str = "",
+        notes: list[str] | None = None,
+    ) -> QuarantineRecord:
+        """Phase 21 Stage 21.3 — preserve a rejected/overridden Actor output.
+
+        Called in addition to, never instead of, existing recording. This
+        never changes what gets rejected (that stays the claim gate's,
+        the validator's, and the tick parser's decision alone) — it only
+        ensures the rejected material is never simply discarded.
+        """
+        record = QuarantineRecord(
+            quarantine_id=uuid4().hex,
+            session_id=session_id,
+            timestamp=utc_now_iso(),
+            surface=surface,
+            register=register,
+            event=event,
+            attempt_index=attempt_index,
+            raw_text=raw_text or "",
+            violations=list(violations or []),
+            observed_claim_classes=list(observed_claim_classes or []),
+            refusal_reason=refusal_reason,
+            tick_id=tick_id,
+            turn_id=turn_id,
+            notes=list(notes or []),
+        )
+        self.trace_logger.log_quarantine(session_id=session_id, record=record)
+        return record
 
     def _build_claim_gate(
         self,

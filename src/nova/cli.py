@@ -435,6 +435,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Analyze accumulated self-state tick history and heartbeat quality.",
     )
+    # Phase 21 Stage 21.3 — quarantine review
+    parser.add_argument(
+        "--quarantine-recent",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Print the last N quarantine records (rejected/overridden Actor output).",
+    )
     # Phase 19 Stage 19.3 — autonomous self-state tick (single-process, non-daemon)
     parser.add_argument(
         "--self-state-tick",
@@ -1226,6 +1234,7 @@ def main() -> int:
     if args.tick_analysis:
         from nova.eval.tick_analysis import TickHistoryAnalyzer
         from nova.agent.heartbeat import HeartbeatStore, SelfModelProposalStore
+        from nova.agent.exploration import ExplorationStore, ExplorationJournal
 
         components = build_memory_components(config_override=args.config_override)
         data_dir = components["data_dir"]
@@ -1234,16 +1243,44 @@ def main() -> int:
 
         heartbeat_store = HeartbeatStore(data_dir / "heartbeats")
         proposal_store = SelfModelProposalStore(data_dir / "self_state")
+        exploration_dir = data_dir / "exploration"
 
         analyzer = TickHistoryAnalyzer(
             trace_dir=trace_dir,
             heartbeat_store=heartbeat_store,
             proposal_store=proposal_store,
+            exploration_store=ExplorationStore(exploration_dir),
+            exploration_journal=ExplorationJournal(exploration_dir),
         )
         report = analyzer.analyze()
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         if report.reasons:
             return 1
+        return 0
+
+    # Phase 21 Stage 21.3 — quarantine review (no model needed)
+    if args.quarantine_recent is not None:
+        components = build_memory_components(config_override=args.config_override)
+        log_dir = components["log_dir"]
+        trace_dir = log_dir / "traces"
+
+        records: list[dict] = []
+        if trace_dir.exists():
+            for path in sorted(trace_dir.glob("*.quarantine.jsonl")):
+                try:
+                    for line in path.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+                except OSError:
+                    continue
+        records.sort(key=lambda r: str(r.get("timestamp", "")))
+        recent = records[-max(0, args.quarantine_recent):] if args.quarantine_recent else []
+        print(json.dumps(recent, indent=2, sort_keys=True))
         return 0
 
     # Phase 19 Stage 19.3 — single-process self-state tick

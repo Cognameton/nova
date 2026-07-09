@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from nova.types import ProbeResult, TraceRecord
+from nova.types import ProbeResult, QuarantineRecord, TraceRecord
 
 
 class JsonlTraceLogger:
@@ -168,6 +168,22 @@ class JsonlTraceLogger:
         }
         with tick_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def log_quarantine(
+        self,
+        *,
+        session_id: str,
+        record: QuarantineRecord,
+    ) -> None:
+        """Phase 21 Stage 21.3 — append-only, never overwritten or pruned.
+
+        Every rejected/overridden Actor output lands here in full before the
+        rejection takes effect, so a genuine signal never disappears just
+        because it first looked like noise (Invariant 5: nothing deleted).
+        """
+        quarantine_path = self.trace_dir / f"{session_id}.quarantine.jsonl"
+        with quarantine_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record.to_dict(), ensure_ascii=False) + "\n")
 
     def log_identity_history(
         self,

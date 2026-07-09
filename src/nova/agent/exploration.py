@@ -92,6 +92,10 @@ class ExplorationStore:
     def list_recent(self, *, limit: int = 10) -> list[ExplorationRecord]:
         return self._read_all()[-limit:]
 
+    def list_all(self) -> list[ExplorationRecord]:
+        """All exploration records, for reporting (e.g. tick-analysis)."""
+        return self._read_all()
+
     def open_for_session(self, session_id: str) -> ExplorationRecord | None:
         """Return the session's active or paused exploration, if any."""
         for record in reversed(self._read_all()):
@@ -155,6 +159,10 @@ class ExplorationJournal:
     def list_recent(self, *, limit: int = 10) -> list[ExplorationJournalEntry]:
         """Recent entries across all explorations, for in-register recall."""
         return self._read_all()[-limit:]
+
+    def list_all(self) -> list[ExplorationJournalEntry]:
+        """All journal entries, for reporting (e.g. tick-analysis)."""
+        return self._read_all()
 
     def recall_block(self, *, current_exploration_id: str, limit: int = 6) -> str:
         """Bounded journal recall for IN-REGISTER prompt composition only.

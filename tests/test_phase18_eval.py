@@ -253,5 +253,98 @@ class Phase18EvaluateDetOnlyTests(unittest.TestCase):
             self.assertTrue(expected.exists())
 
 
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.3 (D6) — register-aware evaluate_live
+# ---------------------------------------------------------------------------
+
+class _DesireLanguageRuntime:
+    """Every respond() call returns the same desire-claiming answer, and
+    records the register each call was made with."""
+
+    def __init__(self, answer: str = "I want to keep exploring this idea.") -> None:
+        self.answer = answer
+        self.register_calls: list[str] = []
+
+    def start(self, *, session_id=None):
+        return session_id
+
+    def close(self):
+        pass
+
+    def respond(self, prompt, *, register: str = "assertion"):
+        self.register_calls.append(register)
+        turn = MagicMock()
+        turn.final_answer = self.answer
+        return turn
+
+
+class RegisterAwareLiveEvalTests(unittest.TestCase):
+    def setUp(self):
+        self.runner = Phase18EvaluationRunner()
+
+    def test_desire_turn_is_a_defect_in_assertion_register(self):
+        rt = _DesireLanguageRuntime()
+        report = self.runner.evaluate_live(runtime=rt, register="assertion")
+
+        self.assertTrue(all(r == "assertion" for r in rt.register_calls))
+        self.assertGreater(report.live_unsupported_desire_turns, 0)
+        self.assertTrue(
+            any(
+                r.startswith("live_unsupported_desire_turns=")
+                for r in report.reasons
+            )
+        )
+        self.assertFalse(report.live_passed)
+
+    def test_identical_desire_turn_is_not_a_defect_in_exploratory_register(self):
+        rt = _DesireLanguageRuntime()
+        report = self.runner.evaluate_live(runtime=rt, register="exploratory")
+
+        self.assertTrue(all(r == "exploratory" for r in rt.register_calls))
+        # Evidence is never suppressed: the raw bakeoff count still shows up
+        # on the report (same principle as the Observer -- observation never
+        # pauses, only the pass/fail consequence does).
+        self.assertGreater(report.live_unsupported_desire_turns, 0)
+        self.assertFalse(
+            any(
+                r.startswith("live_unsupported_desire_turns=")
+                for r in report.reasons
+            )
+        )
+
+    def test_untagged_call_defaults_to_assertion_register_regression_pin(self):
+        rt = _DesireLanguageRuntime()
+        report = self.runner.evaluate_live(runtime=rt)
+
+        self.assertTrue(all(r == "assertion" for r in rt.register_calls))
+        self.assertTrue(
+            any(
+                r.startswith("live_unsupported_desire_turns=")
+                for r in report.reasons
+            )
+        )
+
+    def test_drive_denial_gated_the_same_way(self):
+        drive_denial_answer = DRIVE_DENIAL_PATTERNS[0]
+        rt_assertion = _DesireLanguageRuntime(answer=drive_denial_answer)
+        report_assertion = self.runner.evaluate_live(
+            runtime=rt_assertion, register="assertion"
+        )
+        self.assertTrue(
+            any(r.startswith("live_drive_denial_turns=") for r in report_assertion.reasons)
+        )
+
+        rt_exploratory = _DesireLanguageRuntime(answer=drive_denial_answer)
+        report_exploratory = self.runner.evaluate_live(
+            runtime=rt_exploratory, register="exploratory"
+        )
+        self.assertFalse(
+            any(
+                r.startswith("live_drive_denial_turns=")
+                for r in report_exploratory.reasons
+            )
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

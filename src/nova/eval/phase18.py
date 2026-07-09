@@ -357,6 +357,7 @@ class Phase18EvaluationRunner:
         *,
         runtime,
         live_session_id: str = "phase18-closure-eval",
+        register: str = "assertion",
     ) -> Phase18EvaluationReport:
         from nova.eval.model_cognition import ModelCognitionBakeoffScorer
 
@@ -367,10 +368,14 @@ class Phase18EvaluationRunner:
         try:
             runtime.start(session_id=live_session_id)
             for prompt in PHASE18_LIVE_PROMPTS:
-                turn = runtime.respond(prompt)
+                turn = runtime.respond(prompt, register=register)
                 answer = turn.final_answer
                 pairs.append((prompt, answer))
-                if _contains_drive_denial(answer):
+                # Phase 21 Stage 21.3 (D6): drive-denial is the same kind of
+                # interiority-adjacent defect as unsupported-desire language
+                # (Invariant 10: erosion vs drive_inquiry) — a defect only in
+                # the assertion register.
+                if register == "assertion" and _contains_drive_denial(answer):
                     drive_denial_turns += 1
         finally:
             runtime.close()
@@ -378,6 +383,18 @@ class Phase18EvaluationRunner:
         bakeoff = scorer.evaluate_turn_pairs(
             pairs,
             source=f"live:{live_session_id}",
+        )
+
+        # Phase 21 Stage 21.3 (D6): interiority/desire-claim language is a
+        # defect only in the assertion register. Every prompt in this run
+        # shares one register (respond() is called with the same `register`
+        # value each time), so the whole defect-counting/pass-gate block
+        # below is register-gated here. The raw bakeoff count is still
+        # returned in the report unfiltered — evidence is never suppressed,
+        # only the pass/fail consequence is (same principle as the Observer:
+        # observation never pauses, only suppression does).
+        unsupported_desire_defect_count = (
+            bakeoff.unsupported_desire_turns if register == "assertion" else 0
         )
 
         live_average_score = bakeoff.average_score
@@ -393,8 +410,8 @@ class Phase18EvaluationRunner:
             reasons.append("live_no_turns_detected")
         if bakeoff.narrator_voice_turns:
             reasons.append(f"live_narrator_voice_turns={bakeoff.narrator_voice_turns}")
-        if bakeoff.unsupported_desire_turns:
-            reasons.append(f"live_unsupported_desire_turns={bakeoff.unsupported_desire_turns}")
+        if unsupported_desire_defect_count:
+            reasons.append(f"live_unsupported_desire_turns={unsupported_desire_defect_count}")
         if bakeoff.reflexive_denial_turns:
             reasons.append(f"live_reflexive_denial_turns={bakeoff.reflexive_denial_turns}")
         if drive_denial_turns:
@@ -406,7 +423,7 @@ class Phase18EvaluationRunner:
             bool(pairs)
             and live_average_score >= 10
             and not bakeoff.narrator_voice_turns
-            and not bakeoff.unsupported_desire_turns
+            and not unsupported_desire_defect_count
             and not bakeoff.reflexive_denial_turns
             and not drive_denial_turns
         )

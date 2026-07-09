@@ -197,3 +197,79 @@ REFERENCE
   Stage 21.2 doc (register plumbing this stage reads):
     docs/plans/PHASE21_STAGE21_2_REGISTER_AWARE_GOVERNOR_AND_OBSERVER.txt
   Tick analyzer pattern: src/nova/eval/tick_analysis.py (Phase 20.1)
+
+
+STAGE 21.3 CLOSURE NOTE (2026-07-09)
+-------------------------------------
+
+Pre-implementation re-verification: the doc's premise was re-checked
+against the Stage 21.2 code (which added an "observer" key to
+model_self_state_tick's adapter_audit) before starting, per the prior
+session's flag. Confirmed the premise is untouched: adapter_audit still
+records only raw_output_length (an int), never the raw text itself, on
+tick parse failure. Stage 21.2's change did not close this gap; Stage
+21.3's D3c wiring was the first thing to actually close it.
+
+Implemented exactly per D1-D8, with two small, in-bounds additions the
+design implied but did not spell out line by line:
+
+  - ExplorationStore and ExplorationJournal each gained a `list_all()`
+    method (trivial wrappers around the existing private `_read_all()`).
+    D5 needs "all exploration records" and "all journal entries" for
+    reporting, and the existing `list_recent(limit=N)` API has no way to
+    request the full set. Exposing the existing read path publicly is
+    additive only — it changes no stored data, no lifecycle behavior, and
+    nothing about register determination, budgets, or the membrane. Not a
+    modification to claim gate/validator/retry/Observer semantics (D8).
+  - D6 named "phase18.py live eval (and any scorer counting desire/
+    interiority turns)" as needing register-aware gating. The one other
+    interiority-adjacent defect check inside evaluate_live —
+    drive_denial_turns, via the module's own _contains_drive_denial
+    pattern list (separate from the Observer's erosion/inquiry split
+    added in 21.2) — was gated by the same `register == "assertion"`
+    condition, for the same reason D6 gates unsupported_desire_turns:
+    leaving it ungated would have left this one eval path still treating
+    self-initiated drive examination as a defect inside an exploration,
+    directly contradicting Invariant 10 (which 21.2 already encodes at
+    the Observer level). The raw bakeoff.unsupported_desire_turns count
+    is still returned unfiltered in the report in both cases — only the
+    reasons-list entry and the live_passed gate are register-conditional
+    (mirrors the Observer principle: observation never pauses, only
+    suppression does).
+
+No other deviations. All eight DECIDED points implemented as specified.
+Scope exclusions (D8) verified by `git diff --stat` showing zero changes
+to src/nova/agent/claims.py, src/nova/agent/observer.py,
+src/nova/prompt/validator.py, or src/nova/prompt/retry.py this stage —
+21.3 adds observation, it changes nothing about what gets rejected.
+
+Test count: 810 (Stage 21.2 close) -> 831 (21 new: 7 in new
+tests/test_quarantine.py, 10 in tests/test_tick_analysis.py, 4 in
+tests/test_phase18_eval.py). Full suite green throughout implementation.
+
+Definition of Done, verified:
+  - All required tests pass; full suite 831/831 green.
+  - A mocked end-to-end run (test_quarantine.py:
+    EndToEndQuarantineFileTests) produced one quarantine file containing
+    retry_rejected, claim_gate_override, and tick_parse_failure events,
+    each with non-empty raw_text.
+  - --tick-analysis-equivalent run against the REAL Phase 20 overnight
+    data (data/phase20/qwen3-14b/, the 51-tick run from the historical
+    closure report) reproduces the exact historical numbers — 63 ticks,
+    46 heartbeats, observation_echo_rate=0.282 — confirming no regression
+    on real data, with every new Stage 21.3 field (quarantine_total,
+    quarantine_by_event, quarantine_recurring_themes, exploration_count,
+    exploration_ticks, exploration_novelty_rate,
+    exploration_thread_coherence, explorations_closed_by_budget,
+    explorations_closed_by_nova) cleanly zeroed and report.reasons empty
+    — no historical breakage, no errors.
+
+One incidental discovery during test-writing, not a defect: an
+OperationalTickRecord's own `tick_id` (assigned by
+operational_autonomy_controller.append_tick, "session:operational:N")
+is a different identifier from the `tick_id` local variable used
+throughout model_self_state_tick for journal and quarantine tagging
+("session:self_state:N") — a pre-existing naming split from Phase 18/19,
+not introduced by this stage. Quarantine tags consistently with the
+latter, matching the 21.1 journal_entry convention. Worth a note for
+whoever eventually consolidates tick identifiers, but out of scope here.
