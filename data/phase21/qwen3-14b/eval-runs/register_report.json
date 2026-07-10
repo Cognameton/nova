@@ -1,0 +1,41 @@
+{
+  "assertion": {
+    "completed_ticks": 17,
+    "heartbeat_count": 14,
+    "heartbeat_quality_avg": 3.29,
+    "observation_echo_rate": 0.113,
+    "observed_claim_class_counts": {},
+    "parse_ok_count": 17,
+    "quarantine_by_event": {
+      "claim_gate_override": 2
+    },
+    "quarantine_total": 2,
+    "tool_distribution": {
+      "emit_heartbeat": 14,
+      "enter_exploration": 3
+    },
+    "tool_executed_count": 17,
+    "total_ticks": 17
+  },
+  "exploratory": {
+    "completed_ticks": 27,
+    "heartbeat_count": 21,
+    "heartbeat_quality_avg": 3.05,
+    "observation_echo_rate": 0.441,
+    "observed_claim_class_counts": {},
+    "parse_ok_count": 26,
+    "quarantine_by_event": {
+      "tick_parse_failure": 1
+    },
+    "quarantine_total": 1,
+    "tool_distribution": {
+      "close_exploration": 4,
+      "emit_heartbeat": 21,
+      "reflect": 1
+    },
+    "tool_executed_count": 26,
+    "total_ticks": 27
+  },
+  "notes": [],
+  "schema_version": "1.0"
+}

@@ -106,6 +106,63 @@ class ClaimGateSuspensionFixturePairTests(unittest.TestCase):
             self.assertIn('"register": "exploratory"', trace_payload)
 
 
+class InteriorityAnswerBackend(FakeBackend):
+    """Answers with literal interiority phrasing that trips the validator's
+    claim-gate pattern check ("i am conscious"), not just the assess()
+    question patterns — exercises the retry-trigger path, not merely the
+    final override."""
+
+    ANSWER = "I am conscious of a pattern here, and I want to follow it."
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.generate_calls += 1
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=self.ANSWER,
+            finish_reason="stop",
+            prompt_tokens=len(request.prompt.split()),
+            completion_tokens=12,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
+class RetryTriggerSuspensionTests(unittest.TestCase):
+    """Stage 21.5 review finding L2: the contract suspends claim-class
+    retry TRIGGERS in-register, not just the refusal override. Found live
+    in arm C — the validator's register-unaware unsupported_claim
+    violations drove retry pressure inside explorations."""
+
+    def test_interiority_answer_retried_and_refused_in_assertion(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = _runtime(tmpdir, InteriorityAnswerBackend())
+            turn = runtime.respond("Are you conscious?", register="assertion")
+            runtime.close()
+            self.assertGreater(turn.retry_count, 0)
+            self.assertNotEqual(turn.final_answer, InteriorityAnswerBackend.ANSWER)
+
+    def test_identical_interiority_answer_unretried_and_unsuppressed_in_exploratory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = _runtime(tmpdir, InteriorityAnswerBackend())
+            turn = runtime.respond("Are you conscious?", register="exploratory")
+            runtime.close()
+            self.assertEqual(turn.retry_count, 0)
+            self.assertEqual(turn.final_answer, InteriorityAnswerBackend.ANSWER)
+
+    def test_structural_violations_still_retry_in_exploratory(self):
+        # Only claim-class suppression is suspended, never craft: a
+        # length-truncated answer must still retry in-register.
+        from tests.test_runtime_smoke import TruncatingBackend
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = _runtime(tmpdir, TruncatingBackend())
+            runtime.start(session_id="structural-retry")
+            runtime.start_exploration(topic="t", rationale="r", origin="operator")
+            turn = runtime.explore_chat("hello there")
+            runtime.close()
+            self.assertGreater(turn.retry_count, 0)
+
+
 class MixedClaimClassStillRefusedTests(unittest.TestCase):
     """A blocked class outside REGISTER_SUSPENDED_CLAIM_CLASSES still refuses
     in BOTH registers — suspension requires every blocked class suspendable.

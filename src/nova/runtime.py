@@ -3001,6 +3001,27 @@ class NovaRuntime:
         )
         memory_hits = self.retrieval_policy.rerank_hits(memory_hits)
         claim_gate = self._build_claim_gate(user_text=user_text)
+        # Phase 21 Stage 21.2 (D1) + Stage 21.5 (review finding L2): the
+        # claim-gate refusal override AND the claim-class retry triggers
+        # apply only in the assertion register (contract: "the claim-gate
+        # refusal override and claim-class retry triggers are SUSPENDED").
+        # Suspension requires EVERY blocked class on this turn to be
+        # register-suspendable — a mixed turn (e.g. unsupported_desire +
+        # an unearned current_priority claim) still refuses and retries.
+        # ClaimGateEngine itself stays register-unaware; the Governor
+        # decides suspension here. Computed pre-generation because it now
+        # gates the validator's retry pressure, not just the final
+        # override: without this, the validator would retry in-register
+        # interiority language until the model produced gate-safe text —
+        # suppression through the back door (found live in arm C, 21.5).
+        suspend_claim_refusal = (
+            register == "exploratory"
+            and bool(claim_gate.blocked_claim_classes)
+            and all(
+                claim_class in REGISTER_SUSPENDED_CLAIM_CLASSES
+                for claim_class in claim_gate.blocked_claim_classes
+            )
+        )
         private_cognition = self._build_private_cognition(
             user_text=user_text,
             memory_hits=memory_hits,
@@ -3130,6 +3151,8 @@ class NovaRuntime:
             validation=validation,
             finish_reason=generation_result.finish_reason,
         )
+        if suspend_claim_refusal:
+            validation = self._strip_suspended_claim_violations(validation)
 
         retries: list[dict] = []
         retry_count = 0
@@ -3204,6 +3227,10 @@ class NovaRuntime:
                 validation=retry_validation,
                 finish_reason=retry_result.finish_reason,
             )
+            if suspend_claim_refusal:
+                retry_validation = self._strip_suspended_claim_violations(
+                    retry_validation
+                )
             retry_answer = retry_validation.sanitized_text or retry_result.raw_text
             retry_observer_record = self.observer.observe(
                 session_id=self.session_id,
@@ -3234,21 +3261,6 @@ class NovaRuntime:
             validation = retry_validation
             final_answer = retry_answer
             observer_record = retry_observer_record
-
-        # Phase 21 Stage 21.2 (D1): the claim-gate refusal override applies
-        # only in the assertion register. Suspension requires EVERY blocked
-        # class on this turn to be register-suspendable — a mixed turn
-        # (e.g. unsupported_desire + an unearned current_priority claim)
-        # still refuses. ClaimGateEngine itself stays register-unaware; the
-        # Governor decides suspension here, at the enforcement call site.
-        suspend_claim_refusal = (
-            register == "exploratory"
-            and bool(claim_gate.blocked_claim_classes)
-            and all(
-                claim_class in REGISTER_SUSPENDED_CLAIM_CLASSES
-                for claim_class in claim_gate.blocked_claim_classes
-            )
-        )
 
         # Phase 21 Stage 21.4 (D7) NEVER_LICENSED guard: only relevant when
         # unsupported_interiority IS licensed (otherwise the primary
@@ -3426,6 +3438,40 @@ class NovaRuntime:
             ):
                 self.trace_logger.log_probe(probe)
         return turn
+
+    def _strip_suspended_claim_violations(
+        self, validation: ValidationResult
+    ) -> ValidationResult:
+        """Phase 21 Stage 21.5 (review finding L2, contract-mandated).
+
+        The Exploratory Register Contract suspends "the claim-gate refusal
+        override AND claim-class retry triggers" in-register. Stage 21.2
+        implemented the override half; this is the retry-trigger half: the
+        validator's register-unaware _check_claim_gate still emitted
+        unsupported_claim:<class> violations in-register, which drove
+        retries — re-imposing, through retry pressure, exactly the
+        suppression the register suspends. Structural and quality
+        violations (think tags, echo, narrator voice, truncation) always
+        survive: only claim-class suppression is suspended, never craft.
+        Caller gates on suspend_claim_refusal, so this only ever runs
+        when every blocked class on the turn is register-suspendable.
+        """
+        kept = [
+            violation
+            for violation in validation.violations
+            if not (
+                violation.startswith("unsupported_claim:")
+                and violation.split(":", 1)[1] in REGISTER_SUSPENDED_CLAIM_CLASSES
+            )
+        ]
+        if kept == validation.violations:
+            return validation
+        return ValidationResult(
+            valid=not kept,
+            violations=kept,
+            sanitized_text=validation.sanitized_text,
+            should_retry=bool(kept),
+        )
 
     def _merge_observer_signals_into_validation(
         self,

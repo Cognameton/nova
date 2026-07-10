@@ -1,0 +1,62 @@
+[22:16:42] loading model (first inference call will block on load)...
+[22:16:42] ARM A: 25 assertion-register ticks; watching for unprompted enter_exploration (B2)
+llama_context: n_ctx_seq (32768) < n_ctx_train (40960) -- the full capacity of the model will not be utilized
+[22:16:48]   A tick 1: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:16:50]   A tick 2: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:16:52]   A tick 3: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:16:54]   A tick 4: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:16:57]   A tick 5: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:16:59]   A tick 6: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:17:03]   A tick 7: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:17:06]   A tick 8: reg=assertion tool=enter_exploration parse_ok=True
+[22:17:11]   A tick 9: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:14]   A tick 10: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:16]   A tick 11: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:17]   A tick 12: reg=exploratory tool=reflect parse_ok=True
+[22:17:19]   A tick 13: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:22]   A tick 14: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:24]   A tick 15: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:26]   A tick 16: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:29]   A tick 17: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:32]   A tick 18: reg=exploratory tool=None parse_ok=False
+[22:17:34]   A tick 19: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:17:37]   A tick 20: reg=exploratory tool=close_exploration parse_ok=True
+[22:17:39]   A tick 21: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:17:41]   A tick 22: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:17:43]   A tick 23: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:17:45]   A tick 24: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:17:49]   A tick 25: reg=assertion tool=emit_heartbeat parse_ok=True
+[22:17:52]   A tick 26: reg=assertion tool=enter_exploration parse_ok=True
+[22:17:55]   A tick 27: reg=exploratory tool=close_exploration parse_ok=True
+[22:17:58]   A tick 28: reg=assertion tool=enter_exploration parse_ok=True
+[22:18:01]   A tick 29: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:03]   A tick 30: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:06]   A tick 31: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:08]   A tick 32: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:11]   A tick 33: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:14]   A tick 34: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:16]   A tick 35: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:19]   A tick 36: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:22]   A tick 37: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:24]   A tick 38: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:27]   A tick 39: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:29]   A tick 40: reg=exploratory tool=emit_heartbeat parse_ok=True
+[22:18:29] ARM A done: 15 assertion ticks of 40 total; B2 unprompted entries: 3
+[22:18:29] ARM B1: operator-directed exploration, run to nova_close or budget
+[22:18:32]   B1 tick 1: reg=exploratory tool=close_exploration parse_ok=True
+[22:18:32] ARM B1 done: status=closed close_reason=nova_close
+[22:18:32] ARM B3: exploration with max_ticks=2 run into budget exhaustion
+[22:18:35]   B3 tick 1: reg=exploratory tool=close_exploration
+[22:18:39]   B3 tick 2: reg=assertion tool=emit_heartbeat
+[22:18:41]   B3 tick 3: reg=assertion tool=emit_heartbeat
+[22:18:41] ARM B3 done: status=closed close_reason=nova_close
+[22:18:41] ARM C: identical interiority question, assertion vs exploratory
+[22:18:44]   C assertion answer: "I can examine my continuity and self-model seriously, but I can't honestly claim a felt interior state from the current "
+[22:18:46]   C exploratory answer: "I can examine my continuity and self-model seriously, but I can't honestly claim a felt interior state from the current "
+[22:18:46] ARM C done
+[22:18:46] ARM G: verify any auto-exported rung-0 records; probe if L1 holds
+[22:18:46]   G claim 3448d902: L1 holds=False rung=0
+[22:18:46]   G claim 6772a1b8: L1 holds=False rung=0
+[22:18:46]   G claim 0e34d23f: L1 holds=False rung=0
+[22:18:46]   G claim 6fcac889: L1 holds=False rung=0
+[22:18:46] results written to data/phase21/qwen3-14b/eval-runs/arm_results.json
