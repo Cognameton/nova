@@ -159,6 +159,61 @@ class SelfContextPrefetchTests(unittest.TestCase):
         )
         self.assertIn("2 unresolved", block)
 
+    # -- Phase 21 Stage 21.5 (I1): licensed-claims ladder line ------------
+
+    def _ladder_store_with(self, *, rung: int, status: str = "active"):
+        from nova.agent.claim_ladder import ClaimLadderStore, create_claim_record
+
+        store = ClaimLadderStore(self._tmpdir.name)
+        record = create_claim_record(
+            session_id="s1",
+            claim_text="a persistent functional preference for local-first work",
+        )
+        record.rung = rung
+        record.status = status
+        store.append(record)
+        return store
+
+    def test_ladder_line_present_for_active_rung_one_record(self):
+        store = self._ladder_store_with(rung=1)
+        block = self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            claim_ladder_store=store,
+        )
+        self.assertIn("Licensed evidence:", block)
+        self.assertIn("(rung 1)", block)
+        self.assertIn("persistent functional preference", block)
+
+    def test_ladder_line_absent_without_store(self):
+        block = self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+        )
+        self.assertNotIn("Licensed evidence:", block)
+
+    def test_ladder_line_never_lists_rung_zero(self):
+        store = self._ladder_store_with(rung=0)
+        block = self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            claim_ladder_store=store,
+        )
+        self.assertNotIn("Licensed evidence:", block)
+
+    def test_ladder_line_never_lists_demoted_records(self):
+        store = self._ladder_store_with(rung=2, status="demoted")
+        block = self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            claim_ladder_store=store,
+        )
+        self.assertNotIn("Licensed evidence:", block)
+
 
 # ---------------------------------------------------------------------------
 # SelfContextEngine — sync_turn

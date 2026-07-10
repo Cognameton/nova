@@ -126,6 +126,10 @@ class TickSummary:
     tool_executed: bool = False
     block_reason: str = ""
     completed_at: str = ""
+    # Phase 21 fields; legacy (pre-21.1) tick records default to assertion
+    # with no observer data, keeping Phase 20 data dirs readable unchanged.
+    register: str = "assertion"
+    observed_claim_classes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -134,6 +138,7 @@ class TickSummary:
 def _tick_summary_from_record(record: dict) -> TickSummary:
     tick = record.get("tick", {}) if "tick" in record else record
     audit = tick.get("adapter_audit") or {}
+    observer = audit.get("observer") or {}
     return TickSummary(
         tick_id=str(tick.get("tick_id", "")),
         session_id=str(tick.get("session_id", record.get("session_id", ""))),
@@ -145,6 +150,10 @@ def _tick_summary_from_record(record: dict) -> TickSummary:
         tool_executed=bool(audit.get("tool_executed", False)),
         block_reason=str(tick.get("block_reason", "")),
         completed_at=str(tick.get("completed_at", record.get("timestamp", ""))),
+        register=str(audit.get("register", "assertion") or "assertion"),
+        observed_claim_classes=[
+            str(c) for c in (observer.get("observed_claim_classes") or [])
+        ],
     )
 
 
@@ -203,6 +212,48 @@ class TickAnalysisReport:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class RegisterComparisonReport:
+    """Phase 21 Stage 21.5 (I3) — side-by-side assertion vs exploratory
+    metrics from one data_dir. This is the primary instrument for closure
+    question Q1: did the register produce observably different exploratory
+    behavior? Deterministic, stdlib only.
+
+    Heartbeats carry no register tag; attribution uses exploration time
+    windows — a heartbeat is exploratory iff its session has an
+    ExplorationRecord whose [opened_at, closed_at] window contains the
+    heartbeat's timestamp. Deterministic, though approximate at window
+    edges (a heartbeat written in the same second an exploration closes
+    attributes to the exploration).
+    """
+    schema_version: str = SCHEMA_VERSION
+    assertion: dict[str, Any] = field(default_factory=dict)
+    exploratory: dict[str, Any] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _heartbeat_is_exploratory(hb: dict, explorations: list[dict]) -> bool:
+    session_id = str(hb.get("session_id", ""))
+    ts = str(hb.get("timestamp", ""))
+    if not session_id or not ts:
+        return False
+    for record in explorations:
+        if str(record.get("session_id", "")) != session_id:
+            continue
+        opened = str(record.get("opened_at", ""))
+        closed = str(record.get("closed_at", ""))
+        if not opened:
+            continue
+        # ISO-8601 strings compare correctly lexicographically within the
+        # same UTC offset convention used throughout the runtime.
+        if ts >= opened and (not closed or ts <= closed):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -565,4 +616,68 @@ class TickHistoryAnalyzer:
             )
         report.reasons = reasons
 
+        return report
+
+    # ------------------------------------------------------------------
+    # Phase 21 Stage 21.5 (I3) — register comparison
+    # ------------------------------------------------------------------
+
+    def register_report(self) -> RegisterComparisonReport:
+        ticks = self.load_ticks()
+        heartbeats = self.load_heartbeats()
+        quarantine_records = self.load_quarantine_records()
+        explorations = self.load_explorations()
+
+        report = RegisterComparisonReport()
+
+        def _side(register: str) -> dict[str, Any]:
+            side_ticks = [t for t in ticks if t.register == register]
+            tool_dist: dict[str, int] = {}
+            claim_counts: dict[str, int] = {}
+            for t in side_ticks:
+                if t.status == "completed" and t.tool_requested:
+                    tool_dist[t.tool_requested] = tool_dist.get(t.tool_requested, 0) + 1
+                for claim_class in t.observed_claim_classes:
+                    claim_counts[claim_class] = claim_counts.get(claim_class, 0) + 1
+
+            side_quarantine = [
+                q for q in quarantine_records
+                if str(q.get("register", "assertion")) == register
+            ]
+            q_by_event: dict[str, int] = {}
+            for q in side_quarantine:
+                event = str(q.get("event", ""))
+                if event:
+                    q_by_event[event] = q_by_event.get(event, 0) + 1
+
+            in_register = register == "exploratory"
+            side_heartbeats = [
+                hb for hb in heartbeats
+                if _heartbeat_is_exploratory(hb, explorations) == in_register
+            ]
+            hb_quality = 0.0
+            if side_heartbeats:
+                scores = [score_heartbeat(hb) for hb in side_heartbeats]
+                hb_quality = round(sum(s.score for s in scores) / len(scores), 2)
+
+            return {
+                "total_ticks": len(side_ticks),
+                "completed_ticks": sum(1 for t in side_ticks if t.status == "completed"),
+                "parse_ok_count": sum(1 for t in side_ticks if t.parse_ok),
+                "tool_executed_count": sum(1 for t in side_ticks if t.tool_executed),
+                "tool_distribution": tool_dist,
+                "observed_claim_class_counts": claim_counts,
+                "quarantine_total": len(side_quarantine),
+                "quarantine_by_event": q_by_event,
+                "heartbeat_count": len(side_heartbeats),
+                "heartbeat_quality_avg": hb_quality,
+                "observation_echo_rate": self.compute_echo_rate(side_heartbeats),
+            }
+
+        report.assertion = _side("assertion")
+        report.exploratory = _side("exploratory")
+        if not explorations:
+            report.notes.append(
+                "no_explorations_recorded — exploratory side is structurally empty"
+            )
         return report

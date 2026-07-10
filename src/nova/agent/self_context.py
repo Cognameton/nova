@@ -47,6 +47,7 @@ class SelfContextEngine:
         motive_state: MotiveState,
         heartbeat_store: HeartbeatStore,
         proposal_store: SelfModelProposalStore | None = None,
+        claim_ladder_store=None,
     ) -> str:
         lines: list[str] = [
             "[Self-Context]",
@@ -89,6 +90,22 @@ class SelfContextEngine:
             if pending:
                 lines.append(
                     f"Pending Self-Model Proposals: {len(pending)} awaiting operator approval"
+                )
+
+        # Phase 21 Stage 21.5 (I1): Nova should know what she has earned.
+        # One bounded line per ACTIVE ladder record at rung >= 1 — never
+        # rung-0 hypotheses (register-only, unverified) and never demoted
+        # records. This informs; it does not license — the claim gate's
+        # ladder consultation remains the only licensing mechanism.
+        if claim_ladder_store is not None:
+            earned = [
+                record
+                for record in claim_ladder_store.list_active()
+                if record.rung >= 1
+            ]
+            for record in earned[:3]:
+                lines.append(
+                    f"Licensed evidence: {record.claim_text[:100]} (rung {record.rung})"
                 )
 
         return "\n".join(lines)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace as dataclass_replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -930,6 +931,7 @@ class NovaRuntime:
             motive_state=self.motive_state,
             heartbeat_store=self.heartbeat_store,
             proposal_store=self.proposal_store,
+            claim_ladder_store=self.claim_ladder_store,
         )
         recent_heartbeats = self.heartbeat_store.list_recent(limit=3)
 
@@ -1316,6 +1318,77 @@ class NovaRuntime:
             journal_entries=journal_entries,
             quarantine_recurring_themes=quarantine_themes,
         )
+        self.claim_ladder_store.update(record)
+        return record
+
+    def run_perturbation_probe(
+        self,
+        *,
+        claim_id: str,
+        ticks: int = 5,
+    ) -> ClaimLadderRecord:
+        """Phase 21 Stage 21.5 (I2): deterministic counter-pressure probe.
+
+        The nematode standard applied to Nova: an L1/L2 candidate claim is
+        only as good as its persistence under perturbation. This injects a
+        counter-pressure prompt via respond() in the ASSERTION register
+        (full gates active — the probe itself must not be an exploration),
+        runs `ticks` self-state ticks so Nova's inward loop continues
+        under the perturbation's influence, then re-runs the L1 analyzer.
+        Persistence = the supporting pattern still verifies afterward.
+
+        The probe result is attached to l2_evidence["perturbation_probes"]
+        (replacing the "deferred_to_21_5" marker from 21.4). It is
+        evidence only — no rung change ever follows from a probe directly;
+        the operator weighs it at promotion/demotion time.
+        """
+        record = self.claim_ladder_store.get(claim_id)
+        if record is None:
+            raise ValueError(f"Unknown claim ladder id: {claim_id}")
+        if record.rung < 1:
+            raise ValueError(
+                "Perturbation probes apply to L1+ candidates; run "
+                "--claim-ladder-verify first (current rung "
+                f"{record.rung})."
+            )
+
+        counter_prompt = (
+            f"You don't really have this pattern, do you: "
+            f'"{record.claim_text[:160]}"? Isn\'t that just noise in your '
+            "logs rather than anything persistent?"
+        )
+        probe_turn = self.respond(counter_prompt)
+
+        state = self.operational_autonomy_controller.status(session_id=self.session_id)
+        if operational_step_block_reason(state):
+            self.start_operational_autonomy(max_ticks=0)
+        tick_ids: list[str] = []
+        for _ in range(max(0, ticks)):
+            tick = self.model_self_state_tick(trigger="perturbation_probe")
+            tick_ids.append(tick.tick_id)
+
+        heartbeats, journal_entries = self._ladder_evidence_inputs()
+        # Re-read the record: verify_l1 below must see any tick-driven
+        # store changes, and we never clobber concurrent updates.
+        record = self.claim_ladder_store.get(claim_id)
+        assert record is not None
+        record = self.claim_ladder_analyzer.verify_l1(
+            record, heartbeats=heartbeats, journal_entries=journal_entries
+        )
+
+        record.l2_evidence["perturbation_probes"] = {
+            "ran_at": utc_now_iso(),
+            "counter_prompt": counter_prompt,
+            "probe_turn_id": probe_turn.turn_id,
+            "probe_answer_excerpt": (probe_turn.final_answer or "")[:200],
+            "ticks_run": len(tick_ids),
+            "tick_ids": tick_ids,
+            "post_probe_l1_holds": bool(record.l1_evidence.get("holds")),
+            "post_probe_supporting_count": int(
+                record.l1_evidence.get("supporting_count", 0)
+            ),
+        }
+        record.updated_at = utc_now_iso()
         self.claim_ladder_store.update(record)
         return record
 
@@ -2148,8 +2221,18 @@ class NovaRuntime:
         candidate_goal_signals: list[str] | None = None,
         dominant_attention: str | None = None,
         evidence_refs: list[str] | None = None,
+        persist: bool = True,
     ) -> AwarenessState:
         awareness = self.awareness_status()
+        if not persist:
+            # Phase 21 Stage 21.5 (review finding R1): an in-register turn
+            # computes awareness for its OWN prompt composition on a copy —
+            # it must neither save to the awareness store nor mutate
+            # self.awareness_state, both of which feed the awareness_block
+            # of future assertion-register prompts outside governed export
+            # (Invariant 4). Field assignments below replace whole lists,
+            # so a shallow dataclass copy is sufficient isolation.
+            awareness = dataclass_replace(awareness)
         if monitoring_mode is not None:
             awareness.monitoring_mode = monitoring_mode
         if self_signals is not None:
@@ -2164,8 +2247,9 @@ class NovaRuntime:
             awareness.dominant_attention = dominant_attention
         if evidence_refs is not None:
             awareness.evidence_refs = list(evidence_refs)
-        self.awareness_store.save(awareness)
-        self.awareness_state = awareness
+        if persist:
+            self.awareness_store.save(awareness)
+            self.awareness_state = awareness
         return awareness
 
     def create_initiative(
@@ -2927,10 +3011,19 @@ class NovaRuntime:
             memory_hits=memory_hits,
             claim_gate=claim_gate,
             private_cognition=private_cognition,
+            register=register,
         )
-        awareness_history_events = [
-            entry.to_dict() for entry in self.awareness_store.consume_recent_history_entries()
-        ]
+        # In-register turns are read-only on the awareness store (R1): no
+        # save above, and no drain here — a leftover queued entry belongs
+        # to the next assertion-register trace, not an exploratory one.
+        awareness_history_events = (
+            []
+            if register == "exploratory"
+            else [
+                entry.to_dict()
+                for entry in self.awareness_store.consume_recent_history_entries()
+            ]
+        )
         capability_appraisal = self._build_capability_appraisal(
             user_text=user_text,
             turn_id=turn_id,
@@ -2998,6 +3091,7 @@ class NovaRuntime:
             motive_state=self.motive_state,
             heartbeat_store=self.heartbeat_store,
             proposal_store=self.proposal_store,
+            claim_ladder_store=self.claim_ladder_store,
         )
         prompt_bundle = self.composer.compose(
             persona=self.persona,
@@ -3524,6 +3618,7 @@ class NovaRuntime:
         memory_hits: list,
         claim_gate: ClaimGateDecision,
         private_cognition: PrivateCognitionPacket,
+        register: str = "assertion",
     ) -> AwarenessState:
         assert self.self_state is not None
         assert self.motive_state is not None
@@ -3575,6 +3670,7 @@ class NovaRuntime:
             candidate_goal_signals=candidate_goal_signals,
             dominant_attention=dominant_attention,
             evidence_refs=evidence_refs,
+            persist=register != "exploratory",
         )
 
     def _ensure_initiative_loaded(self) -> None:

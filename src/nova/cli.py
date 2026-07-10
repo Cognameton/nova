@@ -435,6 +435,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Analyze accumulated self-state tick history and heartbeat quality.",
     )
+    # Phase 21 Stage 21.5 — register comparison (I3)
+    parser.add_argument(
+        "--register-report",
+        action="store_true",
+        help="Side-by-side assertion vs exploratory register metrics.",
+    )
     # Phase 21 Stage 21.3 — quarantine review
     parser.add_argument(
         "--quarantine-recent",
@@ -489,6 +495,21 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="EXPLORATION_ID",
         help="Retroactively run governed export for a closed exploration's "
              "findings summary (D8) — idempotent if already processed.",
+    )
+    # Phase 21 Stage 21.5 — perturbation probe (I2; needs the live model)
+    parser.add_argument(
+        "--perturbation-probe",
+        metavar="CLAIM_ID",
+        help="Run a counter-pressure perturbation probe against an L1+ claim: "
+             "one assertion-register challenge turn, N self-state ticks, then "
+             "re-verify L1. Result attached to l2_evidence.",
+    )
+    parser.add_argument(
+        "--probe-ticks",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Self-state ticks to run after the perturbation prompt (default 5).",
     )
     # Phase 19 Stage 19.3 — autonomous self-state tick (single-process, non-daemon)
     parser.add_argument(
@@ -1305,6 +1326,27 @@ def main() -> int:
             return 1
         return 0
 
+    # Phase 21 Stage 21.5 — register comparison (no model needed)
+    if args.register_report:
+        from nova.eval.tick_analysis import TickHistoryAnalyzer
+        from nova.agent.heartbeat import HeartbeatStore
+        from nova.agent.exploration import ExplorationStore, ExplorationJournal
+
+        components = build_memory_components(config_override=args.config_override)
+        data_dir = components["data_dir"]
+        log_dir = components["log_dir"]
+        exploration_dir = data_dir / "exploration"
+
+        analyzer = TickHistoryAnalyzer(
+            trace_dir=log_dir / "traces",
+            heartbeat_store=HeartbeatStore(data_dir / "heartbeats"),
+            exploration_store=ExplorationStore(exploration_dir),
+            exploration_journal=ExplorationJournal(exploration_dir),
+        )
+        report = analyzer.register_report()
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        return 0
+
     # Phase 21 Stage 21.3 — quarantine review (no model needed)
     if args.quarantine_recent is not None:
         components = build_memory_components(config_override=args.config_override)
@@ -1402,6 +1444,23 @@ def main() -> int:
             print(json.dumps({"error": str(exc)}, indent=2))
             return 1
         print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+
+    # Phase 21 Stage 21.5 — perturbation probe (loads the live model)
+    if args.perturbation_probe:
+        runtime = build_runtime(config_override=args.config_override)
+        try:
+            runtime.start(session_id=args.session_id or "perturbation-probe")
+            record = runtime.run_perturbation_probe(
+                claim_id=args.perturbation_probe,
+                ticks=args.probe_ticks,
+            )
+        except ValueError as exc:
+            print(json.dumps({"error": str(exc)}, indent=2))
+            return 1
+        finally:
+            runtime.close()
+        print(json.dumps(record.to_dict(), indent=2, sort_keys=True))
         return 0
 
     # Phase 19 Stage 19.3 — single-process self-state tick

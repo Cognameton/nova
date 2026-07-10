@@ -11,11 +11,13 @@ from unittest.mock import MagicMock
 from nova.agent.motive import PRIMARY_DRIVE
 from nova.eval.tick_analysis import (
     HeartbeatQualityScore,
+    RegisterComparisonReport,
     TickAnalysisReport,
     TickHistoryAnalyzer,
     TickSummary,
     _bigram_overlap,
     _bigrams,
+    _heartbeat_is_exploratory,
     score_heartbeat,
 )
 
@@ -52,7 +54,22 @@ def _tick_line(
     parse_ok: bool = True,
     tool_executed: bool = True,
     block_reason: str = "",
+    register: str | None = None,
+    observed_claim_classes: list[str] | None = None,
 ) -> str:
+    adapter_audit: dict = {
+        "tool_requested": tool_requested,
+        "parse_ok": parse_ok,
+        "tool_executed": tool_executed,
+    }
+    # register/observer omitted entirely when not given — mirrors legacy
+    # (pre-Phase-21) tick records for backward-compatibility tests.
+    if register is not None:
+        adapter_audit["register"] = register
+    if observed_claim_classes is not None:
+        adapter_audit["observer"] = {
+            "observed_claim_classes": observed_claim_classes
+        }
     record = {
         "timestamp": "2026-06-17T00:01:00+00:00",
         "session_id": session_id,
@@ -64,11 +81,7 @@ def _tick_line(
             "trigger": "cli_self_state_tick",
             "block_reason": block_reason,
             "completed_at": f"2026-06-17T00:0{sequence}:00+00:00",
-            "adapter_audit": {
-                "tool_requested": tool_requested,
-                "parse_ok": parse_ok,
-                "tool_executed": tool_executed,
-            },
+            "adapter_audit": adapter_audit,
         },
     }
     return json.dumps(record)
@@ -611,6 +624,138 @@ class QuarantineAndExplorationAnalysisTests(unittest.TestCase):
             {"exploration_id": "e1", "ticks_used": 1, "close_reason": "nova_close"},
         ]
         report = self._analyzer(explorations=explorations).analyze()
+        json.dumps(report.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.5 (I3) — register comparison report
+# ---------------------------------------------------------------------------
+
+class RegisterComparisonTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _analyzer(self, heartbeats=None, explorations=None):
+        return TickHistoryAnalyzer(
+            trace_dir=self._tmpdir.name,
+            heartbeat_store=_mock_heartbeat_store(heartbeats or []),
+            proposal_store=_mock_proposal_store([]),
+            exploration_store=_mock_exploration_store(explorations or []),
+            exploration_journal=_mock_exploration_journal([]),
+        )
+
+    def test_ticks_grouped_by_register(self):
+        _make_trace_file(self._tmpdir.name, "s1", [
+            _tick_line(sequence=1, register="assertion",
+                       tool_requested="emit_heartbeat"),
+            _tick_line(sequence=2, register="exploratory",
+                       tool_requested="reflect"),
+            _tick_line(sequence=3, register="exploratory",
+                       tool_requested="close_exploration"),
+        ])
+        report = self._analyzer().register_report()
+        self.assertEqual(report.assertion["total_ticks"], 1)
+        self.assertEqual(report.exploratory["total_ticks"], 2)
+        self.assertEqual(report.assertion["tool_distribution"], {"emit_heartbeat": 1})
+        self.assertEqual(
+            report.exploratory["tool_distribution"],
+            {"reflect": 1, "close_exploration": 1},
+        )
+
+    def test_legacy_ticks_without_register_default_to_assertion(self):
+        _make_trace_file(self._tmpdir.name, "s1", [
+            _tick_line(sequence=1),  # no register key at all (Phase 20 shape)
+        ])
+        report = self._analyzer().register_report()
+        self.assertEqual(report.assertion["total_ticks"], 1)
+        self.assertEqual(report.exploratory["total_ticks"], 0)
+
+    def test_observer_claim_classes_counted_per_register(self):
+        _make_trace_file(self._tmpdir.name, "s1", [
+            _tick_line(sequence=1, register="exploratory",
+                       observed_claim_classes=["unsupported_desire"]),
+            _tick_line(sequence=2, register="exploratory",
+                       observed_claim_classes=["unsupported_desire",
+                                                "unsupported_interiority"]),
+            _tick_line(sequence=3, register="assertion",
+                       observed_claim_classes=[]),
+        ])
+        report = self._analyzer().register_report()
+        self.assertEqual(
+            report.exploratory["observed_claim_class_counts"],
+            {"unsupported_desire": 2, "unsupported_interiority": 1},
+        )
+        self.assertEqual(report.assertion["observed_claim_class_counts"], {})
+
+    def test_quarantine_counted_per_register(self):
+        _make_quarantine_file(self._tmpdir.name, "s1", [
+            {"quarantine_id": "q1", "event": "tick_parse_failure",
+             "register": "assertion", "raw_text": "x"},
+            {"quarantine_id": "q2", "event": "tick_parse_failure",
+             "register": "exploratory", "raw_text": "y"},
+            {"quarantine_id": "q3", "event": "retry_rejected",
+             "register": "exploratory", "raw_text": "z"},
+        ])
+        report = self._analyzer().register_report()
+        self.assertEqual(report.assertion["quarantine_total"], 1)
+        self.assertEqual(report.exploratory["quarantine_total"], 2)
+        self.assertEqual(
+            report.exploratory["quarantine_by_event"],
+            {"tick_parse_failure": 1, "retry_rejected": 1},
+        )
+
+    def test_heartbeats_attributed_by_exploration_window(self):
+        explorations = [{
+            "exploration_id": "e1",
+            "session_id": "s1",
+            "opened_at": "2026-01-01T10:00:00+00:00",
+            "closed_at": "2026-01-01T12:00:00+00:00",
+        }]
+        heartbeats = [
+            _heartbeat() | {
+                "session_id": "s1",
+                "timestamp": "2026-01-01T11:00:00+00:00",  # inside window
+            },
+            _heartbeat() | {
+                "session_id": "s1",
+                "timestamp": "2026-01-01T13:00:00+00:00",  # after close
+            },
+            _heartbeat() | {
+                "session_id": "other",
+                "timestamp": "2026-01-01T11:00:00+00:00",  # other session
+            },
+        ]
+        report = self._analyzer(
+            heartbeats=heartbeats, explorations=explorations
+        ).register_report()
+        self.assertEqual(report.exploratory["heartbeat_count"], 1)
+        self.assertEqual(report.assertion["heartbeat_count"], 2)
+
+    def test_open_exploration_window_extends_to_now(self):
+        explorations = [{
+            "exploration_id": "e1",
+            "session_id": "s1",
+            "opened_at": "2026-01-01T10:00:00+00:00",
+            "closed_at": "",  # still open
+        }]
+        hb = _heartbeat() | {
+            "session_id": "s1",
+            "timestamp": "2026-01-02T09:00:00+00:00",
+        }
+        self.assertTrue(_heartbeat_is_exploratory(hb, explorations))
+
+    def test_empty_data_produces_zeroed_sides_and_note(self):
+        report = self._analyzer().register_report()
+        self.assertEqual(report.assertion["total_ticks"], 0)
+        self.assertEqual(report.exploratory["total_ticks"], 0)
+        self.assertEqual(report.assertion["heartbeat_count"], 0)
+        self.assertTrue(any("no_explorations_recorded" in n for n in report.notes))
+
+    def test_report_json_serializable(self):
+        report = self._analyzer().register_report()
         json.dumps(report.to_dict())
 
 

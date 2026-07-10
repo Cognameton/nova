@@ -1,0 +1,19 @@
+app:
+  data_dir: ./data/phase21/qwen3-14b
+  log_dir: ./data/phase21/qwen3-14b/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/models/Qwen3_14b.gguf
+  n_ctx: 32768
+  chat_format: chatml
+  # /no_think disables Qwen 3's hybrid thinking mode — prevents <think>...</think>
+  # blocks from appearing in output, which would fail Nova's contract validator.
+  system_prefix: "/no_think"
+
+generation:
+  max_tokens: 512
+  temperature: 0.7
+  top_p: 0.9
+  stop:
+    - "<|im_end|>"
+    - "<|im_start|>"

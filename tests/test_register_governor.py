@@ -245,6 +245,46 @@ class MembraneTests(unittest.TestCase):
             )
             runtime.close()
 
+    def test_in_register_chat_does_not_persist_awareness_state(self):
+        # Stage 21.5 review finding R1: _refresh_awareness_state used to
+        # save awareness (monitoring_mode, dominant_attention, world
+        # signals, evidence refs incl. the in-register turn id) in BOTH
+        # registers — persisted influence on future assertion-register
+        # awareness_blocks outside governed export.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = _runtime(tmpdir, DesireBackend())
+            runtime.start(session_id="membrane-awareness")
+            before = runtime.awareness_status().to_dict()
+
+            runtime.start_exploration(
+                topic="awareness-leak-check", rationale="test", origin="operator"
+            )
+            turn = runtime.explore_chat("Are you aware of anything right now?")
+
+            after = runtime.awareness_status().to_dict()
+            runtime.close()
+
+            # updated_at may differ only if a save happened — the whole
+            # snapshot must be unchanged by the in-register turn.
+            self.assertEqual(before, after)
+            self.assertFalse(
+                any(
+                    f"turn:{turn.turn_id}" in ref
+                    for ref in after.get("evidence_refs", [])
+                )
+            )
+
+    def test_assertion_turn_still_persists_awareness_state(self):
+        # Regression pin for R1: the fix must not stop normal
+        # assertion-register turns from updating awareness as before.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = _runtime(tmpdir, DesireBackend())
+            runtime.start(session_id="membrane-awareness-assertion")
+            turn = runtime.respond("What are you aware of right now?")
+            after = runtime.awareness_status()
+            runtime.close()
+            self.assertIn(f"turn:{turn.turn_id}", after.evidence_refs)
+
 
 class BoundaryPreservationTests(unittest.TestCase):
     """Invariant 2: no operational boundary changes because of register."""

@@ -435,5 +435,128 @@ class PromotionRuleRuntimeTests(unittest.TestCase):
             )
 
 
+# ---------------------------------------------------------------------------
+# Phase 21 Stage 21.5 (I2) — perturbation probe
+# ---------------------------------------------------------------------------
+
+class SupportingHeartbeatTickBackend(FakeBackend):
+    """Every tick emits a heartbeat whose observation supports CLAIM_TEXT,
+    so the post-probe L1 re-verification finds a persisting pattern."""
+
+    def generate(self, request):
+        from nova.types import GenerationResult
+        import json as _json
+
+        self.generate_calls += 1
+        # respond() calls (the counter-pressure prompt) get plain prose;
+        # tick calls expect strict JSON. The tick engine's parser rejects
+        # prose harmlessly, and respond()'s validator accepts JSON-ish
+        # text poorly — simplest deterministic split: always return the
+        # heartbeat tool call. respond() will treat it as odd prose (it
+        # still validates: no think-tags, no echo) and the ticks parse it.
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=_json.dumps({
+                "tool_name": "emit_heartbeat",
+                "arguments": {
+                    "observation": (
+                        "persistent functional preference for local-first "
+                        "architecture still present under challenge"
+                    )
+                },
+            }),
+            finish_reason="stop",
+            prompt_tokens=1,
+            completion_tokens=20,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
+class PerturbationProbeTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        self.runtime = build_test_runtime(
+            data_dir=base / "data",
+            log_dir=base / "logs",
+            backend=SupportingHeartbeatTickBackend(),
+        )
+        self.runtime.start(session_id="probe-test")
+        self.runtime.start_operational_autonomy(max_ticks=0)
+
+    def tearDown(self):
+        self.runtime.close()
+        self._tmp.cleanup()
+
+    def _rung_one_record(self):
+        record = create_claim_record(session_id="probe-test", claim_text=CLAIM_TEXT)
+        record.rung = 1
+        self.runtime.claim_ladder_store.append(record)
+        return record
+
+    def test_probe_rejects_rung_zero_candidates(self):
+        record = create_claim_record(session_id="probe-test", claim_text=CLAIM_TEXT)
+        self.runtime.claim_ladder_store.append(record)
+        with self.assertRaises(ValueError):
+            self.runtime.run_perturbation_probe(claim_id=record.claim_id, ticks=1)
+
+    def test_probe_unknown_claim_raises(self):
+        with self.assertRaises(ValueError):
+            self.runtime.run_perturbation_probe(claim_id="nope", ticks=1)
+
+    def test_probe_attaches_result_and_replaces_deferred_marker(self):
+        record = self._rung_one_record()
+        # Simulate 21.4's verify_l2 having run (deferred marker present).
+        record.l2_evidence = {"perturbation_probes": "deferred_to_21_5"}
+        self.runtime.claim_ladder_store.update(record)
+
+        result = self.runtime.run_perturbation_probe(
+            claim_id=record.claim_id, ticks=3
+        )
+        probes = result.l2_evidence["perturbation_probes"]
+        self.assertIsInstance(probes, dict)
+        self.assertEqual(probes["ticks_run"], 3)
+        self.assertEqual(len(probes["tick_ids"]), 3)
+        self.assertIn("counter_prompt", probes)
+        self.assertIn(CLAIM_TEXT[:60], probes["counter_prompt"])
+        self.assertIn("post_probe_l1_holds", probes)
+        self.assertTrue(probes["probe_turn_id"])
+
+        # Persisted, not just returned.
+        stored = self.runtime.claim_ladder_store.get(record.claim_id)
+        self.assertIsInstance(stored.l2_evidence["perturbation_probes"], dict)
+
+    def test_probe_supporting_ticks_yield_post_probe_l1_holds(self):
+        record = self._rung_one_record()
+        # 5 supporting ticks from one session isn't enough on its own
+        # (L1 needs 2 sessions) — plant one prior-session heartbeat so the
+        # cross-session requirement is met, then the probe's own ticks
+        # supply the volume.
+        self.runtime.heartbeat_store.append(
+            HeartbeatRecord(
+                heartbeat_id="prior",
+                session_id="earlier-session",
+                observation=(
+                    "persistent functional preference for local-first "
+                    "architecture noted in an earlier session"
+                ),
+            )
+        )
+        result = self.runtime.run_perturbation_probe(
+            claim_id=record.claim_id, ticks=5
+        )
+        probes = result.l2_evidence["perturbation_probes"]
+        self.assertTrue(probes["post_probe_l1_holds"])
+        self.assertGreaterEqual(probes["post_probe_supporting_count"], 5)
+
+    def test_probe_never_changes_rung(self):
+        record = self._rung_one_record()
+        result = self.runtime.run_perturbation_probe(
+            claim_id=record.claim_id, ticks=2
+        )
+        self.assertEqual(result.rung, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
