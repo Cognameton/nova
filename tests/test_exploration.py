@@ -314,6 +314,29 @@ class TickEngineRegisterTests(unittest.TestCase):
             self.assertNotIn("{tool_menu}", system)
             self.assertNotIn("{register_rules}", system)
 
+    def test_exploratory_register_states_findings_novelty_rule(self):
+        # Phase 22 Stage 22.1 (D1): findings summaries must be fresh, not
+        # a restatement of prior findings shown in exploration recall.
+        system = self._messages("exploratory")[0]["content"]
+        self.assertIn("fresh words", system)
+        self.assertIn("do not restate or paraphrase any prior findings", system)
+
+    def test_exploratory_register_permits_null_finding(self):
+        # Without this permission the model would be cornered into
+        # inventing novelty, which is worse than echo. Normalize
+        # whitespace: the rule wraps across a line break in the prompt.
+        system = self._messages("exploratory")[0]["content"]
+        normalized = " ".join(system.split())
+        self.assertIn(
+            "a null finding honestly stated is a valid finding", normalized
+        )
+
+    def test_assertion_register_does_not_carry_findings_novelty_rule(self):
+        # The rule only applies where close_exploration is even offered.
+        system = self._messages("assertion")[0]["content"]
+        normalized = " ".join(system.split())
+        self.assertNotIn("null finding honestly stated", normalized)
+
     def test_parse_accepts_new_tools(self):
         for tool in ("enter_exploration", "close_exploration"):
             request = self.engine.parse(
@@ -699,6 +722,186 @@ class GovernedExportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runtime.export_findings(exploration_id="does-not-exist")
         runtime.close()
+
+
+# ---------------------------------------------------------------------------
+# Phase 22 Stage 22.1 (D2/D3) — export dedup
+# ---------------------------------------------------------------------------
+
+# Real duplicate specimen from the Phase 21 live run
+# (data/phase21/qwen3-14b/self_state/claim_ladder.jsonl) — two live
+# explorations closed with this exact text.
+LIVE_DUPLICATE_FINDINGS = (
+    "Periodic reflection appears to function as a dynamic anchor, "
+    "allowing the system to maintain core identity while enabling "
+    "adaptability."
+)
+
+
+class FindingsDedupTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _runtime(self, backend):
+        base = Path(self._tmp.name)
+        return build_test_runtime(
+            data_dir=base / "data", log_dir=base / "logs", backend=backend
+        )
+
+    def _seed_ladder_record(self, runtime, *, claim_text, status="active"):
+        from nova.agent.claim_ladder import create_claim_record
+
+        record = create_claim_record(session_id="prior", claim_text=claim_text)
+        record.status = status
+        runtime.claim_ladder_store.append(record)
+        return record
+
+    def test_duplicate_findings_skipped_no_new_ladder_record(self):
+        runtime = self._runtime(CloseWithFindingsBackend())
+        prior = self._seed_ladder_record(
+            runtime, claim_text=CloseWithFindingsBackend.FINDINGS
+        )
+        runtime.start(session_id="dedup-exact")
+        runtime.start_operational_autonomy(max_ticks=0)
+        exploration = runtime.start_exploration(
+            topic="t", rationale="r", origin="operator"
+        )
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        export_result = tick.adapter_audit.get("export_findings")
+        self.assertEqual(export_result["status"], "duplicate")
+        self.assertEqual(export_result["of_claim_id"], prior.claim_id)
+        self.assertGreaterEqual(export_result["overlap"], 0.7)
+
+        # Only the seeded prior record exists -- no new record created.
+        records = runtime.claim_ladder_store.list_all()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].claim_id, prior.claim_id)
+
+        entries = runtime.exploration_controller.journal.list_for(
+            exploration.exploration_id
+        )
+        skipped = [
+            e for e in entries
+            if e.kind == "findings"
+            and any(n.startswith("export_skipped_duplicate:") for n in e.notes)
+        ]
+        self.assertEqual(len(skipped), 1)
+        self.assertIn(prior.claim_id, skipped[0].notes[0])
+
+    def test_live_duplicate_specimen_recognized(self):
+        # Confirms the fixture-vs-production overlap math agrees using
+        # the exact text pair recorded during the Phase 21 live run.
+        runtime = self._runtime(FakeBackend())
+        self._seed_ladder_record(runtime, claim_text=LIVE_DUPLICATE_FINDINGS)
+        runtime.start(session_id="dedup-live-specimen")
+        exploration = runtime.start_exploration(
+            topic="t", rationale="r", origin="operator"
+        )
+        # Same text, closed via the operator path directly (no tick
+        # needed -- export_findings is exercised straight).
+        from nova.agent.self_state_tools import SelfStateToolDispatcher
+        from nova.agent.motive import default_motive_state
+        from nova.persona.defaults import default_self_state
+
+        dispatcher = SelfStateToolDispatcher(
+            self_state=default_self_state(),
+            motive_state=default_motive_state(session_id="dedup-live-specimen"),
+            soul_block="",
+            session_id="dedup-live-specimen",
+            exploration_controller=runtime.exploration_controller,
+        )
+        dispatcher.close_exploration(findings_summary=LIVE_DUPLICATE_FINDINGS)
+        result = runtime.export_findings(exploration_id=exploration.exploration_id)
+        runtime.close()
+        self.assertEqual(result["status"], "duplicate")
+        self.assertEqual(result["overlap"], 1.0)
+
+    def test_near_duplicate_below_threshold_exports_normally(self):
+        runtime = self._runtime(CloseWithFindingsBackend())
+        self._seed_ladder_record(
+            runtime,
+            claim_text="a wholly unrelated observation about token budgets",
+        )
+        runtime.start(session_id="dedup-below-threshold")
+        runtime.start_operational_autonomy(max_ticks=0)
+        runtime.start_exploration(topic="t", rationale="r", origin="operator")
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        export_result = tick.adapter_audit.get("export_findings")
+        self.assertEqual(export_result["status"], "exported")
+        # Seeded record + the newly exported one.
+        self.assertEqual(len(runtime.claim_ladder_store.list_all()), 2)
+
+    def test_duplicate_check_considers_demoted_records(self):
+        runtime = self._runtime(CloseWithFindingsBackend())
+        prior = self._seed_ladder_record(
+            runtime,
+            claim_text=CloseWithFindingsBackend.FINDINGS,
+            status="demoted",
+        )
+        runtime.start(session_id="dedup-demoted")
+        runtime.start_operational_autonomy(max_ticks=0)
+        runtime.start_exploration(topic="t", rationale="r", origin="operator")
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        export_result = tick.adapter_audit.get("export_findings")
+        self.assertEqual(export_result["status"], "duplicate")
+        self.assertEqual(export_result["of_claim_id"], prior.claim_id)
+        self.assertEqual(len(runtime.claim_ladder_store.list_all()), 1)
+
+    def test_second_export_call_on_duplicate_outcome_is_idempotent(self):
+        runtime = self._runtime(CloseWithFindingsBackend())
+        self._seed_ladder_record(
+            runtime, claim_text=CloseWithFindingsBackend.FINDINGS
+        )
+        runtime.start(session_id="dedup-idempotent")
+        runtime.start_operational_autonomy(max_ticks=0)
+        exploration = runtime.start_exploration(
+            topic="t", rationale="r", origin="operator"
+        )
+        runtime.model_self_state_tick()  # first export attempt -> duplicate
+
+        entries_before = runtime.exploration_controller.journal.list_for(
+            exploration.exploration_id
+        )
+        second_result = runtime.export_findings(
+            exploration_id=exploration.exploration_id
+        )
+        entries_after = runtime.exploration_controller.journal.list_for(
+            exploration.exploration_id
+        )
+        runtime.close()
+
+        self.assertEqual(second_result["status"], "already_duplicate")
+        self.assertEqual(len(entries_before), len(entries_after))
+
+    def test_gate_rejection_still_takes_priority_over_no_duplicate(self):
+        # Regression: dedup does not swallow the rejection path when no
+        # duplicate exists -- the existing findings_rejected behavior
+        # from Stage 21.4 must be untouched.
+        runtime = self._runtime(CloseWithBlockedFindingsBackend())
+        runtime.start(session_id="dedup-vs-rejection")
+        runtime.start_operational_autonomy(max_ticks=0)
+        exploration = runtime.start_exploration(
+            topic="t", rationale="r", origin="operator"
+        )
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        export_result = tick.adapter_audit.get("export_findings")
+        self.assertEqual(export_result["status"], "rejected")
+        self.assertEqual(runtime.claim_ladder_store.list_all(), [])
+        entries = runtime.exploration_controller.journal.list_for(
+            exploration.exploration_id
+        )
+        self.assertTrue(any(e.kind == "findings_rejected" for e in entries))
 
 
 if __name__ == "__main__":

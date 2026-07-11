@@ -160,3 +160,54 @@ DEFINITION OF DONE
   - Closure note appended here (deviations, new test count).
   - This clears Phase 22's hard entry criterion; Stage 22.2 (overnight
     daemon runs) may then proceed on the operator's schedule.
+
+
+STAGE 22.1 CLOSURE NOTE (2026-07-11)
+--------------------------------------
+
+Implemented exactly per D1-D4. No deviations from the pinned design.
+
+Pre-implementation re-verification: all CODE FACTS confirmed against
+commit a70df37 before editing — _EXPLORATORY_RULES at
+self_state_tick.py:63, export_findings at runtime.py:1504,
+_bigram_overlap at eval/tick_analysis.py:55, journal_entry at
+exploration.py:375, close_exploration tool at self_state_tools.py:254
+— all matched the doc's premises exactly, no drift this time.
+
+D1 (prompt rule): appended to the close_exploration bullet in
+_EXPLORATORY_RULES verbatim as specified, including the null-finding
+permission.
+
+D2/D3 (Governor dedup): implemented as the doc's literal ordering —
+idempotency scan (now also matching "export_skipped_duplicate:" notes
+so a duplicate outcome is itself idempotent) runs first, then the
+duplicate scan against claim_ladder_store.list_all() (active AND
+demoted) via _bigram_overlap, THEN the validator/claim-gate pass. A
+duplicate never reaches the gate. FINDINGS_DUPLICATE_OVERLAP_THRESHOLD
+placed as a class-level constant on NovaRuntime directly above
+export_findings (D3 said "next to its use" — interpreted as
+class-local rather than module-level, since the only use is this one
+method).
+
+One incidental confirmation, not a deviation: the two live-duplicate
+pairs named in the doc's CODE FACTS
+(data/phase21/qwen3-14b/self_state/claim_ladder.jsonl) were pulled
+directly and used as fixture text (LIVE_DUPLICATE_FINDINGS in
+tests/test_exploration.py) — confirmed bigram overlap 1.0 against
+itself and 0.0 against an unrelated specimen, exactly the separation
+the 0.7 threshold is meant to sit inside.
+
+Test count: 893 (Phase 21 close) -> 902 (9 new: 3 prompt-rule tests in
+TickEngineRegisterTests — one needed a whitespace-normalizing fix
+after the rule text wrapped across a line break in the prompt, a test
+bug not a code bug — and 6 in new FindingsDedupTests, matching the 5
+scenarios required plus the live-specimen confirmation test).
+
+Definition of Done fixture demonstration run directly (not just via
+unittest): two explorations closing through CloseWithFindingsBackend's
+identical FINDINGS text produced exactly 1 ladder record total and
+exactly 1 export_skipped_duplicate journal note on the second
+exploration — matching the requirement precisely.
+
+Phase 22's hard entry criterion is cleared. Stage 22.2 (overnight
+daemon-cadence runs) may proceed on the operator's schedule.

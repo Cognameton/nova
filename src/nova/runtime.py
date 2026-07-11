@@ -1501,6 +1501,12 @@ class NovaRuntime:
         self.claim_ladder_store.update(record)
         return record
 
+    # Phase 22 Stage 22.1 (D3): matches the established 0.7 "echoing not
+    # deepening" threshold used elsewhere for bigram overlap (see
+    # eval/tick_analysis.py module docstring). Not configurable in this
+    # stage — promote to config only if live data shows tuning need.
+    FINDINGS_DUPLICATE_OVERLAP_THRESHOLD = 0.7
+
     def export_findings(self, *, exploration_id: str) -> dict:
         """Phase 21 Stage 21.4 (D8): governed export — the membrane's
         other half. Runs a closed exploration's Nova-authored findings
@@ -1512,8 +1518,21 @@ class NovaRuntime:
         data, never erased (Invariant 5). Self-model / instruction
         proposals are unaffected; export never creates them.
 
+        Phase 22 Stage 22.1 (D2): before the gate, findings text is
+        checked against every existing ladder record's claim_text
+        (active AND demoted — a demoted duplicate is still a duplicate)
+        for bigram overlap. A duplicate (>= threshold) is recognized, not
+        gate-rejected — no fresh gate pass is needed for content already
+        on the ladder — so it journals as kind="findings" (never
+        "findings_rejected", which stays reserved for genuine gate
+        failures) and creates no new record. This stops the ladder from
+        accumulating near-identical rung-0 candidates from journal-recall
+        echo (Phase 21 live finding F1), without touching Nova's freedom
+        to close whenever she chooses.
+
         Idempotent: a second call for an already-processed exploration
-        returns the existing outcome without creating anything new.
+        (exported, rejected, OR recognized as a duplicate) returns the
+        existing outcome without creating anything new.
         """
         self._ensure_state_loaded()
         assert self.persona is not None
@@ -1541,6 +1560,20 @@ class NovaRuntime:
                     if note.startswith("exported:")
                 )
                 return {"status": "already_exported", "claim_id": claim_id}
+            if entry.kind == "findings" and any(
+                note.startswith("export_skipped_duplicate:") for note in entry.notes
+            ):
+                note = next(
+                    note
+                    for note in entry.notes
+                    if note.startswith("export_skipped_duplicate:")
+                )
+                _, overlap_str, of_claim_id = note.split(":", 2)
+                return {
+                    "status": "already_duplicate",
+                    "of_claim_id": of_claim_id,
+                    "overlap": float(overlap_str),
+                }
             if entry.kind == "findings_rejected":
                 return {"status": "already_rejected", "reasons": list(entry.notes)}
 
@@ -1553,6 +1586,34 @@ class NovaRuntime:
                 f"Findings text not found for exploration {exploration_id} "
                 f"(findings_ref={record.findings_ref!r})."
             )
+
+        # Phase 22 Stage 22.1 (D2): dedup runs BEFORE the gate. A
+        # duplicate of an already-recorded claim needs no fresh gate
+        # pass — its original either already passed or was already
+        # rejected — so this check takes priority over validator/
+        # claim-gate assessment below.
+        from nova.eval.tick_analysis import _bigram_overlap
+
+        for existing in self.claim_ladder_store.list_all():
+            overlap = _bigram_overlap(findings_text, existing.claim_text)
+            if overlap >= self.FINDINGS_DUPLICATE_OVERLAP_THRESHOLD:
+                self.exploration_controller.journal_entry(
+                    exploration_id=exploration_id,
+                    session_id=record.session_id,
+                    kind="findings",
+                    content=(
+                        f"Export skipped as duplicate of {existing.claim_id} "
+                        f"(overlap {overlap:.2f})"
+                    ),
+                    notes=[
+                        f"export_skipped_duplicate:{overlap:.4f}:{existing.claim_id}"
+                    ],
+                )
+                return {
+                    "status": "duplicate",
+                    "of_claim_id": existing.claim_id,
+                    "overlap": overlap,
+                }
 
         contract_rules = build_contract_rules(self.persona, self.config.contract)
         claim_gate = self._build_claim_gate(user_text=findings_text)

@@ -73,6 +73,11 @@ _EXPLORATORY_RULES = "\n".join(
         "  a compact honest summary of what this exploration observed, learned, or",
         "  failed to resolve. Close when the line of inquiry is exhausted; the runtime",
         "  will otherwise close it when its budget is spent.",
+        "  The findings_summary MUST state what THIS exploration itself observed, in",
+        "  fresh words — do not restate or paraphrase any prior findings shown in the",
+        "  exploration recall above. If this exploration produced nothing beyond what",
+        "  prior findings already say, say exactly that in your own words; a null",
+        "  finding honestly stated is a valid finding.",
     ]
 )
 
