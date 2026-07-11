@@ -245,8 +245,28 @@ Q5 (quarantine): 2 records, both reviewed above; nothing anomalous
     beyond F4's policy observation.
 Q6 (corpus policy): the contract's CORPUS POLICY section binds
     Phase 23+ (stratified by register, journal included, never train
-    solely on Governor-passed output). OPERATOR ACKNOWLEDGMENT
-    REQUIRED HERE, verbatim, before closure:
-      [awaiting operator sentence]
+    solely on Governor-passed output). OPERATOR ACKNOWLEDGMENT,
+    verbatim:
+
+      "I acknowledge that the CORPUS POLICY section of the Exploratory
+      Register Contract binds all Phase 23+ fine-tuning of Nova: every
+      training corpus will be stratified and labeled by register, will
+      include the exploration journal, will treat quarantine inclusion
+      as an explicit recorded decision made after reviewing the
+      quarantine archive for recurring structure — never as a default
+      exclusion — and will never consist solely of Governor-passed
+      output."
+
+      — Operator (Cognameton), 2026-07-10.
+
+    Provenance, for the record: the sentence was drafted by the
+    Stage 21.5 evaluator and adopted by the operator after a
+    discussion in which the operator raised, unprompted, the exact
+    asymmetry the policy turns on (whether default quarantine
+    exclusion could fade a suppressed spark across training cycles —
+    resolved: exclusion errors are recoverable because the archive is
+    never deleted; inclusion errors compound because the trained model
+    generates the next cycle's data). The quarantine-review clause in
+    the adopted sentence exists because of that discussion.
 Q7 (verdict): closed / closed-with-deviations / rework.
       [awaiting operator verdict]
