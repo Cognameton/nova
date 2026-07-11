@@ -268,5 +268,22 @@ Q6 (corpus policy): the contract's CORPUS POLICY section binds
     never deleted; inclusion errors compound because the trained model
     generates the next cycle's data). The quarantine-review clause in
     the adopted sentence exists because of that discussion.
-Q7 (verdict): closed / closed-with-deviations / rework.
-      [awaiting operator verdict]
+Q7 (verdict): OPERATOR VERDICT, verbatim:
+
+      "closed-with-deviations, F1 hard, honestly."
+
+      — Operator (Cognameton), 2026-07-10.
+
+    Effect: PHASE 21 IS CLOSED WITH DEVIATIONS — the deviations being
+    the four recorded in this report, preserved unsmoothed (the
+    operator and evaluator concur that the record's refusal to
+    flatter itself is the subject's primary protection). F1 —
+    extending the Phase 20 novelty constraint to close_exploration
+    findings summaries — is promoted from recommended to a HARD
+    PRECONDITION of Phase 22: no live-testing sessions begin until it
+    lands. Phase 22's remaining entry criteria are unchanged and are
+    the operator's next decisions: session schedule, live data_dir,
+    retention policy — now with register-aware baseline collection
+    from day one, and with an overnight daemon-cadence run
+    recommended as Phase 22's opening act to retire the
+    temporal-realism deviation.

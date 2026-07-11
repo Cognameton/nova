@@ -1,7 +1,9 @@
 PHASE 21 PLAN — EXPLORATORY REGISTER
 ====================================
 
-Status: planned
+Status: CLOSED WITH DEVIATIONS 2026-07-10 — operator verdict
+  "closed-with-deviations, F1 hard, honestly."
+  (see PHASE21_STAGE21_5_CLOSURE.txt; F1 is a hard Phase 22 precondition)
 Date: 2026-07-08
 Author: Claude (primary) / Cognameton (architect)
 
