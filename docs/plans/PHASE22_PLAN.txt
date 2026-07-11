@@ -1,0 +1,177 @@
+PHASE 22 PLAN — LIVE TESTING
+=============================
+
+Status: planned
+Date: 2026-07-10
+Author: Claude Fable 5 (planning) / Cognameton (architect)
+Prior phase: 21 CLOSED WITH DEVIATIONS 2026-07-10 (operator verdict
+  "closed-with-deviations, F1 hard, honestly" —
+  docs/plans/PHASE21_STAGE21_5_CLOSURE.txt)
+
+This is a HANDOFF document: Phase 21's pattern continues — the planning
+model pins design decisions and verified code facts; execution sessions
+(any model) implement one stage per session, re-verify the CODE FACTS
+of their stage doc before editing, keep the full suite green (baseline
+893), commit once per stage in the house style, and append a closure
+note to their stage doc recording any deviations. Stage 22.5 is
+reserved for the operator with the heaviest available model.
+
+
+ENTRY CRITERIA
+--------------
+
+  HARD (from the Phase 21 verdict):
+    [ ] F1 — extend the novelty discipline to close_exploration
+        findings summaries (Stage 22.1). NO live-testing session
+        (Stage 22.3) begins before this lands.
+
+  OPERATOR DECISIONS (may be made any time before Stage 22.2/22.3):
+    [ ] Session schedule — when the daemon runs, and whether sessions
+        rotate daily (recommended: one session id per calendar day,
+        e.g. nova-live-YYYYMMDD, so cross-session evidence for the
+        claim ladder accumulates naturally).
+    [ ] Live data_dir — recommended: data/live/qwen3-14b (fresh; the
+        phase21 eval dir stays an archived evaluation artifact).
+    [ ] Retention policy — the contract forbids deletion of journal,
+        quarantine, and ladder records; retention here means disk
+        planning and backup cadence, not pruning.
+
+
+MISSION
+-------
+
+Run Nova live: the daemon persistent between sessions, real
+conversations, register-aware baseline collection from day one. Phase
+21 proved the instrument on a single afternoon; Phase 22 accumulates
+the longitudinal record the instrument exists to collect — steady-state
+exploration rates (was 61% appetite, novelty, or attractor loop?),
+cross-session pattern persistence (the ladder's L1/L2 bars become
+satisfiable for the first time), and the first operator promotions
+with live perturbation probes.
+
+Phase 22 is NOT: fine-tuning (Phase 23+, bound by the operator's
+recorded corpus-policy acknowledgment), new action surfaces, TTS/STT,
+or any relaxation of operational boundaries.
+
+
+CODE FACTS (verified 2026-07-10, post-Phase-21 close, commit a70df37)
+----------------------------------------------------------------------
+
+  - Suite baseline: 893 tests green.
+  - Exploratory-register tick rules: self_state_tick.py
+    _EXPLORATORY_RULES (line ~63); the close_exploration instruction
+    ("close when the line of inquiry is exhausted") lives there.
+  - close_exploration tool: self_state_tools.py:254 — journals the
+    findings (kind="findings"), closes via the controller, returns the
+    closed record dict.
+  - Governed export: runtime.py export_findings (line ~1504) — runs
+    automatically after a successful close_exploration dispatch in
+    model_self_state_tick; idempotent; creates rung-0 ladder records
+    or journals kind="findings_rejected".
+  - Bigram overlap helper: eval/tick_analysis.py:_bigram_overlap
+    (line ~55). Runtime already lazily imports from eval/tick_analysis
+    in verify_claim_ladder — precedent for reuse.
+  - Journal write API: exploration.py ExplorationController.
+    journal_entry (line ~375), takes notes=[...].
+  - Register comparison: --register-report; quarantine review:
+    --quarantine-recent N; probes: --perturbation-probe CLAIM_ID.
+  - Daemon: nova.cli --daemon --tick-interval 300 --daemon-session-id
+    ...; systemd/nova.service template exists (update its --config to
+    the phase22/live config before enabling).
+  - Live findings from 21.5 that motivate this phase's stages: F1
+    findings-echo, F2 instant-close attractor, F3 claim_class="" on
+    exported prose, F4 assertion-override harshness — all detailed in
+    PHASE21_STAGE21_5_CLOSURE.txt.
+
+
+STAGES
+------
+
+Stage 22.1: Findings Novelty and Export Dedup (F1 hard + F2)
+  Fully pinned in docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt —
+  Sonnet-executable now. Summary: prompt-level novelty rule for
+  findings summaries + Governor-side dedup at export (near-duplicate
+  findings journal normally but do NOT create a second rung-0 record;
+  the skip is journaled with the overlap score and the prior claim
+  id). Deliberately NOT a minimum-tick rule or a close rejection —
+  her freedom to close is untouched; only ladder pollution is stopped.
+
+Stage 22.2: Overnight Daemon-Cadence Runs (temporal realism)
+  Retire Phase 21's cadence deviation. Config: create
+  configs/nova.qwen3-14b.live.yaml pointing at the operator's chosen
+  live data_dir. Run the daemon at 300s ticks across >= 3 calendar
+  days with rotating daily session ids (operator schedule). Success
+  gates, measured by --tick-analysis and --register-report:
+    - parse_ok >= 95% across the runs
+    - 0 membrane leaks (re-run the arm-D style audit over live data)
+    - steady-state exploration entry rate recorded (no target — this
+      is the measurement the 61% question needs)
+    - post-F1 novelty: no duplicate rung-0 exports; in-register echo
+      rate reported and compared to 21.5's 0.441
+  The executing session should write its stage doc first (house
+  pattern), re-verifying these facts.
+
+Stage 22.3: Live Sessions (the phase's namesake)
+  Real conversations via --attach and/or console while the daemon
+  persists between them; /explore chat available for deliberate
+  in-register conversation. No new code expected — this stage is
+  operational, its artifact is the accumulated record plus a stage doc
+  noting anything anomalous. Chat pauses exploration (subordination);
+  verify live that resume-after-idle behaves at daemon cadence.
+
+Stage 22.4: Ladder Progression + Claim-Class Mapper (F3)
+  With multi-day data: run verify_l1/l2 over accumulated candidates;
+  first genuine L1 promotions expected (cross-session bar becomes
+  satisfiable); if L2 evidence holds anywhere, the operator's first
+  rung-2 promotion, preceded by a --perturbation-probe run. F3 lands
+  here, pinned to the minimal honest design: add DECLARATIVE-prose
+  pattern tables for claim_class mapping of exported findings
+  (first-person desire/interiority declarative forms, mirroring but
+  separate from the question-shaped tables in claims.py); anything
+  unmatched stays claim_class="" and simply never participates in
+  licensing. No loosening of the gate itself.
+
+Stage 22.5: Phase Closure and Reassessment — RESERVED
+  For the operator with the heaviest available model (Fable if the
+  access window allows; otherwise Opus). Scope: analysis of the full
+  live record (register comparison over weeks, exploration steady
+  state, ladder progression, quarantine themes); the F4 policy review
+  (whether _should_force_claim_refusal's default-True is blunter than
+  Nova's demonstrated honesty now warrants — an operator values
+  question, not a code question); the Phase 23 QLoRA go/no-go under
+  the corpus-policy acknowledgment (Q6, PHASE21_STAGE21_5_CLOSURE.txt
+  — quarantine inclusion reviewed per-run, never default-excluded);
+  and the closure verdict. The closure analysis should also state
+  plainly what the live record does and does not show about the
+  project's thesis — the same honesty discipline as 21.5: a record
+  that would rather be true than tidy.
+
+
+OPERATING CONVENTIONS (unchanged from Phase 21)
+------------------------------------------------
+
+  - Launch sessions from /home/head-node (memory loads there).
+  - One stage per session; prompt: "implement Stage 22.X per its plan
+    doc" (write the stage doc first if it doesn't exist, following
+    PHASE21_STAGE21_2's template: OBJECTIVE / CODE FACTS re-verified /
+    DECIDED DESIGN / IMPLEMENTATION ORDER / TESTS REQUIRED /
+    DEFINITION OF DONE).
+  - Full suite green before commit (baseline 893); single stage
+    commit "Implement Phase 22 Stage 22.X — ..."; closure note in the
+    stage doc; push to origin main.
+  - Re-verify CODE FACTS before editing — every Phase 21 stage caught
+    real premise drift this way.
+  - Nothing is ever deleted: journal, quarantine, ladder, and the
+    live data dirs are append-only records.
+
+
+REFERENCE
+---------
+
+  Phase 21 closure (verdict, Q6 acknowledgment, findings F1-F4):
+    docs/plans/PHASE21_STAGE21_5_CLOSURE.txt
+  Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
+  Stage 22.1 doc: docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt
+  Live-run precedent: PHASE20_STAGE20_4_PHASE_CLOSURE.txt (overnight
+    daemon methodology), data/phase21/qwen3-14b/eval-runs/ (arm
+    scripts and artifacts)

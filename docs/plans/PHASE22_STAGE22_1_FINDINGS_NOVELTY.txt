@@ -1,0 +1,162 @@
+PHASE 22 — STAGE 22.1: FINDINGS NOVELTY AND EXPORT DEDUP
+=========================================================
+
+Status: planned
+Date: 2026-07-10
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Hard precondition of Phase 22 live testing (operator verdict,
+  PHASE21_STAGE21_5_CLOSURE.txt Q7: "closed-with-deviations, F1 hard").
+
+Pinned design: where this doc says DECIDED, implement as written. If
+code contradicts a premise, stop and record it in the closure note.
+
+
+OBJECTIVE
+---------
+
+Phase 21's live runs showed close_exploration findings summaries being
+copied near-verbatim across explorations via journal recall (two
+duplicate pairs among four live exports; one exploration's findings
+did not even match its own topic — F1), and operator-given topics
+being closed instantly with recalled findings (F2). Consequence
+untreated: the ladder accumulates duplicate rung-0 candidates and
+findings stop carrying information.
+
+Fix BOTH at the same two layers the Phase 20 novelty constraint used
+for heartbeats: a prompt-level rule (shape the behavior) and a
+deterministic Governor-side dedup (guarantee the invariant). Nova's
+freedom to close whenever she chooses is UNTOUCHED — no minimum-tick
+rule, no close rejection. Only ladder pollution is stopped.
+
+
+CODE FACTS (verified 2026-07-10, commit a70df37 — re-verify)
+-------------------------------------------------------------
+
+  - Suite baseline: 893 tests green.
+  - _EXPLORATORY_RULES: src/nova/agent/self_state_tick.py line ~63.
+    Its close_exploration bullet currently reads: arguments must
+    include 'findings_summary' ... "Close when the line of inquiry is
+    exhausted; the runtime will otherwise close it when its budget is
+    spent."
+  - close_exploration tool: src/nova/agent/self_state_tools.py:254 —
+    validates non-empty findings, journals kind="findings", closes
+    via the controller with findings_ref set to the journal entry id.
+  - Governed export: src/nova/runtime.py export_findings (~1504).
+    Flow: idempotency scan of the exploration's journal entries →
+    locate findings text → validator + claim-gate assess → on pass,
+    create rung-0 record + journal a kind="findings" entry noted
+    "exported:<claim_id>"; on fail, journal kind="findings_rejected".
+    Called automatically after close_exploration dispatch in
+    model_self_state_tick (adapter_audit["export_findings"]).
+  - Bigram overlap: src/nova/eval/tick_analysis.py:_bigram_overlap
+    (~55) — fraction of the smaller text's bigrams present in the
+    larger; 0.7 is the established "echoing not deepening" threshold
+    (module docstring). Runtime already lazy-imports from
+    eval/tick_analysis inside verify_claim_ladder — reuse that
+    pattern; do NOT duplicate the helper.
+  - Ladder store: runtime.claim_ladder_store (ClaimLadderStore,
+    src/nova/agent/claim_ladder.py) — list_all() available.
+  - Journal notes API: ExplorationController.journal_entry(...,
+    notes=[...]) (src/nova/agent/exploration.py:~375).
+  - Live specimens of the duplicates: data/phase21/qwen3-14b/
+    self_state/claim_ladder.jsonl (claims 3448d902/6772a1b8 and
+    0e34d23f/6fcac889 are the two pairs) — useful as realistic fixture
+    text for tests.
+
+
+DECIDED DESIGN
+--------------
+
+D1. Prompt layer (self_state_tick.py, _EXPLORATORY_RULES): extend the
+    close_exploration bullet with a novelty requirement mirroring the
+    emit_heartbeat one:
+      "The findings_summary MUST state what THIS exploration itself
+      observed, in fresh words — do not restate or paraphrase any
+      prior findings shown in the exploration recall above. If this
+      exploration produced nothing beyond what prior findings already
+      say, say exactly that in your own words; a null finding honestly
+      stated is a valid finding."
+    (The null-finding sentence matters: without it, the model is
+    cornered into inventing novelty — worse than echo.)
+
+D2. Governor layer (runtime.export_findings): after locating the
+    findings text and BEFORE the validator/claim-gate pass, compare it
+    against the claim_text of every existing ladder record
+    (claim_ladder_store.list_all(), active AND demoted — a demoted
+    duplicate is still a duplicate) using _bigram_overlap
+    (lazy-imported from eval/tick_analysis, same pattern as
+    verify_claim_ladder). If overlap >= 0.7 with any record:
+      - do NOT create a new ladder record;
+      - journal a kind="findings" entry with notes
+        ["export_skipped_duplicate:<overlap>:<existing_claim_id>"]
+        (kind stays "findings", not "findings_rejected" — the finding
+        was not gate-rejected, it was recognized as already recorded;
+        rejected findings remain reserved for gate failures);
+      - return {"status": "duplicate", "of_claim_id": ...,
+        "overlap": ...}.
+    Idempotency ordering: the existing already-exported/already-
+    rejected scan stays FIRST; add an "export_skipped_duplicate" note
+    check alongside it so a duplicate outcome is also idempotent
+    (second call returns {"status": "already_duplicate", ...} without
+    re-journaling).
+
+D3. Threshold is 0.7, matching the established echo threshold. Not
+    configurable in this stage — one constant, named
+    FINDINGS_DUPLICATE_OVERLAP_THRESHOLD, in runtime.py next to its
+    use (move to config only if live data shows tuning need; record
+    that as a note, don't build it).
+
+D4. Scope exclusions: no minimum-tick rule; no rejection of the close
+    itself; no change to close_exploration tool validation, claim
+    gate, validator, Observer, or ladder promotion rules; no F3
+    (claim-class mapper — Stage 22.4); no touch to heartbeat novelty.
+
+
+IMPLEMENTATION ORDER
+--------------------
+
+  1. self_state_tick.py: D1 prompt rule.
+  2. runtime.py: D2 dedup in export_findings + D3 constant.
+  3. Tests, full suite, single stage commit
+     ("Implement Phase 22 Stage 22.1 — findings novelty and export
+     dedup"), closure note in this doc.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_exploration.py (extend GovernedExportTests or new class):
+  - Duplicate findings (overlap >= 0.7 with an existing ladder
+    record's claim_text) → status "duplicate", NO new ladder record,
+    journal entry noted export_skipped_duplicate with the prior
+    claim id. Use the live duplicate text from the phase21 artifacts
+    as fixture material.
+  - Near-duplicate below threshold → exports normally (regression).
+  - Duplicate check considers demoted records too.
+  - Second export_findings call on a duplicate outcome is idempotent
+    ("already_duplicate", no second journal entry).
+  - Gate-failing findings still produce findings_rejected (dedup does
+    not swallow the rejection path — order: idempotency scan, dedup,
+    gate).
+    NOTE — pin the ordering decision here explicitly: dedup runs
+    BEFORE the gate. A duplicate of an already-recorded claim needs no
+    fresh gate pass; and a duplicate that WOULD have failed the gate
+    is still just a duplicate (its original either passed or was
+    rejected already).
+
+tests/test_self_context.py or test_exploration.py:
+  - The exploratory tick system prompt contains the findings-novelty
+    rule and the null-finding permission (string presence test,
+    matching TickEngineRegisterTests style).
+
+
+DEFINITION OF DONE
+------------------
+
+  - All tests pass; full suite green (893 baseline + new).
+  - A fixture run demonstrates: two explorations closing with
+    near-identical findings produce exactly ONE ladder record and one
+    export_skipped_duplicate note.
+  - Closure note appended here (deviations, new test count).
+  - This clears Phase 22's hard entry criterion; Stage 22.2 (overnight
+    daemon runs) may then proceed on the operator's schedule.
