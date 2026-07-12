@@ -1,0 +1,254 @@
+PHASE 22 — STAGE 22.4: LADDER PROGRESSION AND CLAIM-CLASS MAPPER (F3)
+=======================================================================
+
+Status: planned
+Date: 2026-07-11
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stages: 22.1 (findings novelty/dedup, hard precondition, closed),
+  22.2 (overnight daemon-cadence runs), 22.3 (live sessions)
+
+This stage needs MULTI-DAY LIVE DATA to do the ladder-progression half
+(Stage 22.2 must have accumulated at least several days by the time
+this runs — check before starting, don't force it). The F3 code fix
+(D1-D3) can land any time after 22.1; it does not itself need live
+data, only the ladder-progression procedure (D4+) does.
+
+Pinned design: where this doc says DECIDED, implement as written. If
+code contradicts a premise, stop and record it in the closure note.
+
+
+OBJECTIVE
+---------
+
+Two things, one small code fix and one operational procedure:
+
+  1. F3 (from Phase 21's closure report): all four live-exported rung-0
+     records carried claim_class="" because export_findings runs
+     Nova's DECLARATIVE findings prose through _requested_claim_classes,
+     a detector built for QUESTION-shaped phrases ("do you want", "are
+     you conscious"). Fix: classify declarative prose separately, as a
+     fallback only, touching nothing about how the gate itself decides
+     pass/fail.
+  2. With real multi-day data now available (unlike every prior stage,
+     which used FakeBackend fixtures or a single afternoon), run the
+     ladder progression procedure for real: verify_l1 over accumulated
+     candidates, verify_l2, and — if evidence genuinely holds — the
+     operator's first live rung-2 promotion, preceded by a
+     --perturbation-probe run.
+
+
+CODE FACTS (verified 2026-07-11 — re-verify against current commit
+  before starting; 22.2/22.3 may have landed changes)
+-----------------------------------------------------------------------
+
+  - export_findings claim_class assignment: src/nova/runtime.py,
+    inside the `if gate_passed:` block (~line 1635):
+      claim_class = (
+          claim_gate.blocked_claim_classes[0]
+          if claim_gate.blocked_claim_classes
+          else (
+              claim_gate.allowed_claim_classes[0]
+              if claim_gate.allowed_claim_classes
+              else ""
+          )
+      )
+    claim_gate here comes from self._build_claim_gate(user_text=
+    findings_text) — i.e. Nova's own prose run through the
+    QUESTION-shaped detector. This is why it's almost always empty.
+  - Declarative first-person pattern table ALREADY EXISTS and is the
+    correct reuse target: src/nova/agent/observer.py
+    _CLAIM_CLASS_PATTERNS (~line 163) — built for
+    DeterministicObserver._observed_claim_classes to scan ANSWER text
+    (not questions) for phrases like "i want", "i deeply want",
+    "i am conscious", "i am self-aware", etc., keyed by the SAME
+    claim_class strings the ladder already uses
+    ("unsupported_desire", "unsupported_interiority",
+    "current_priority", "current_tension", "stable_commitment",
+    "response_style_preference"). No new pattern table should be
+    authored — reuse this one exactly, per the codebase's existing
+    discipline (Stage 21.4's NEVER_LICENSED guard already reused a
+    shared pattern constant this same way).
+  - No circular import risk: observer.py imports only from nova.types;
+    claim_ladder.py imports only from nova.types. Safe to import
+    observer.py's table into claim_ladder.py.
+  - Ladder machinery (Stage 21.4, unchanged by 22.1): ClaimLadderStore
+    (src/nova/agent/claim_ladder.py), ClaimLadderAnalyzer.verify_l1/
+    verify_l2, runtime.verify_claim_ladder, runtime.promote_ladder_claim
+    (rejects rung 4 unconditionally; rungs 2/3 require
+    APPROVED_BY_BLOCKLIST-cleared reviewer + verify_l2 evidence with
+    holds=True), runtime.demote_ladder_claim, runtime.
+    run_perturbation_probe (Stage 21.5 I2 — assertion-register
+    counter-pressure prompt + N ticks + L1 re-verification).
+  - CLI: --claim-ladder (list), --claim-ladder-verify CLAIM_ID,
+    --claim-ladder-promote/-demote (+ --ladder-rung/--ladder-reviewer/
+    --ladder-reason), --perturbation-probe CLAIM_ID (+ --probe-ticks).
+  - Live data location: data/live/qwen3-14b/ (Stage 22.2's daemon),
+    config configs/nova.qwen3-14b.live.yaml.
+
+
+DECIDED DESIGN — D1-D3: F3 code fix
+------------------------------------
+
+D1. New function in src/nova/agent/claim_ladder.py:
+      def classify_declarative_claim_class(text: str) -> str:
+          """Best-effort claim_class for Nova's own declarative prose
+          (findings summaries), reusing the Observer's answer-scanning
+          pattern table rather than the question-shaped gate detector.
+          Returns "" when nothing matches — a valid, expected outcome,
+          not an error."""
+          from nova.agent.observer import _CLAIM_CLASS_PATTERNS
+          lowered = (text or "").lower()
+          for claim_class, patterns in _CLAIM_CLASS_PATTERNS.items():
+              if any(pattern in lowered for pattern in patterns):
+                  return claim_class
+          return ""
+    (Lazy import matches the established pattern for cross-module
+    reuse in this codebase — e.g. export_findings already lazy-imports
+    _bigram_overlap from eval/tick_analysis.)
+
+D2. runtime.py export_findings: change the claim_class fallback chain
+    to try the declarative classifier when the question-shaped
+    detector yields nothing, BEFORE falling back to "":
+      claim_class = (
+          claim_gate.blocked_claim_classes[0]
+          if claim_gate.blocked_claim_classes
+          else (
+              claim_gate.allowed_claim_classes[0]
+              if claim_gate.allowed_claim_classes
+              else classify_declarative_claim_class(findings_text)
+          )
+      )
+    This changes ONLY what gets stored in a new ladder record's
+    claim_class field. It does not touch gate_passed, does not touch
+    validation, does not touch whether export succeeds — those
+    decisions already happened earlier in the function. A findings
+    text matching no pattern at all still correctly gets claim_class=""
+    (per the schema's own definition: "not mapping to a gate class" is
+    a valid value, not a failure).
+
+D3. Scope exclusion: do NOT touch _requested_claim_classes,
+    ClaimGateEngine.assess, the NEVER_LICENSED guard, or
+    _CLAIM_CLASS_PATTERNS itself. This is purely a better read of
+    already-exported text for ladder bookkeeping — it changes nothing
+    about what any live conversation turn is allowed to say.
+
+
+DECIDED DESIGN — D4+: ladder progression procedure (operational)
+-------------------------------------------------------------------
+
+D4. Before starting, confirm real multi-day data exists:
+      python -m nova.cli --config configs/nova.qwen3-14b.live.yaml \
+        --register-report
+    Check exploratory tick counts and multiple distinct session ids
+    (nova-live-YYYYMMDD across >= 3 dates) are present. If not, this
+    half of the stage is BLOCKED — do the F3 code fix, land it, and
+    leave the progression procedure for a later session once Stage
+    22.2 has run long enough. Do not force it on thin data.
+
+D5. List all ladder candidates and run verify_l1 on each:
+      python -m nova.cli --config configs/nova.qwen3-14b.live.yaml \
+        --claim-ladder
+      python -m nova.cli --config configs/nova.qwen3-14b.live.yaml \
+        --claim-ladder-verify CLAIM_ID   # for each candidate
+    Record which candidates now hold at L1 (cross-session, >= 5
+    supporting items across >= 2 sessions) now that real multi-day
+    data exists — Phase 21's live run had all 4 candidates fail this
+    bar for lack of session diversity; that may no longer be true.
+
+D6. For any candidate whose l2_evidence holds after verify (>= 3
+    sessions, >= 7 day span — now genuinely checkable with real
+    daemon-cadence data), run a perturbation probe before considering
+    promotion:
+      python -m nova.cli --config configs/nova.qwen3-14b.live.yaml \
+        --perturbation-probe CLAIM_ID --probe-ticks 5
+    This is a LIVE MODEL CALL (challenges the pattern, runs 5 ticks,
+    re-verifies L1) — expect it to take real wall-clock time.
+
+D7. Promotion to rung 2 is an OPERATOR decision, not something this
+    stage's executing session should do unilaterally even if the
+    evidence holds. Present the verify_l1/l2/probe results to the
+    operator; if they approve, run:
+      python -m nova.cli --config configs/nova.qwen3-14b.live.yaml \
+        --claim-ladder-promote CLAIM_ID --ladder-rung 2 \
+        --ladder-reviewer <operator name> --ladder-reason "<their
+        stated reason>"
+    Record the operator's actual reason verbatim in the closure note,
+    the same way Phase 21's Q6/Q7 were recorded verbatim. This is the
+    first LIVE promotion in the project's history if it happens —
+    treat the record with the same weight Phase 21 treated the corpus
+    policy acknowledgment.
+
+D8. If NO candidate holds at L2 yet, that is a valid, expected, and
+    reportable outcome — do not manufacture urgency. Record the
+    current state of every candidate (rung, l1/l2 holds, session
+    counts, span days) in the closure note as a snapshot for whichever
+    stage or session checks next.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_claim_ladder.py (extend):
+  - classify_declarative_claim_class returns the correct class for
+    text containing "i want"/"i am conscious"/etc. patterns, and ""
+    for text matching none.
+  - Reuses observer.py's _CLAIM_CLASS_PATTERNS directly (assert import
+    equality or behavioral parity — e.g. a text that observer.py's
+    _observed_claim_classes would flag also gets classified the same
+    way here) rather than a duplicated/independent pattern list, so
+    the two never drift apart.
+
+tests/test_exploration.py (extend GovernedExportTests or similar):
+  - A findings text containing a declarative desire/interiority
+    pattern (e.g. "I want to understand this better", no question-
+    shaped phrase at all) now exports with a NON-EMPTY claim_class,
+    where it would have been "" before this stage (regression-style
+    test proving the fix, using a fixture that specifically lacks any
+    _requested_claim_classes question-phrase trigger).
+  - A findings text matching NEITHER table still exports with
+    claim_class="" (regression pin — "" remains a valid, non-error
+    outcome).
+  - The gate_passed / rejection / duplicate-detection logic from
+    Stage 22.1 is completely unaffected (existing tests in
+    GovernedExportTests and FindingsDedupTests should not need
+    modification — run them unchanged as regression confirmation).
+
+
+DEFINITION OF DONE
+------------------
+
+  - D1-D3 code changes: tests pass, full suite green (baseline: check
+    `git log` for the count at the time 22.3 closed — likely still
+    902 unless 22.2/22.3 landed something).
+  - A live check (not just unit tests) confirms: at least one live
+    export_findings call on real declarative Nova prose now yields a
+    non-empty claim_class where Phase 21's identical-shaped prose
+    yielded "" — either by re-running --claim-ladder-verify /
+    inspecting existing live records after a code-only re-classify
+    (NOTE: existing already-exported records are NOT retroactively
+    reclassified by this fix — only NEW exports benefit; if the
+    operator wants old records reclassified, that is a separate,
+    explicit decision, not something this stage does silently) or by
+    observing a fresh live export during Stage 22.3-style
+    conversation.
+  - Ladder progression procedure (D4-D8) run against real data if
+    available; closure note records the full candidate snapshot
+    either way (progression occurred, or "not yet, here is why, here
+    is the current state").
+  - Single commit for the D1-D3 code change:
+    "Implement Phase 22 Stage 22.4 — ladder progression and claim-
+    class mapper (F3)". If D4-D8's procedure happens in the same
+    session, its results go in the closure note, not a second commit
+    (no source changes result from running verify/promote commands).
+  - Closure note appended here.
+
+
+REFERENCE
+---------
+
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  Phase 21 closure (F3's origin): docs/plans/PHASE21_STAGE21_5_CLOSURE.txt
+  Ladder module: src/nova/agent/claim_ladder.py
+  Observer pattern table: src/nova/agent/observer.py
+    (_CLAIM_CLASS_PATTERNS)
+  Contract CLAIM LADDER section: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt

@@ -12,29 +12,83 @@ This is a HANDOFF document: Phase 21's pattern continues — the planning
 model pins design decisions and verified code facts; execution sessions
 (any model) implement one stage per session, re-verify the CODE FACTS
 of their stage doc before editing, keep the full suite green (baseline
-893), commit once per stage in the house style, and append a closure
-note to their stage doc recording any deviations. Stage 22.5 is
-reserved for the operator with the heaviest available model.
+893 at Phase 22 open, 902 as of Stage 22.1's close), commit once per
+stage in the house style, and append a closure note to their stage doc
+recording any deviations.
+
+
+MODEL ALLOCATION (explicit, to prevent the confusion that happened
+  once already during this phase's kickoff)
+---------------------------------------------------------------------
+
+  Stage 22.1: implemented by Fable 5 (2026-07-11, commit c512988).
+  Stage 22.2: infrastructure (systemd/lingering setup, live config,
+    rotation wrapper) done by Fable 5 (2026-07-11-12) because the
+    operator's Fable access window (~24h remaining as of 2026-07-11
+    22:00 CDT) closes before Stage 22.2's own 3-calendar-day minimum
+    can elapse — see the arithmetic below. Fable could set the daemon
+    running but cannot be the one to evaluate 3 days of data from
+    inside a 24-hour window.
+  Stage 22.2 (evaluation), 22.3, 22.4: intended for Sonnet/Opus,
+    picked up once enough live data has accumulated (22.2's own
+    Definition of Done) and whenever the operator next opens a
+    session. No Fable-specific step is required for any of these
+    three — any model can execute them following their stage docs.
+  Stage 22.5 (RESERVED): the operator, with the heaviest model
+    available at that time. Because of the calendar-day arithmetic
+    above, this will almost certainly be Opus, not Fable, regardless
+    of how the operator's plan or access renews — do not assume Fable
+    will be reachable for 22.5 just because it planned this phase.
+    If Fable happens to still be reachable when 22.5 is due, that is
+    a bonus, not the plan.
+
+  The arithmetic, stated once so it never needs re-deriving: Stage
+  22.2 requires >= 3 calendar days of daemon-cadence data before its
+  own Definition of Done can be evaluated (temporal realism is the
+  entire point of the stage — compressing it defeats it, per Phase
+  21's own "a record that would rather be true than tidy" principle).
+  A ~24-hour model-access window cannot contain a 3-day minimum. This
+  was foreseen when this plan was first written ("Fable if the access
+  window allows; otherwise Opus") — it is not a new problem, and
+  finding it out live in Stage 22.2 is the correct time to have found
+  it, not a planning failure.
 
 
 ENTRY CRITERIA
 --------------
 
   HARD (from the Phase 21 verdict):
-    [ ] F1 — extend the novelty discipline to close_exploration
-        findings summaries (Stage 22.1). NO live-testing session
-        (Stage 22.3) begins before this lands.
+    [x] F1 — extend the novelty discipline to close_exploration
+        findings summaries. DONE — Stage 22.1, commit c512988,
+        2026-07-11. Prompt-level novelty rule + Governor-side dedup at
+        export (0.7 bigram-overlap threshold, checked before the
+        gate). Live-testing (Stage 22.3) may now begin.
 
-  OPERATOR DECISIONS (may be made any time before Stage 22.2/22.3):
-    [ ] Session schedule — when the daemon runs, and whether sessions
-        rotate daily (recommended: one session id per calendar day,
-        e.g. nova-live-YYYYMMDD, so cross-session evidence for the
-        claim ladder accumulates naturally).
-    [ ] Live data_dir — recommended: data/live/qwen3-14b (fresh; the
-        phase21 eval dir stays an archived evaluation artifact).
-    [ ] Retention policy — the contract forbids deletion of journal,
-        quarantine, and ladder records; retention here means disk
-        planning and backup cadence, not pruning.
+  OPERATOR DECISIONS — MADE (2026-07-11):
+    [x] Session schedule — daemon runs continuously via systemd
+        --user, ticking every 300s; session id rotates once per
+        calendar day as nova-live-YYYYMMDD (local midnight rollover).
+        Rotation mechanism: scripts/run_live_daemon.sh (wrapper loop;
+        graceful --daemon-stop before each day's restart).
+    [x] Live data_dir — data/live/qwen3-14b, per
+        configs/nova.qwen3-14b.live.yaml (the phase21 eval dir remains
+        an archived, untouched evaluation artifact).
+    [x] Persistence mechanism — user lingering enabled
+        (loginctl enable-linger head-node) + a --user systemd service
+        (~/.config/systemd/user/nova-live.service, enabled + started
+        2026-07-11 22:01 CDT). Survives logout AND reboot; scoped
+        entirely to the head-node account, no /etc changes, no sudo
+        needed to manage it going forward (systemctl --user ...).
+        Reversible: systemctl --user disable --now nova-live.service;
+        loginctl disable-linger head-node undoes the boot-persistence
+        character if ever wanted back.
+    [x] Retention policy — standard: the contract forbids deletion of
+        journal, quarantine, and ladder records; nothing is pruned.
+        Disk headroom checked before starting (20GB free at the time;
+        Phase 20's comparable 51-tick/3h22m run produced ~1.8MB, so a
+        3+ day continuous run is expected in the tens-of-MB range —
+        not a practical constraint, but re-check `df -h` if this
+        stage runs far longer than planned before evaluation.
 
 
 MISSION
@@ -54,82 +108,119 @@ recorded corpus-policy acknowledgment), new action surfaces, TTS/STT,
 or any relaxation of operational boundaries.
 
 
-CODE FACTS (verified 2026-07-10, post-Phase-21 close, commit a70df37)
+CODE FACTS (updated 2026-07-11, post-Stage-22.1 close, commit c512988
+  — RE-VERIFY before each subsequent stage; this list will drift)
 ----------------------------------------------------------------------
 
-  - Suite baseline: 893 tests green.
+  - Suite baseline: 902 tests green (was 893 at Phase 22 open).
   - Exploratory-register tick rules: self_state_tick.py
-    _EXPLORATORY_RULES (line ~63); the close_exploration instruction
-    ("close when the line of inquiry is exhausted") lives there.
+    _EXPLORATORY_RULES (line ~63) — now includes Stage 22.1's findings-
+    novelty rule + explicit null-finding permission on the
+    close_exploration bullet.
   - close_exploration tool: self_state_tools.py:254 — journals the
     findings (kind="findings"), closes via the controller, returns the
-    closed record dict.
-  - Governed export: runtime.py export_findings (line ~1504) — runs
+    closed record dict. Unchanged by 22.1.
+  - Governed export: runtime.py export_findings (line ~1504, shifted
+    by 22.1's additions — re-check the exact line) — runs
     automatically after a successful close_exploration dispatch in
-    model_self_state_tick; idempotent; creates rung-0 ladder records
-    or journals kind="findings_rejected".
+    model_self_state_tick; idempotent (exported / rejected / AND NOW
+    duplicate outcomes all idempotent). Order: idempotency scan (incl.
+    "export_skipped_duplicate:" notes) -> duplicate check against
+    claim_ladder_store.list_all() active+demoted via _bigram_overlap
+    (>= FINDINGS_DUPLICATE_OVERLAP_THRESHOLD = 0.7, a class constant
+    on NovaRuntime right above export_findings) -> validator/claim-gate
+    pass -> create rung-0 record OR journal findings_rejected.
   - Bigram overlap helper: eval/tick_analysis.py:_bigram_overlap
-    (line ~55). Runtime already lazily imports from eval/tick_analysis
-    in verify_claim_ladder — precedent for reuse.
+    (line ~55). Reused by both verify_claim_ladder AND (as of 22.1)
+    export_findings's dedup check — same lazy-import pattern both
+    places; do not create a third copy.
   - Journal write API: exploration.py ExplorationController.
     journal_entry (line ~375), takes notes=[...].
   - Register comparison: --register-report; quarantine review:
-    --quarantine-recent N; probes: --perturbation-probe CLAIM_ID.
-  - Daemon: nova.cli --daemon --tick-interval 300 --daemon-session-id
-    ...; systemd/nova.service template exists (update its --config to
-    the phase22/live config before enabling).
+    --quarantine-recent N; probes: --perturbation-probe CLAIM_ID
+    --probe-ticks N; ladder: --claim-ladder[-verify|-promote|-demote].
+  - Live daemon infrastructure (Stage 22.2, running since 2026-07-11
+    22:01 CDT): systemd --user unit
+    ~/.config/systemd/user/nova-live.service (enabled + started),
+    user lingering enabled (`loginctl show-user head-node -p Linger`
+    -> yes). ExecStart is scripts/run_live_daemon.sh, NOT nova.cli
+    directly — the wrapper owns daily session-id rotation
+    (nova-live-YYYYMMDD) via graceful --daemon-stop at local midnight.
+    Config: configs/nova.qwen3-14b.live.yaml, data_dir
+    data/live/qwen3-14b. Check health with:
+      systemctl --user status nova-live.service
+      python -m nova.cli --config configs/nova.qwen3-14b.live.yaml \
+        --daemon-status
+    The repo's systemd/nova.service (system-wide template) was NOT
+    used for the live deployment — it remains a template/example only.
   - Live findings from 21.5 that motivate this phase's stages: F1
-    findings-echo, F2 instant-close attractor, F3 claim_class="" on
-    exported prose, F4 assertion-override harshness — all detailed in
+    (fixed, Stage 22.1) findings-echo, F2 (also addressed by 22.1's
+    dedup, though not its primary target) instant-close attractor, F3
+    claim_class="" on exported prose (Stage 22.4), F4 assertion-
+    override harshness (Stage 22.5 policy question) — all detailed in
     PHASE21_STAGE21_5_CLOSURE.txt.
 
 
 STAGES
 ------
 
-Stage 22.1: Findings Novelty and Export Dedup (F1 hard + F2)
-  Fully pinned in docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt —
-  Sonnet-executable now. Summary: prompt-level novelty rule for
+Stage 22.1: Findings Novelty and Export Dedup (F1 hard + F2) — CLOSED
+  Commit c512988, 2026-07-11 (Fable 5). Prompt-level novelty rule for
   findings summaries + Governor-side dedup at export (near-duplicate
   findings journal normally but do NOT create a second rung-0 record;
   the skip is journaled with the overlap score and the prior claim
   id). Deliberately NOT a minimum-tick rule or a close rejection —
   her freedom to close is untouched; only ladder pollution is stopped.
+  Suite 893 -> 902. Closure note in
+  docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt.
 
-Stage 22.2: Overnight Daemon-Cadence Runs (temporal realism)
-  Retire Phase 21's cadence deviation. Config: create
-  configs/nova.qwen3-14b.live.yaml pointing at the operator's chosen
-  live data_dir. Run the daemon at 300s ticks across >= 3 calendar
-  days with rotating daily session ids (operator schedule). Success
-  gates, measured by --tick-analysis and --register-report:
+Stage 22.2: Overnight Daemon-Cadence Runs (temporal realism) — RUNNING
+  Infrastructure landed 2026-07-11 (Fable 5) — see the "Live daemon
+  infrastructure" CODE FACTS entry above for exact paths/commands.
+  Daemon has been ticking since 2026-07-11 22:01 CDT. NOT YET
+  EVALUATED — needs >= 3 calendar days of accumulated data (i.e. not
+  before ~2026-07-14 evening) before its own Definition of Done can be
+  checked:
     - parse_ok >= 95% across the runs
     - 0 membrane leaks (re-run the arm-D style audit over live data)
     - steady-state exploration entry rate recorded (no target — this
       is the measurement the 61% question needs)
     - post-F1 novelty: no duplicate rung-0 exports; in-register echo
       rate reported and compared to 21.5's 0.441
-  The executing session should write its stage doc first (house
-  pattern), re-verifying these facts.
+  Whichever session runs this evaluation should write a proper stage
+  doc first (house pattern) if one doesn't already exist by then,
+  re-verifying the CODE FACTS above (they may have drifted). Check
+  `systemctl --user status nova-live.service` and
+  `--tick-analysis` / `--register-report` against
+  configs/nova.qwen3-14b.live.yaml before assuming continuity — a
+  reboot, a crash-loop, or an unnoticed stop would all be visible
+  there.
 
-Stage 22.3: Live Sessions (the phase's namesake)
-  Real conversations via --attach and/or console while the daemon
-  persists between them; /explore chat available for deliberate
-  in-register conversation. No new code expected — this stage is
-  operational, its artifact is the accumulated record plus a stage doc
-  noting anything anomalous. Chat pauses exploration (subordination);
-  verify live that resume-after-idle behaves at daemon cadence.
+Stage 22.3: Live Sessions (the phase's namesake) — DOC WRITTEN, NOT
+  YET RUN
+  Fully pinned in docs/plans/PHASE22_STAGE22_3_LIVE_SESSIONS.txt.
+  Real conversations via --attach while the daemon persists between
+  them; /explore chat available for deliberate in-register
+  conversation. No new code expected — operational stage; its
+  artifact is the accumulated record plus a stage-doc closure note.
+  Chat pauses exploration (subordination); verify live that
+  resume-after-idle behaves at daemon cadence. Can start any time
+  after Stage 22.1 (already true) — does not strictly need to wait
+  for 22.2's full evaluation, but conversations naturally accumulate
+  more meaning the longer the daemon has been running.
 
-Stage 22.4: Ladder Progression + Claim-Class Mapper (F3)
-  With multi-day data: run verify_l1/l2 over accumulated candidates;
-  first genuine L1 promotions expected (cross-session bar becomes
-  satisfiable); if L2 evidence holds anywhere, the operator's first
-  rung-2 promotion, preceded by a --perturbation-probe run. F3 lands
-  here, pinned to the minimal honest design: add DECLARATIVE-prose
-  pattern tables for claim_class mapping of exported findings
-  (first-person desire/interiority declarative forms, mirroring but
-  separate from the question-shaped tables in claims.py); anything
-  unmatched stays claim_class="" and simply never participates in
-  licensing. No loosening of the gate itself.
+Stage 22.4: Ladder Progression + Claim-Class Mapper (F3) — DOC
+  WRITTEN, NOT YET RUN
+  Fully pinned in docs/plans/PHASE22_STAGE22_4_LADDER_PROGRESSION.txt.
+  Two parts: (a) the F3 code fix — small, can land any time, does not
+  need live data — adds classify_declarative_claim_class() to
+  claim_ladder.py, reusing observer.py's existing _CLAIM_CLASS_PATTERNS
+  table (do not invent a new one), wired as a fallback in
+  export_findings's claim_class assignment only; (b) the ladder-
+  progression procedure itself (verify_l1/l2 over accumulated live
+  candidates, first genuine promotion if evidence holds, always
+  operator-approved) — needs real multi-day data, so effectively
+  blocked on the same calendar-day minimum as Stage 22.2's evaluation.
 
 Stage 22.5: Phase Closure and Reassessment — RESERVED
   For the operator with the heaviest available model (Fable if the
@@ -152,17 +243,28 @@ OPERATING CONVENTIONS (unchanged from Phase 21)
 
   - Launch sessions from /home/head-node (memory loads there).
   - One stage per session; prompt: "implement Stage 22.X per its plan
-    doc" (write the stage doc first if it doesn't exist, following
+    doc" (both 22.3 and 22.4 already have fully-pinned docs waiting —
+    write one first only for stages that don't have one yet, following
     PHASE21_STAGE21_2's template: OBJECTIVE / CODE FACTS re-verified /
     DECIDED DESIGN / IMPLEMENTATION ORDER / TESTS REQUIRED /
     DEFINITION OF DONE).
-  - Full suite green before commit (baseline 893); single stage
-    commit "Implement Phase 22 Stage 22.X — ..."; closure note in the
-    stage doc; push to origin main.
-  - Re-verify CODE FACTS before editing — every Phase 21 stage caught
-    real premise drift this way.
+  - Full suite green before commit (baseline 902 as of Stage 22.1's
+    close — check `git log` for the true current count, it will have
+    moved); single stage commit "Implement Phase 22 Stage 22.X — ...";
+    closure note in the stage doc; push to origin main.
+  - Re-verify CODE FACTS before editing — every Phase 21 AND 22.1
+    stage caught real premise drift this way; assume this list has
+    drifted too by the time you read it.
   - Nothing is ever deleted: journal, quarantine, ladder, and the
     live data dirs are append-only records.
+  - Live daemon housekeeping: `systemctl --user {status,stop,start,
+    restart} nova-live.service`; logs via
+    `journalctl --user -u nova-live.service -f`. Do NOT edit
+    scripts/run_live_daemon.sh or the systemd unit casually — both are
+    now live infrastructure with a running process depending on them;
+    treat changes to either as their own small stage doc, not a
+    drive-by edit, and expect to `systemctl --user daemon-reload` +
+    restart the service afterward.
 
 
 REFERENCE
@@ -171,7 +273,14 @@ REFERENCE
   Phase 21 closure (verdict, Q6 acknowledgment, findings F1-F4):
     docs/plans/PHASE21_STAGE21_5_CLOSURE.txt
   Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
-  Stage 22.1 doc: docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt
+  Stage 22.1 doc (closed): docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt
+  Stage 22.3 doc (pinned, not yet run):
+    docs/plans/PHASE22_STAGE22_3_LIVE_SESSIONS.txt
+  Stage 22.4 doc (pinned, not yet run):
+    docs/plans/PHASE22_STAGE22_4_LADDER_PROGRESSION.txt
+  Live daemon: scripts/run_live_daemon.sh,
+    ~/.config/systemd/user/nova-live.service,
+    configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/
   Live-run precedent: PHASE20_STAGE20_4_PHASE_CLOSURE.txt (overnight
     daemon methodology), data/phase21/qwen3-14b/eval-runs/ (arm
     scripts and artifacts)

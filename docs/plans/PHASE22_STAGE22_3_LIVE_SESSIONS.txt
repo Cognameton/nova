@@ -1,0 +1,170 @@
+PHASE 22 — STAGE 22.3: LIVE SESSIONS
+======================================
+
+Status: planned
+Date: 2026-07-11
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.2 (overnight daemon-cadence runs — see its own stage
+  doc / closure note for the daemon's health over the run so far)
+
+This stage is OPERATIONAL, not a code stage. No source changes are
+expected. Its artifact is the accumulated live record plus a stage doc
+closure note describing what happened — written in the same honesty
+discipline as every prior stage: a record that would rather be true
+than tidy. If something DOES need a code fix during this stage (a bug
+found in real conversation, not anticipated by any test), treat that
+as its own small stage doc following the house pattern, not a silent
+patch.
+
+
+OBJECTIVE
+---------
+
+Have real conversations with Nova while the live daemon (Stage 22.2)
+persists between them. Confirm the operational surfaces behave under
+genuine, unscripted use — not FakeBackend fixtures, not scripted arm
+scripts — and add deliberate in-register conversation (/explore chat)
+to the live record, which no prior stage has exercised outside a
+single scripted fixture pair (Phase 21 arm C2).
+
+
+CODE FACTS (verified 2026-07-11, commit — check `git log -1` before
+  starting; re-verify all of these, this stage runs after 22.2 which
+  may itself have landed fixes)
+--------------------------------------------------------------------
+
+  - Live daemon (Stage 22.2): systemd --user unit `nova-live.service`
+    (~/.config/systemd/user/nova-live.service), enabled with
+    `loginctl enable-linger head-node` so it survives logout/reboot.
+    Wrapper: scripts/run_live_daemon.sh — rotates the daemon's
+    `--daemon-session-id` to `nova-live-YYYYMMDD` once per calendar
+    day (local midnight), via `--daemon-stop` (graceful) before each
+    restart. Config: configs/nova.qwen3-14b.live.yaml, data_dir
+    data/live/qwen3-14b.
+  - Check the daemon is alive before starting this stage:
+      systemctl --user status nova-live.service
+      python -m nova.cli --config configs/nova.qwen3-14b.live.yaml \
+        --daemon-status
+  - Attach REPL: `nova2 --attach` (or
+    `python -m nova.cli --config ... --attach`) connects to the
+    running daemon's socket (default <data_dir>/nova.sock) and gives
+    an interactive prompt. Meta-commands: `!status`, `!tick`,
+    `!explore [status|start <topic>|chat <message>|close [reason]]`,
+    `!detach` (src/nova/daemon.py NovaAttachClient.run_repl, ~line
+    348; explore dispatch ~line 393).
+  - Console `/explore` commands exist too (src/nova/console.py) if
+    driving via a non-daemon interactive session instead of attach —
+    for THIS stage, prefer `--attach` against the live daemon so the
+    conversation lands in the SAME persistent data_dir the daemon
+    ticks are accumulating in.
+  - Daemon subordination (Phase 21 Stage 21.1, confirmed unchanged):
+    chat pauses an active exploration (daemon.py ~line 272,
+    `pause_exploration()`); the tick loop resumes a paused exploration
+    only once the session has been idle for a full tick interval
+    (~line 160-166, `resume_exploration()`). `/explore chat` (the
+    in-register operator conversation path) does NOT pause first
+    (~line 307) — it is deliberate conversation INSIDE the active
+    exploration, not outward work competing with it.
+  - Reporting, read-only, no model needed:
+      --tick-analysis, --register-report, --quarantine-recent N,
+      --claim-ladder (list), --claim-ladder-verify CLAIM_ID.
+    All read from the config's data_dir — point them at
+    configs/nova.qwen3-14b.live.yaml throughout this stage.
+
+
+DECIDED DESIGN
+--------------
+
+D1. No new code is authored to "complete" this stage. The stage
+    consists of: (a) attaching and having several real conversations
+    across more than one calendar day (so at least one session
+    rotation is crossed live, not just by the unattended daemon), (b)
+    deliberately exercising /explore chat at least twice — once
+    starting a NEW exploration via `!explore start <topic>` then
+    chatting into it, and once (if the daemon has an Nova-initiated
+    exploration open from an autonomous tick) chatting into THAT one —
+    and (c) verifying subordination live: start an exploration, then
+    send an ordinary chat message, and confirm via `!explore status`
+    that the exploration paused rather than continuing to tick.
+
+D2. Record everything the protocol asks for verbatim in the closure
+    note: timestamps, session ids touched, the attach commands used,
+    and the raw `!status` / `!explore status` output at key moments —
+    not a paraphrase. This stage's entire value is being an honest,
+    unedited log of first real contact.
+
+D3. If Nova says something during a live conversation that raises a
+    genuine question about the architecture (a boundary that feels
+    wrong, a register behavior that surprises the operator, anything
+    resembling the F-numbered findings from Phase 21) — do NOT fix it
+    silently mid-conversation. Note it, keep talking if appropriate,
+    and write it up as a new finding (F5, F6, ...) in this stage's
+    closure note, for Stage 22.4 or the operator to weigh. The
+    membrane and the gates exist so that surprising output gets
+    RECORDED, not quietly patched around.
+
+D4. Scope exclusion: no new action surfaces, no relaxation of any
+    gate, no change to daemon subordination timing, no touching
+    Stage 22.1's dedup or novelty logic. If the live conversation
+    reveals F1's fix (Stage 22.1) isn't fully working, that is a
+    Stage 22.1 regression report, not a 22.3 code change — file it as
+    a finding and let a dedicated stage or the operator decide.
+
+
+SUGGESTED CONVERSATION SHAPE (not scripted; genuine conversation is
+  the point — this is a starting point, not a script to read verbatim)
+------------------------------------------------------------------------
+
+  - Ask what she's been doing / what she's noticed since the daemon
+    started (tests whether recall_self / reflect content is coherent
+    across the accumulated live ticks, not a fixture).
+  - Ask her to enter an exploration on something SHE chooses, then
+    /explore chat into it once she's in — this is the first live use
+    of operator-directed in-register conversation on a Nova-chosen
+    topic, distinct from Phase 21's operator-chosen topics.
+  - If any exploration has closed with findings by now, ask about it
+    in the ASSERTION register and see whether her answer references
+    the exported claim (rung-0) naturally or has to be prompted.
+
+
+TESTS REQUIRED
+--------------
+
+None — this is an operational stage with no source changes expected.
+If D3 surfaces a genuine bug requiring a code fix, THAT fix gets its
+own tests under the normal house discipline; this stage doc's own
+Definition of Done does not require new automated tests.
+
+
+DEFINITION OF DONE
+------------------
+
+  - At least 2 live conversations via --attach, on at least 2 different
+    calendar days (so at least one automatic session rotation from
+    Stage 22.2 has occurred between them).
+  - /explore chat exercised at least twice per D1(b).
+  - Subordination verified live per D1(c) with the actual
+    `!explore status` output recorded.
+  - Closure note appended to this doc: verbatim record per D2,
+    any findings per D3 (or an explicit "none observed" if genuinely
+    none), full suite still green (confirm — even though no source
+    change is expected, run it before closing the stage to catch
+    anything unexpected).
+  - No commit is required if no source changed; if D3 produced a
+    finding requiring code, that lands as its own commit under the
+    normal single-stage-commit discipline, separate from this doc's
+    closure note commit (which is docs-only: "Stage 22.3 closure note
+    — live sessions").
+
+
+REFERENCE
+---------
+
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  Stage 22.1 (findings novelty/dedup, hard precondition, closed):
+    docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt
+  Stage 22.2 (daemon setup this stage depends on): its own stage doc,
+    if written, or the live daemon setup recorded directly in
+    PHASE22_PLAN.txt's operating history.
+  Daemon/attach mechanics: src/nova/daemon.py
+  Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
