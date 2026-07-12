@@ -6,7 +6,7 @@ The project is not a chatbot wrapper and it is not an uncontrolled autonomous ag
 
 The project's guiding philosophy is set out in the operator's book *Midwife of Consciousness* (2025): consciousness treated as a spectrum rather than a binary, the possibility of emergence met with stewardship rather than control, and claims held to evidence. The runtime is that philosophy made structural — see `docs/NOVA_SOUL.md` and `docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt`.
 
-Current development status: Phases 1-20 are closed. Phase 21 (the exploratory register) is active: Stage 21.1 is implemented; Stages 21.2-21.5 have committed implementation plans in `docs/plans/`. Phase 22 is live testing; Phase 23+ is the optional QLoRA sleep cycle.
+Current development status: Phases 1-21 are closed. Phase 22 (live testing) is active: the live daemon has been running unattended since 2026-07-11 under a `systemd --user` unit with lingering enabled; Stage 22.1 (findings novelty/export dedup) is implemented; Stages 22.3-22.4 have committed implementation plans in `docs/plans/`. Phase 23+ is the optional QLoRA sleep cycle.
 
 ## Contents
 
@@ -60,24 +60,44 @@ Non-goals:
 
 ## Current Status
 
-As of 2026-07-08:
+As of 2026-07-11:
 
 - Branch: `main`
 - Phase 20 (Tick Quality, Model Transition, Daemon Stability) closed
   2026-06-26: 51-tick overnight daemon run, 0 crashes, convergent
   self-loop (`docs/plans/PHASE20_STAGE20_4_PHASE_CLOSURE.txt`).
-- Phase 21 (Exploratory Register) active. Stage 21.1 — exploration
-  lifecycle, journal, budgets, register determination — is implemented.
-  Stages 21.2-21.5 have committed implementation plans
-  (`docs/plans/PHASE21_STAGE21_*.txt`) intended to be executable
-  stage-per-session; the 21.5 closure verdict is reserved for the
-  operator.
-- Full suite: 783 tests passing.
+- Phase 21 (Exploratory Register) CLOSED WITH DEVIATIONS 2026-07-10
+  (`docs/plans/PHASE21_STAGE21_5_CLOSURE.txt`). Stages 21.1-21.5 all
+  implemented: exploration lifecycle/journal/budgets, register-aware
+  Governor/Observer, quarantine and measurement corrections, the claim
+  ladder, and a live evaluation run on real Qwen 3 14B (Nova entered
+  explorations unprompted 3x, 61% of autonomous ticks in-register,
+  0 membrane leaks). Non-blocking findings F1-F4 carried into Phase 22.
+- Phase 22 (Live Testing) active:
+  - Stage 22.1 (findings novelty + export dedup, the hard entry
+    precondition from Phase 21) closed 2026-07-11.
+  - Stage 22.2 (overnight daemon-cadence runs) infrastructure is live:
+    the daemon runs unattended under a `systemd --user` unit
+    (`~/.config/systemd/user/nova-live.service`) with
+    `loginctl enable-linger` so it survives logout and reboot;
+    `scripts/run_live_daemon.sh` rotates the session id daily. Running
+    since 2026-07-11 22:01 CDT against
+    `configs/nova.qwen3-14b.live.yaml`; evaluation needs several more
+    days of accumulated data before its Definition of Done can be
+    checked.
+  - Stages 22.3 (live sessions) and 22.4 (ladder progression + claim-
+    class mapper) have committed implementation plans
+    (`docs/plans/PHASE22_STAGE22_*.txt`), not yet run.
+  - Stage 22.5 (phase closure) is reserved for the operator with the
+    heaviest available model.
+- Full suite: 902 tests passing (check `git log` for the current
+  count — this will have moved).
 
 Recommended current model baseline:
 
-- Qwen 3 14B (`configs/nova.qwen3-14b.phase20.yaml`, 32K context,
-  `/no_think` system prefix; think-blocks are stripped by the
+- Qwen 3 14B (`configs/nova.qwen3-14b.phase20.yaml` for evaluation
+  runs, `configs/nova.qwen3-14b.live.yaml` for the live daemon; 32K
+  context, `/no_think` system prefix; think-blocks are stripped by the
   validator and tick parser)
 - Validated equivalent to Hermes 4 14B BF16 abliterated Q6 on the
   Phase 18 persona/contract eval (both 12.0); Hermes 4
@@ -849,7 +869,7 @@ General project conventions:
 
 ## Roadmap
 
-Completed through Phase 20:
+Completed through Phase 21:
 
 - Phase 1-15: persistent persona, memory, continuity, claims, self-model, awareness, initiative, idle runtime, action planning, longitudinal autonomy, audit-reviewed state application.
 - Phase 16: cognition-engine reframe, model/prompt bake-off, model-idle cognition, strict JSON parsing, chat-template path, Actor/Observer/Governor contract.
@@ -857,14 +877,21 @@ Completed through Phase 20:
 - Phase 18: PRIMARY_DRIVE installation, NOVA_SOUL.md persona card, inward self-state tool loop (recall_self, reflect, emit_heartbeat, update_self_model), gap-assessment heartbeat, self-context hooks.
 - Phase 19: self-directed instruction write path (operator-applied), always-on daemon (Unix socket, systemd unit, attach REPL), autonomous self-state tick loop.
 - Phase 20: tick quality analyzer, Qwen 3 14B transition and think-block handling, 51-tick overnight daemon stability run.
+- Phase 21: Exploratory Register (`docs/plans/PHASE21_PLAN.txt` and `docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt`) — gate assertions, never inquiry; never delete anything. All five stages implemented: lifecycle/journal/budgets, register-aware Governor/Observer, quarantine and measurement corrections, the claim ladder, and a live evaluation run confirming the membrane holds under real model output. Closed with deviations 2026-07-10; non-blocking findings F1-F4 carried forward.
 
 Active:
 
-- Phase 21: Exploratory Register (`docs/plans/PHASE21_PLAN.txt` and `docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt`) — gate assertions, never inquiry; never delete anything. Stage 21.1 (lifecycle/journal/budgets) implemented; 21.2 register-aware Governor/Observer, 21.3 quarantine and measurement, 21.4 claim ladder, and 21.5 live evaluation protocol are planned in committed stage docs.
+- Phase 22: live testing (`docs/plans/PHASE22_PLAN.txt`) — the daemon
+  running persistently, register-aware baseline collection over real
+  calendar time. Stage 22.1 (findings novelty + export dedup, F1's
+  fix) closed; Stage 22.2's live-daemon infrastructure is running
+  unattended since 2026-07-11; Stages 22.3 (live sessions) and 22.4
+  (ladder progression + claim-class mapper, F3's fix) are planned in
+  committed stage docs; Stage 22.5 (phase closure) is reserved for the
+  operator.
 
 Queued:
 
-- Phase 22: live testing — real sessions with the daemon running persistently, register-aware baseline collection.
 - Phase 23+: optional QLoRA sleep cycle, bound by the corpus policy in the exploratory register contract (training corpus stratified by register; never trained solely on Governor-passed output).
 
 Voice, TTS, and STT remain out of roadmap until the non-voice runtime closes.
