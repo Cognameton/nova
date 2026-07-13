@@ -18,40 +18,51 @@ recording any deviations.
 
 
 MODEL ALLOCATION (explicit, to prevent the confusion that happened
-  once already during this phase's kickoff)
+  once already during this phase's kickoff — UPDATED 2026-07-12, see
+  note below)
 ---------------------------------------------------------------------
 
   Stage 22.1: implemented by Fable 5 (2026-07-11, commit c512988).
   Stage 22.2: infrastructure (systemd/lingering setup, live config,
-    rotation wrapper) done by Fable 5 (2026-07-11-12) because the
-    operator's Fable access window (~24h remaining as of 2026-07-11
-    22:00 CDT) closes before Stage 22.2's own 3-calendar-day minimum
-    can elapse — see the arithmetic below. Fable could set the daemon
-    running but cannot be the one to evaluate 3 days of data from
-    inside a 24-hour window.
+    rotation wrapper) done by Fable 5 (2026-07-11-12).
+
+  UPDATE 2026-07-12: the reasoning below this line (written 2026-07-11,
+  under a ~24h remaining Fable-access assumption) has been overtaken by
+  events — the operator reports Fable access has been extended through
+  2026-07-19. That comfortably contains Stage 22.2's own 3-calendar-day
+  minimum (data started accumulating 2026-07-11 22:01 CDT; the
+  evaluation gate opens ~2026-07-14 evening — see the arithmetic
+  paragraph, which is still correct as *arithmetic*, just no longer
+  proof that Fable is unavailable). Do NOT assume Fable is unavailable
+  for 22.2's evaluation, 22.3, 22.4, or even 22.5 on the basis of the
+  paragraph below alone — re-confirm the actual current access window
+  with the operator at the start of whatever session picks this up
+  next, the same way this correction had to happen once already.
+  Access-window end dates in this project have moved twice now; treat
+  any previously recorded date as provisional.
+
+  Original reasoning (2026-07-11, now superseded by the note above but
+  kept for the arithmetic, which remains valid in general — a window
+  that DOES turn out to be short still cannot contain the 3-day
+  minimum):
+
   Stage 22.2 (evaluation), 22.3, 22.4: intended for Sonnet/Opus,
     picked up once enough live data has accumulated (22.2's own
     Definition of Done) and whenever the operator next opens a
     session. No Fable-specific step is required for any of these
     three — any model can execute them following their stage docs.
   Stage 22.5 (RESERVED): the operator, with the heaviest model
-    available at that time. Because of the calendar-day arithmetic
-    above, this will almost certainly be Opus, not Fable, regardless
-    of how the operator's plan or access renews — do not assume Fable
-    will be reachable for 22.5 just because it planned this phase.
-    If Fable happens to still be reachable when 22.5 is due, that is
-    a bonus, not the plan.
+    available at that time.
 
   The arithmetic, stated once so it never needs re-deriving: Stage
   22.2 requires >= 3 calendar days of daemon-cadence data before its
   own Definition of Done can be evaluated (temporal realism is the
   entire point of the stage — compressing it defeats it, per Phase
   21's own "a record that would rather be true than tidy" principle).
-  A ~24-hour model-access window cannot contain a 3-day minimum. This
-  was foreseen when this plan was first written ("Fable if the access
-  window allows; otherwise Opus") — it is not a new problem, and
-  finding it out live in Stage 22.2 is the correct time to have found
-  it, not a planning failure.
+  A model-access window shorter than 3 days cannot contain that
+  minimum — check the ACTUAL current window before assuming any model
+  is or isn't available for a given stage; do not trust a previously
+  recorded end date without re-confirming.
 
 
 ENTRY CRITERIA
