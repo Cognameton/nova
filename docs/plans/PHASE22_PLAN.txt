@@ -171,17 +171,37 @@ CODE FACTS (updated 2026-07-11, post-Stage-22.1 close, commit c512988
     override harshness (Stage 22.5 policy question) — all detailed in
     PHASE21_STAGE21_5_CLOSURE.txt.
   - Live findings from 22.2's evaluation (2026-07-14/15, see its own
-    closure note in PHASE22_STAGE22_2_OVERNIGHT_DAEMON_CADENCE.txt):
-    F5 exploratory-register parse_ok trails assertion (84.4% vs 100%
-    over 861 live ticks) — all 67 quarantine records are exploratory-
-    side tick_parse_failure. F6 Nova has closed ZERO live explorations
+    closure note + 2026-07-15 root-cause addendum in
+    PHASE22_STAGE22_2_OVERNIGHT_DAEMON_CADENCE.txt): F5 exploratory-
+    register parse_ok trails assertion (84.4% vs 100% over 861 live
+    ticks) — all 67 quarantine records are exploratory-side
+    tick_parse_failure. F6 Nova has closed ZERO live explorations
     herself in 3.25 days (0/39 closures were closed_by_nova, all were
     budget_exhausted) — this is the OPPOSITE of Phase 21's F2 instant-
     close attractor, and it means Stage 22.1's dedup fix has never
     actually been exercised live (no findings have ever been
     exported). F6 blocks Stage 22.4's ladder-progression procedure
-    from having real close-with-findings data to work with until it's
-    understood or budgets are revisited.
+    from having real close-with-findings data to work with. ROOT CAUSE
+    CONFIRMED (not a guess — traced through code + quarantine data):
+    F5 and F6 are ONE bug. `/no_think` only soft-suppresses Qwen 3's
+    thinking mode; the exploratory-register prompt is structurally
+    more deliberative (6 tool options incl. close_exploration, budget/
+    recall context, the novelty rule) and more often triggers a real
+    `<think>` block; self_state_tick has NO retry on parse failure
+    (runtime.py:972); under the shared max_tokens=512, a long think
+    block either consumes the whole budget or leaves the JSON
+    truncated mid-value — either way the tick is quarantined and
+    nothing executes. A recovered quarantined record shows Nova
+    explicitly weighing closing at tick 11 of 12 before the response
+    truncates. Quarantined ticks still charge the exploration's
+    budget, and the wall-clock check (3600s vs a 300s daemon interval)
+    trips before a 12th tick can start — which is why all 39 closures
+    show ticks_used=11/12 exactly, never a spread. No fix has been
+    applied; candidate directions (register-specific max_tokens, a
+    retry on parse failure, loosening wall_clock_seconds relative to
+    max_ticks, firmer thinking-suppression) are listed in the addendum
+    but NOT decided — needs an explicit operator/planning decision and
+    its own stage doc before any code changes.
 
 
 STAGES

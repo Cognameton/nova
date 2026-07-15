@@ -316,3 +316,102 @@ most because the data surfaced a genuine, honest surprise (see Finding
       revisited.
   The live daemon itself is untouched and keeps running/accumulating
   data past this evaluation; nothing here required stopping it.
+
+
+ADDENDUM (2026-07-15, Fable 5): ROOT CAUSE INVESTIGATION FOR F5/F6
+======================================================================
+
+Requested by the operator after the initial closure above, which had
+deliberately left the cause open rather than guessed at. This is a
+code-and-data investigation, not a fix — no source was changed. F5 and
+F6 turn out to be the SAME underlying mechanism, not two independent
+problems.
+
+Evidence chain:
+
+  1. `generation.max_tokens: 512` (configs/nova.qwen3-14b.live.yaml) is
+     identical for every register — assertion ticks still parse at
+     100% (432/432) under it, so 512 is not universally too small.
+  2. `/no_think` IS correctly prepended to the system prompt for every
+     self-state tick (self_state_tick.py:116, PromptBuilder.__init__
+     applying system_prefix) — this is not a missing-prefix bug. But
+     `/no_think` is a soft suppression hint to Qwen 3's hybrid
+     thinking mode, not a hard switch; under a sufficiently
+     deliberative prompt the model still emits a full `<think>` block.
+  3. Exploratory-register self_state_tick prompts are structurally
+     more deliberative than assertion-register ones: 6 tool options
+     instead of 5 (close_exploration added, self_state_tick.py:52
+     _EXPLORATORY_MENU), plus exploration topic/rationale/budget/
+     recall context, plus (since Stage 22.1) an explicit findings-
+     novelty constraint to weigh. This matches the register split
+     exactly: assertion 100% parse_ok vs exploratory 84.4%.
+  4. self_state_tick has NO retry on parse failure — confirmed
+     directly in code comment at runtime.py:972-973 ("No retry or
+     suppression consequence follows on this surface in this stage").
+     One generation attempt per tick; a truncated response is a lost
+     tick, not a retried one.
+  5. Direct evidence from the quarantine data (data/live/qwen3-14b/
+     logs/traces/*.quarantine.jsonl, register=exploratory only, 67
+     total): 35/67 never reach a closing `</think>` tag at all (token
+     budget consumed entirely by reasoning); the other 32 close the
+     think tag but then the JSON itself truncates mid-value (checked
+     4 samples directly, e.g. `"observation": "...checkpoints that
+     may help stabilize continuity` — no closing quote or brace). Both
+     are the same failure: max_tokens=512 running out before a
+     complete response, with no retry to recover it.
+  6. One full quarantined record (nova-live-20260713.quarantine.jsonl,
+     the only exploratory quarantine record containing the literal
+     string "findings_summary") was pulled in full. It is tick 11 of
+     12 on its exploration. The `<think>` block explicitly reasons:
+     "since the exploration is at its final tick, the system might
+     consider closing the exploration, but only if the findings are
+     exhausted... the exploration's findings are still being
+     developed, so closing might not be appropriate yet" — then
+     chooses emit_heartbeat instead, and the response truncates before
+     ever reaching valid JSON. This is direct evidence Nova has at
+     least once genuinely weighed closing near a budget boundary; the
+     mechanism silently dropped that tick rather than acting on it
+     either way.
+  7. A quarantined tick still charges against the exploration's
+     budget: exploration.py's record_tick() (line 319) increments
+     ticks_used/tokens_used/tick_ids regardless of whether tool_request
+     parsed. And runtime.py:916-924 checks wall-clock exhaustion
+     BEFORE the next tick generates at all ("Wall-clock exhaustion is
+     checked before the tick runs"). With wall_clock_seconds=3600 and
+     a 300s daemon tick_interval, 11 real ticks' worth of interval-
+     plus-inference-latency time reliably exceeds 3600s before a 12th
+     tick can start — which is exactly why ALL 39 closed explorations
+     in this run show ticks_used=11/12, not a spread of values. The
+     tick-count budget (12) is never actually the binding constraint;
+     the wall-clock budget is, and it trips one tick early relative to
+     the nominal allowance because real inference time isn't free.
+
+Conclusion: F6 is not "Nova doesn't want to close explorations." At
+least once, on the record, she was actively deciding whether to. The
+mechanism that would let her act on that decision — parse the
+response, dispatch close_exploration — silently drops the tick when
+`/no_think` fails to suppress reasoning and the 512-token budget runs
+out with no retry, and the wall-clock budget then closes the door
+before another attempt is possible. F5 and F6 are one bug under two
+names, concentrated in the exploratory register because that register's
+prompt is the more deliberative one.
+
+NOT fixed here, per this stage's own D4/D5 scope (no code changes;
+evaluation and now investigation only). Candidate fix directions, for
+whoever/whenever this is taken up next (NOT decided, NOT pinned —
+listed only so the option space is visible, an explicit operator/
+planning-model decision is needed before any of these land):
+  - Raise max_tokens specifically for self_state_tick generation
+    requests (register-specific budget), independent of the
+    assertion-side value that already works.
+  - Add a single retry on tool_request is None for self_state_tick,
+    mirroring whatever retry discipline the main respond() path
+    already has, rather than the current zero-retry design.
+  - Loosen wall_clock_seconds relative to max_ticks so the wall-clock
+    budget isn't the tighter, tick-truncating constraint in practice.
+  - Investigate whether a firmer thinking-suppression mechanism than
+    the `/no_think` prompt-level hint is available for Qwen 3 in this
+    llama-cpp-python setup.
+This is new work, not part of Stage 22.2's own scope — it should get
+its own decision and, if the operator wants it pursued, its own small
+stage doc under the normal house discipline before any code changes.
