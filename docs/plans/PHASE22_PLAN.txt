@@ -201,11 +201,31 @@ CODE FACTS (updated 2026-07-11, post-Stage-22.1 close, commit c512988
     retry on parse failure, loosening wall_clock_seconds relative to
     max_ticks, firmer thinking-suppression) are listed in the addendum
     but NOT decided — needs an explicit operator/planning decision and
-    its own stage doc before any code changes.
+    its own stage doc before any code changes. UPDATE 2026-07-15:
+    Tier 1 (the native enable_thinking fix) is now IMPLEMENTED — see
+    Stage 22.2b below. Tier 1b and Tier 2 remain undecided.
 
 
 STAGES
 ------
+
+Stage 22.2b: Native Thinking-Mode Suppression (F5/F6 Tier 1 root fix)
+  — CODE LANDED, NOT YET LIVE
+  Commit 2f306f3, 2026-07-15 (Fable 5). Fully pinned in
+  docs/plans/PHASE22_STAGE22_2B_NATIVE_THINKING_SUPPRESSION.txt.
+  Replaces chat_format="chatml" (generic, discards the model's own
+  template) with a Jinja2ChatFormatter built from the GGUF's own
+  embedded tokenizer.chat_template + enable_thinking=False passed at
+  render time — the model's real template-level switch, not a text
+  hint. Falls back to the old create_chat_completion path unchanged
+  when no embedded template exists. Suite 902 -> 912 (new coverage for
+  a previously-untested backend module). NOT YET LIVE: the running
+  nova-live.service process still has the old backend code loaded in
+  memory and won't pick this up until restarted; no real-model smoke
+  test has run either (live daemon holds ~10GB on each RTX 3060,
+  leaving no VRAM for a second model load). Both are separate,
+  explicit operator decisions — see the stage doc's closure note for
+  the exact sequencing.
 
 Stage 22.1: Findings Novelty and Export Dedup (F1 hard + F2) — CLOSED
   Commit c512988, 2026-07-11 (Fable 5). Prompt-level novelty rule for
