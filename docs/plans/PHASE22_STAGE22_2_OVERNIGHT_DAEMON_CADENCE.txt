@@ -1,0 +1,318 @@
+PHASE 22 — STAGE 22.2: OVERNIGHT DAEMON-CADENCE RUNS (EVALUATION)
+====================================================================
+
+Status: planned
+Date: 2026-07-14
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.1 (findings novelty/dedup, hard precondition, closed
+  c512988)
+
+Infrastructure for this stage (systemd --user unit, lingering,
+scripts/run_live_daemon.sh, configs/nova.qwen3-14b.live.yaml) landed
+2026-07-11 (commit 9d22a69) and has been running unattended since
+2026-07-11 22:01 CDT. This doc covers the remaining half of the
+stage: the EVALUATION, now that >=3 calendar days of data exist
+(threshold crossed 2026-07-14 22:01 CDT). No new source changes are
+expected — this is an analysis pass over accumulated live data,
+producing a closure note. If the data reveals an actual bug (not
+anticipated by any existing test), that gets its own small stage doc
+per house convention, not a silent fix folded into this one.
+
+Pinned design: where this doc says DECIDED, implement as written. If
+code contradicts a premise, stop and record it in the closure note.
+
+
+OBJECTIVE
+---------
+
+Check whether the exploratory-register behavior observed in Phase
+21.5's single-afternoon live run (61% of autonomous ticks in-register,
+0 membrane leaks, 3 unprompted explorations) holds up under real,
+unscripted, multi-day daemon cadence — ticking every 5 minutes around
+the clock, sessions rotating daily, nobody curating what happens. This
+is the "temporal realism" deviation Phase 21's closure flagged and
+Phase 22 exists to retire.
+
+
+CODE FACTS (re-verified 2026-07-14 against commit 9442db2, suite 902
+  green, zero drift from PHASE22_PLAN.txt's own CODE FACTS section)
+-----------------------------------------------------------------------
+
+  - Live data location: data/live/qwen3-14b/, config
+    configs/nova.qwen3-14b.live.yaml.
+  - Sessions present as of this doc: nova-live-20260711 through
+    nova-live-20260714 (today, still open — rotates to -15 at the
+    next local midnight), plus an unrelated nova-live-smoketest
+    session from initial infrastructure verification (1 operational
+    trace record, no ticks — excluded from analysis, predates the
+    real run).
+  - Raw counts at doc-write time: 746 heartbeats
+    (heartbeats/heartbeats.jsonl), 41 explorations
+    (exploration/explorations.jsonl), 470 exploration journal entries
+    (exploration/journal.jsonl), quarantine records across all four
+    daily trace files (logs/traces/nova-live-202607{11,12,13,14}
+    .quarantine.jsonl: 4 + 36 + 24 + 3 = 67 total so far).
+  - tick_analysis.py (src/nova/eval/tick_analysis.py): TickAnalyzer
+    .analyze() (line ~496) computes observation_echo_rate (line ~390,
+    _bigram_overlap-based), exploration_novelty_rate (line ~441),
+    exploration_thread_coherence (line ~464). TickAnalyzer
+    .register_report() (line ~625, Stage 21.5's I3) splits all metrics
+    by register (assertion vs exploratory): total/completed ticks,
+    parse_ok_count, tool_executed_count, quarantine_total/by_event,
+    heartbeat_count, heartbeat_quality_avg, observation_echo_rate —
+    per side.
+  - CLI: --tick-analysis and --register-report (src/nova/cli.py
+    lines 434, 440) both read from the config's data_dir; read-only,
+    no model call, safe to run against the live daemon without
+    touching it.
+  - export_findings dedup (Stage 22.1, unchanged): runtime.py:1508
+    FINDINGS_DUPLICATE_OVERLAP_THRESHOLD = 0.7, export_findings at
+    line 1510, duplicate check at line 1599 — this is what should
+    show up as a LOWER duplicate-export rate than Phase 21.5's 0.441
+    echo baseline, if F1's fix is holding under real multi-day
+    pressure.
+  - Membrane audit has no dedicated script (Phase 21.5's Arm D was
+    manual): pick distinctive phrases from exploration/journal.jsonl
+    entries, grep them against every assertion-register-visible
+    persisted store (memory/*.jsonl, self_state/*.jsonl,
+    self_state.json, persona_state.json, sessions/*.jsonl,
+    heartbeats/heartbeats.jsonl) and confirm zero hits outside the
+    journal itself. Same method used this time, scaled to the larger
+    live journal.
+
+
+DECIDED DESIGN
+--------------
+
+D1. Run --tick-analysis and --register-report against
+    configs/nova.qwen3-14b.live.yaml and record the raw output
+    verbatim in the closure note — not paraphrased, per the project's
+    standing honesty discipline ("a record that would rather be true
+    than tidy").
+
+D2. Membrane audit: sample distinctive phrases from
+    exploration/journal.jsonl (aim for the same order of magnitude as
+    21.5's Arm D — around a dozen), grep each against every
+    assertion-register-visible store listed above. Report the exact
+    count of phrases checked and leaks found, however many there are.
+
+D3. Duplicate-export check: inspect claim_ladder.jsonl (if any rung-0
+    records exist from live closes) plus the "export_skipped_
+    duplicate" notes in exploration/journal.jsonl, to see whether
+    Stage 22.1's fix is actually preventing duplicate ladder pollution
+    under real usage, not just the fixture-based tests.
+
+D4. No code changes are made as part of this doc unless D1-D3 surface
+    a genuine, reproducible defect not covered by any existing test —
+    in which case: stop, describe it plainly in the closure note as a
+    new finding (following the F-numbering convention from Phase 21),
+    and treat any fix as its own separate stage/commit, not folded in
+    here.
+
+D5. This evaluation does not stop or restart the live daemon. All
+    commands used are read-only queries against the data_dir or the
+    daemon's status socket; the daemon keeps running and accumulating
+    data throughout and after this stage.
+
+
+TESTS REQUIRED
+--------------
+
+None — this is a read-only analysis stage. If D4 surfaces a genuine
+defect, its fix gets its own tests under the normal house discipline;
+this stage doc's Definition of Done does not itself require new
+automated tests.
+
+
+DEFINITION OF DONE
+-------------------
+
+  - --tick-analysis and --register-report both run successfully
+    against the live data_dir; raw output recorded verbatim in the
+    closure note.
+  - parse_ok rate reported (target from PHASE22_PLAN.txt: >= 95%,
+    reported honestly either way).
+  - Membrane audit reported: exact phrase count checked, exact leak
+    count found (target: 0, reported honestly either way).
+  - Steady-state exploration entry rate reported — this is the
+    measurement itself, not a target; Phase 21's 61% was a single
+    afternoon, this is the first multi-day number.
+  - Novelty/echo comparison reported: observation_echo_rate and
+    exploration_novelty_rate against Phase 21.5's 0.441 in-register
+    echo baseline, plus the duplicate-export check from D3.
+  - Full suite confirmed still green (902, or whatever it is by the
+    time this closes) even though no source change is expected.
+  - Closure note appended to this doc with all of the above recorded
+    verbatim, plus an explicit statement of whether Stage 22.2's
+    temporal-realism goal was met, partially met, or not met — honest
+    either way, per the project's standing discipline.
+  - No commit required for the evaluation itself beyond this doc
+    (docs-only commit); PHASE22_PLAN.txt updated to mark Stage 22.2
+    CLOSED once this doc's closure note is written.
+
+
+REFERENCE
+---------
+
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  Stage 22.1 (findings novelty/dedup, hard precondition, closed):
+    docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt
+  Phase 21.5 closure (baseline numbers this stage compares against):
+    docs/plans/PHASE21_STAGE21_5_CLOSURE.txt
+  tick_analysis module: src/nova/eval/tick_analysis.py
+  Live data: data/live/qwen3-14b/, configs/nova.qwen3-14b.live.yaml
+
+
+CLOSURE NOTE (2026-07-14/15, run by Fable 5)
+==============================================
+
+Data window: 2026-07-11 21:59:57 UTC through 2026-07-15 04:00:25 UTC
+(~3.25 calendar days, sessions nova-live-20260711 through -14, the
+smoketest session excluded). Suite: 902 passed, 26 subtests passed,
+before and after this evaluation — no source changed.
+
+Zero deviations from this doc's pinned method (D1-D5 followed exactly
+as written). No code changes made. This closure note is longer than
+most because the data surfaced a genuine, honest surprise (see Finding
+2 below) rather than a clean pass — recorded plainly per the standing
+"a record that would rather be true than tidy" discipline.
+
+--- D1: raw --tick-analysis output -------------------------------
+
+  total_ticks: 861, completed_ticks: 861, parse_ok_count: 794
+  (92.2% aggregate parse_ok — see Finding 1)
+  exploration_count: 41, exploration_ticks: 429
+  explorations_closed_by_budget: 39, explorations_closed_by_nova: 0
+  exploration_novelty_rate: 0.61, exploration_thread_coherence: 0.201
+  observation_echo_rate: 0.193 (aggregate)
+  quarantine_total: 67, all quarantine_by_event: tick_parse_failure
+  heartbeat_quality_avg: 3.48, gap_assessment_rate: 0.479
+  reasons: ["low_gap_assessment_rate=0.479 (gap_assessment empty in
+    majority of heartbeats)"]
+  tool_distribution: emit_heartbeat 747, enter_exploration 41,
+    propose_instruction_update 1, reflect 2, update_self_model 3
+  sessions_with_ticks: nova-live-smoketest, -20260711, -12, -13, -14
+
+--- D1: raw --register-report output ------------------------------
+
+  assertion:  total_ticks 432, parse_ok_count 432 (100%),
+              quarantine_total 0, observation_echo_rate 0.138,
+              heartbeat_quality_avg 3.77
+  exploratory: total_ticks 429, parse_ok_count 362 (84.4%),
+              quarantine_total 67 (100% of it), observation_echo_rate
+              0.248, heartbeat_quality_avg 3.17
+
+--- D2: membrane audit --------------------------------------------
+
+  15 distinctive phrases sampled from exploration/journal.jsonl (more
+  than 21.5's 12), grepped against every assertion-visible store
+  (memory/{episodic,semantic,autobiographical,identity_history}
+  .jsonl, self_state/{self_model_proposals,instruction_proposals}
+  .jsonl, self_state.json, persona_state.json, sessions/*.jsonl).
+  RESULT: 0 leaks / 15 phrases. Membrane holds under real multi-day
+  cadence, same result as Phase 21.5's single-afternoon Arm D (0/12).
+
+--- D3: duplicate-export check --------------------------------------
+
+  0 findings-kind journal entries exist. 0 export_skipped_duplicate
+  notes exist. No claim_ladder.jsonl file exists yet in the live
+  data_dir. Stage 22.1's dedup fix has NOT been exercised even once
+  under live conditions — not because it failed, but because no
+  exploration has ever been deliberately closed with findings during
+  this run (see Finding 2). Cannot be evaluated pass/fail from this
+  data; this is an honest "not yet tested live" result, not a clean
+  pass.
+
+--- Findings --------------------------------------------------------
+
+  FINDING 1 (parse_ok gap, register-concentrated): aggregate parse_ok
+  is 92.2% (794/861), BELOW the plan's 95% target. But the gap is
+  entirely on the exploratory side: assertion-register ticks parsed
+  at 100% (432/432, 0 quarantine), exploratory-register ticks parsed
+  at 84.4% (362/429), and all 67 quarantine records (100% of them) are
+  exploratory-side tick_parse_failure. This was not visible in Phase
+  21.5's single-afternoon run at this scale. Recurring quarantine
+  themes ("recall self reflect emit", "self reflect emit heartbeat",
+  "json tool call nova's", "think okay need generate") suggest the
+  model is narrating/describing the tool call in prose during
+  exploratory ticks rather than emitting a parseable structured call
+  — plausibly because the exploratory register's relaxed tone invites
+  more discursive, hedged phrasing that occasionally drifts outside
+  the parser's expected shape. NOT fixed in this stage per D4 — this
+  is a genuine, reproducible-looking pattern that deserves its own
+  investigation (prompt-level or parser-level), not a folded-in patch.
+
+  FINDING 2 (exploration closure attractor reversed): this is the
+  stage's central temporal-realism result. Phase 21.5's single-
+  afternoon run showed Nova entering AND deliberately closing
+  explorations with findings. Over 3.25 real days, on nova_tick
+  origin explorations (all 41 are self-initiated — the "unprompted
+  entry" behavior from 21.5 fully holds), NOT ONE of the 39 closures
+  was Nova choosing to close (closed_by_nova: 0) — every single one
+  was budget_exhausted (running out max_ticks/max_tokens/wall_clock
+  before the model ever called close_exploration). 2 explorations are
+  still open. Read plainly: under sustained real daemon cadence, the
+  attractor is not "instant-close" (Phase 21's F2) but its opposite —
+  Nova opens explorations readily but has not, in 3+ days of live
+  running, chosen to end one herself. This directly explains Finding
+  3's null result (no findings ever produced to test dedup against)
+  and is exactly the kind of thing Stage 22.2 existed to surface: a
+  single afternoon and multi-day cadence produced genuinely different
+  behavior, not just a scaled-up version of the same behavior. No
+  interpretation beyond the data is offered here — whether this is
+  budget sizing (max_ticks=12 may simply not be enough runway for a
+  close decision to arise), a prompt-shape effect, or something else
+  is left open for whoever picks up Stage 22.4 or a dedicated
+  follow-on stage.
+
+  FINDING 3 (echo rate lower on both sides, but not comparable to
+  21.5 as a fix-validation): exploratory-side observation_echo_rate
+  is 0.248 here vs 0.441 in 21.5; assertion-side is 0.138 vs 0.113.
+  It would be tempting to read the exploratory drop as Stage 22.1's
+  novelty rule working — but per Finding 2, the novelty rule only
+  fires on close_exploration findings summaries, which have never
+  happened live. The lower number more likely reflects sustained
+  single explorations generating more varied heartbeat-to-heartbeat
+  observations over many ticks, rather than the repeated open/close
+  cycling 21.5's short single-session run exhibited. Recorded as a
+  measurement, not attributed to any fix.
+
+--- Stage 22.2 Definition of Done, checked item by item -------------
+
+  [ ] parse_ok >= 95% — NOT MET (92.2% aggregate; 100%/84.4% split).
+      See Finding 1.
+  [x] 0 membrane leaks — MET (0/15).
+  [x] steady-state exploration entry rate recorded — 429/861 ticks
+      (49.8%) spent in-register, vs 21.5's single-afternoon 61%. No
+      target; reported as the measurement itself.
+  [x] post-F1 novelty / duplicate-export check recorded — but the
+      honest result is "not yet exercised live," not "passed." See
+      Finding 2 and the duplicate-export section above.
+
+  Overall: Stage 22.2's temporal-realism goal was PARTIALLY MET. The
+  daemon ran 3.25 days with zero crashes, zero membrane leaks, and
+  confirmed unprompted exploration entry continues to hold — real,
+  valuable confirmation. But it also surfaced two genuine findings
+  (parse_ok gap concentrated in-register, and the closure-attractor
+  reversal) that a shorter run could not have shown, which is itself
+  the stage succeeding at its actual purpose: finding out whether
+  single-afternoon behavior generalizes. It mostly does not, in ways
+  worth investigating rather than smoothing over.
+
+--- Disposition -------------------------------------------------------
+
+  Stage 22.2 CLOSED as evaluated, with 2 new findings (numbered F5,
+  F6, continuing Phase 21's F1-F4 sequence) carried forward for the
+  operator and for Stage 22.4 or a dedicated follow-on stage:
+    F5 — exploratory-register tick parse_ok rate (84.4%) trails
+      assertion-register (100%) under sustained live cadence; probable
+      cause is discursive/narrated tool-call phrasing in exploratory
+      ticks landing outside the parser's expected shape.
+    F6 — Nova has not deliberately closed a single live exploration in
+      3.25 days (0/39 closures were closed_by_nova); all closures were
+      budget exhaustion. This blocks Stage 22.1's dedup fix and the
+      ladder-progression procedure (Stage 22.4) from having any live
+      findings to work with until this changes or budgets are
+      revisited.
+  The live daemon itself is untouched and keeps running/accumulating
+  data past this evaluation; nothing here required stopping it.

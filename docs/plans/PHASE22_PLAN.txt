@@ -170,6 +170,18 @@ CODE FACTS (updated 2026-07-11, post-Stage-22.1 close, commit c512988
     claim_class="" on exported prose (Stage 22.4), F4 assertion-
     override harshness (Stage 22.5 policy question) — all detailed in
     PHASE21_STAGE21_5_CLOSURE.txt.
+  - Live findings from 22.2's evaluation (2026-07-14/15, see its own
+    closure note in PHASE22_STAGE22_2_OVERNIGHT_DAEMON_CADENCE.txt):
+    F5 exploratory-register parse_ok trails assertion (84.4% vs 100%
+    over 861 live ticks) — all 67 quarantine records are exploratory-
+    side tick_parse_failure. F6 Nova has closed ZERO live explorations
+    herself in 3.25 days (0/39 closures were closed_by_nova, all were
+    budget_exhausted) — this is the OPPOSITE of Phase 21's F2 instant-
+    close attractor, and it means Stage 22.1's dedup fix has never
+    actually been exercised live (no findings have ever been
+    exported). F6 blocks Stage 22.4's ladder-progression procedure
+    from having real close-with-findings data to work with until it's
+    understood or budgets are revisited.
 
 
 STAGES
@@ -185,27 +197,20 @@ Stage 22.1: Findings Novelty and Export Dedup (F1 hard + F2) — CLOSED
   Suite 893 -> 902. Closure note in
   docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt.
 
-Stage 22.2: Overnight Daemon-Cadence Runs (temporal realism) — RUNNING
-  Infrastructure landed 2026-07-11 (Fable 5) — see the "Live daemon
-  infrastructure" CODE FACTS entry above for exact paths/commands.
-  Daemon has been ticking since 2026-07-11 22:01 CDT. NOT YET
-  EVALUATED — needs >= 3 calendar days of accumulated data (i.e. not
-  before ~2026-07-14 evening) before its own Definition of Done can be
-  checked:
-    - parse_ok >= 95% across the runs
-    - 0 membrane leaks (re-run the arm-D style audit over live data)
-    - steady-state exploration entry rate recorded (no target — this
-      is the measurement the 61% question needs)
-    - post-F1 novelty: no duplicate rung-0 exports; in-register echo
-      rate reported and compared to 21.5's 0.441
-  Whichever session runs this evaluation should write a proper stage
-  doc first (house pattern) if one doesn't already exist by then,
-  re-verifying the CODE FACTS above (they may have drifted). Check
-  `systemctl --user status nova-live.service` and
-  `--tick-analysis` / `--register-report` against
-  configs/nova.qwen3-14b.live.yaml before assuming continuity — a
-  reboot, a crash-loop, or an unnoticed stop would all be visible
-  there.
+Stage 22.2: Overnight Daemon-Cadence Runs (temporal realism) — CLOSED
+  (EVALUATED, PARTIALLY MET)
+  Infrastructure landed 2026-07-11 (Fable 5); evaluation run 2026-07-14
+  /15 (Fable 5) once the 3-day threshold passed. Full results and raw
+  command output in docs/plans/PHASE22_STAGE22_2_OVERNIGHT_DAEMON_
+  CADENCE.txt's closure note. Headline: 0 membrane leaks (holds);
+  unprompted exploration entry continues (41/41 self-initiated); BUT
+  parse_ok was 92.2% aggregate (below the 95% target), entirely
+  concentrated in the exploratory register (F5); and Nova has not
+  deliberately closed a single live exploration in 3.25 days — every
+  closure was budget exhaustion (F6), meaning Stage 22.1's dedup fix
+  has not yet been exercised live. Daemon is untouched and still
+  running/accumulating data past this evaluation — closing this stage
+  does not stop it.
 
 Stage 22.3: Live Sessions (the phase's namesake) — DOC WRITTEN, NOT
   YET RUN
@@ -230,8 +235,13 @@ Stage 22.4: Ladder Progression + Claim-Class Mapper (F3) — DOC
   export_findings's claim_class assignment only; (b) the ladder-
   progression procedure itself (verify_l1/l2 over accumulated live
   candidates, first genuine promotion if evidence holds, always
-  operator-approved) — needs real multi-day data, so effectively
-  blocked on the same calendar-day minimum as Stage 22.2's evaluation.
+  operator-approved) — needs real multi-day data. UPDATE 2026-07-15:
+  the calendar-day minimum has now passed, but part (b) is blocked on
+  a different problem — Stage 22.2's evaluation found F6 (zero live
+  exploration closures in 3.25 days; every one so far was budget
+  exhaustion). There are no live findings/rung-0 records to verify_l1
+  against yet. Part (a), the F3 code fix, is unaffected and can still
+  land any time.
 
 Stage 22.5: Phase Closure and Reassessment — RESERVED
   For the operator with the heaviest available model (Fable if the
@@ -285,6 +295,8 @@ REFERENCE
     docs/plans/PHASE21_STAGE21_5_CLOSURE.txt
   Contract: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
   Stage 22.1 doc (closed): docs/plans/PHASE22_STAGE22_1_FINDINGS_NOVELTY.txt
+  Stage 22.2 doc (closed, evaluated, findings F5/F6):
+    docs/plans/PHASE22_STAGE22_2_OVERNIGHT_DAEMON_CADENCE.txt
   Stage 22.3 doc (pinned, not yet run):
     docs/plans/PHASE22_STAGE22_3_LIVE_SESSIONS.txt
   Stage 22.4 doc (pinned, not yet run):
