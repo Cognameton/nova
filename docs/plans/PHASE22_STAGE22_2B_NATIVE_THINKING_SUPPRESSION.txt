@@ -1,0 +1,340 @@
+PHASE 22 — STAGE 22.2b: NATIVE THINKING-MODE SUPPRESSION (F5/F6 ROOT FIX)
+============================================================================
+
+Status: planned
+Date: 2026-07-15
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.2 (overnight daemon-cadence runs, closed, evaluated,
+  root-cause addendum in PHASE22_STAGE22_2_OVERNIGHT_DAEMON_CADENCE.txt)
+
+This stage implements Tier 1 of the three-tier fix plan the operator
+approved for F5/F6: replace the text-level `/no_think` hint with
+Qwen 3's actual native `enable_thinking=False` template mechanism.
+Tier 1b (wall_clock_seconds/max_ticks reconciliation) and Tier 2
+(self_state_tick retry-on-parse-failure, mirroring respond()'s
+existing pattern) are explicitly OUT OF SCOPE for this stage — the
+operator scoped this session to Tier 1 only ("Tier 1 fix for now").
+
+Pinned design: where this doc says DECIDED, implement as written. If
+code contradicts a premise, stop and record it in the closure note.
+
+
+OBJECTIVE
+---------
+
+Stop relying on a text-level `/no_think` hint (unreliable, soft,
+unenforced) and instead invoke the model's actual template-level
+thinking-suppression switch, using the chat template already embedded
+in the GGUF file. This fixes the root cause identified in Stage 22.2's
+addendum: `LlamaCppBackend` currently forces `chat_format="chatml"`
+(a generic, hardcoded string formatter), which discards the model's
+own embedded template and therefore never gives it the chance to
+honor `enable_thinking=False` structurally.
+
+
+CODE FACTS (verified 2026-07-15 against commit 53261f1, suite 902
+  green)
+-----------------------------------------------------------------------
+
+  - src/nova/inference/llama_cpp_backend.py is the only implementation
+    of the inference backend interface; `load()` (line 24) constructs
+    `Llama(..., chat_format=chat_format, ...)` where chat_format comes
+    from config.model.chat_format (currently the string "chatml" for
+    both configs/nova.qwen3-14b.live.yaml and .phase20.yaml).
+    `generate()` (line 71) branches on `request.messages`: non-empty
+    messages -> `self._llm.create_chat_completion(messages=...)`;
+    empty/no messages -> `self._llm(request.prompt, ...)` (raw
+    completion). All three real call sites (model_self_state_tick,
+    model_idle_tick, respond()) always build a non-empty `messages`
+    list via their own *_engine.build_messages()/composer.compose()
+    methods — the raw-completion "no messages" branch is exercised
+    only by direct prompt-only calls, not by the live tick loop.
+  - Confirmed directly against the live model file
+    (/home/head-node/Dev/ai-lab/models/Qwen3_14b.gguf, loaded
+    vocab_only=True for inspection, no VRAM used): the GGUF DOES
+    contain its own embedded chat template at metadata key
+    "tokenizer.chat_template" (4116 chars), and that template DOES
+    contain an `enable_thinking` conditional (confirmed via substring
+    check and a live render comparison — see below).
+  - Confirmed via a direct render test (llama_cpp.llama_chat_format.
+    Jinja2ChatFormatter, constructed from that exact template string):
+    rendering the SAME messages list with `enable_thinking=False`
+    passed as a formatter kwarg produces a prompt ending in
+    `<|im_start|>assistant\n<think>\n\n</think>\n\n` — i.e. the
+    template pre-seeds an ALREADY-CLOSED empty think block into the
+    generation prompt itself. Without that kwarg, the prompt ends
+    directly after `<|im_start|>assistant\n` with no such scaffold —
+    confirming the model is structurally invited to open its own
+    `<think>` block in that case, matching exactly the failure mode
+    documented in 22.2's addendum.
+  - `Llama.create_chat_completion()` (llama_cpp 0.3.20, installed) has
+    a CLOSED keyword signature — no `**kwargs` passthrough. There is
+    no way to pass `enable_thinking=False` through it directly; this
+    is why the fix renders the prompt string itself via
+    Jinja2ChatFormatter and calls the RAW completion API
+    (`self._llm(prompt_string, ...)`) instead of
+    `create_chat_completion`, exactly mirroring the existing
+    "completion" mode branch already present in generate() for the
+    no-messages case.
+  - Token strings needed for Jinja2ChatFormatter's constructor
+    (eos_token, bos_token) are NOT directly present as metadata
+    string values — metadata only has
+    "tokenizer.ggml.eos_token_id"=151645 and
+    "tokenizer.ggml.bos_token_id"=151643 (integers). Confirmed the
+    correct extraction method: `self._llm.detokenize([token_id],
+    special=True).decode(...)` (special=True is required — without it
+    special/control tokens detokenize to empty bytes). Verified:
+    eos -> "<|im_end|>" (matches the existing configured `stop` list
+    in both live/phase20 configs exactly), bos -> "<|endoftext|>".
+  - `Jinja2ChatFormatter.__call__` (llama_cpp/llama_chat_format.py)
+    accepts `**kwargs` and forwards them directly into
+    `self._environment.render(messages=..., eos_token=..., ...,
+    **kwargs)` — this is how `enable_thinking=False` reaches the
+    template's own `{% if enable_thinking is defined and
+    enable_thinking is false %}` branch. Returns
+    `ChatFormatterResponse(prompt: str, stop: list[str], ...)` — a
+    plain prompt string plus a stop-token list (`[eos_token]`), ready
+    to feed directly into the raw completion API.
+  - No existing test file covers src/nova/inference/
+    llama_cpp_backend.py at all (confirmed via search) — this stage
+    adds the first one, mocking `llama_cpp.Llama` (patched at
+    `llama_cpp.Llama` since `load()` does a local
+    `from llama_cpp import Llama` import at call time).
+  - Operational constraint (checked via nvidia-smi immediately before
+    writing this doc): the live daemon (nova-live.service) currently
+    holds ~10GB on each of the two RTX 3060s (~1.9GB / ~1.5GB free
+    respectively). A real-model smoke test cannot run concurrently
+    without stopping the live daemon first to free VRAM. This stage's
+    Definition of Done therefore covers fixture-level correctness only
+    (mocked Llama); the real-model smoke test and any live daemon
+    restart are explicitly OUT OF SCOPE here and are a separate,
+    later operator decision.
+
+
+DECIDED DESIGN
+--------------
+
+D1. `LlamaCppBackend.__init__` gains a new instance attribute
+    `self._chat_formatter: Any | None = None`.
+
+D2. New private method `_build_native_chat_formatter(self)`:
+      - Reads `self._llm.metadata.get("tokenizer.chat_template")`.
+      - Returns None immediately if the key is absent or falsy (no
+        embedded template — e.g. a future model swap without one).
+      - Otherwise extracts eos/bos token strings via
+        `self._llm.token_eos()` / `token_bos()` +
+        `self._llm.detokenize([id], special=True).decode("utf-8",
+        "ignore")`, constructs and returns a
+        `llama_cpp.llama_chat_format.Jinja2ChatFormatter(template=...,
+        eos_token=..., bos_token=...)`.
+      - Wrapped in a single try/except Exception, returning None on
+        any failure (metadata shape assumptions are an external-
+        library/file boundary, not an internal invariant — a
+        differently-quantized or differently-converted GGUF is a real
+        possibility this project's own "best model for the job"
+        conversation just raised, and a broken template extraction
+        must degrade gracefully to the existing chat_format="chatml"
+        path, never crash the backend).
+
+D3. `load()` calls `self._chat_formatter =
+    self._build_native_chat_formatter()` once, immediately after
+    constructing `self._llm`. The existing `chat_format=chat_format`
+    argument to `Llama(...)` is UNCHANGED (kept as the fallback path's
+    formatter, still needed when D2 returns None).
+
+D4. `unload()` additionally resets `self._chat_formatter = None`
+    (matches the existing `self._llm = None` reset; cheap, keeps
+    load/unload symmetric).
+
+D5. `generate()`'s branching becomes three-way instead of two-way:
+      - `request.messages` truthy AND `self._chat_formatter is not
+        None`: render via
+        `self._chat_formatter(messages=request.messages,
+        enable_thinking=False)` -> `formatted`. Merge stop tokens:
+        `list(dict.fromkeys(list(formatted.stop or []) +
+        list(request.stop)))` (formatter's own stop token first, then
+        the request's configured stop list, de-duplicated, order
+        preserved). Call
+        `self._llm(formatted.prompt, max_tokens=request.max_tokens,
+        temperature=request.temperature, top_p=request.top_p,
+        stop=stop)`. `mode = "native_template_completion"`.
+      - `request.messages` truthy AND `self._chat_formatter is None`:
+        UNCHANGED existing `create_chat_completion(...)` path.
+        `mode = "chat_completion"` (unchanged).
+      - No messages: UNCHANGED existing raw-completion path.
+        `mode = "completion"` (unchanged).
+    The existing raw_text extraction (`if mode == "chat_completion":
+    ... else: ...`) needs no change — both "completion" and the new
+    "native_template_completion" mode already fall into the existing
+    `else` branch (`first_choice.get("text")`), which is correct for
+    both since both call the same raw completion API shape.
+
+D6. `metadata()` gains one new field:
+    `"native_chat_template": self._chat_formatter is not None` — a
+    direct, cheap way to confirm which path is active without
+    re-deriving it from logs, given this exact ambiguity (is the
+    native switch actually active?) is what caused F5/F6 to go
+    unnoticed in the first place.
+
+D7. `enable_thinking=False` is a hardcoded literal in `generate()`,
+    not a config field. Nova's architecture already treats raw model
+    reasoning as never-authoritative (Actor/Observer/Governor split);
+    suppressing `<think>` output structurally is the intended,
+    permanent behavior, not a tunable — matches "don't add a config
+    knob for a hypothetical future need."
+
+D8. Scope exclusion: no change to wall_clock_seconds/max_ticks budget
+    calibration (Tier 1b), no retry-on-parse-failure addition to
+    self_state_tick (Tier 2), no change to any prompt-building code
+    (self_state_tick.py's `/no_think` prefix stays in place as
+    defense-in-depth — removing it is a separate, later decision once
+    the native switch is proven over real data), no restart of the
+    live daemon, no real-model smoke test in this stage (VRAM
+    constraint documented above).
+
+
+IMPLEMENTATION ORDER
+---------------------
+
+  1. Implement D1-D7 in src/nova/inference/llama_cpp_backend.py.
+  2. New tests/test_llama_cpp_backend.py, mocking llama_cpp.Llama at
+     the import site.
+  3. Full suite green.
+  4. Commit.
+  5. Closure note recording what remains explicitly out of scope
+     (real-model smoke test, live restart, Tier 1b, Tier 2) and what
+     the natural next step is.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_llama_cpp_backend.py (new):
+  - load() builds a native formatter when mocked Llama.metadata
+    contains "tokenizer.chat_template" with a minimal but real Jinja
+    template string containing an enable_thinking conditional; assert
+    backend._chat_formatter is not None afterward.
+  - load() leaves backend._chat_formatter as None when metadata has no
+    "tokenizer.chat_template" key (regression pin for models without
+    an embedded template).
+  - load() leaves backend._chat_formatter as None (graceful fallback,
+    no exception raised) when detokenize()/token_eos()/token_bos()
+    raise — simulates an unusual GGUF that breaks the extraction.
+  - generate() with messages, formatter present: asserts
+    create_chat_completion is NOT called; asserts the mocked Llama's
+    raw __call__ IS called with a prompt string (not a messages list)
+    containing the pre-seeded closed think-block, and enable_thinking
+    reached the formatter (assert on the rendered prompt content,
+    not on an internal call-arg to a private mock).
+  - generate() with messages, formatter present: asserts stop tokens
+    merge the formatter's eos_token with request.stop, deduplicated.
+  - generate() with messages, formatter ABSENT: asserts
+    create_chat_completion IS called (existing behavior, regression
+    pin proving backward compatibility for templateless models).
+  - generate() with no messages (prompt-only): asserts raw completion
+    is used and behavior is byte-for-byte unchanged from before this
+    stage (regression pin for the pre-existing "completion" mode).
+  - metadata()["native_chat_template"] reflects True/False correctly
+    in both formatter-present and formatter-absent cases.
+  - unload() resets both self._llm and self._chat_formatter to None.
+
+
+DEFINITION OF DONE
+-------------------
+
+  - D1-D8 implemented exactly as decided above.
+  - New test file passes; full suite green (baseline: check `git log`
+    for the count at Stage 22.2's close — 902 as of commit 53261f1;
+    this stage should ADD tests, not hold the count flat).
+  - metadata()["native_chat_template"] gives an immediate, code-level
+    answer to "is the native switch active" for any future debugging
+    session — this was itself a gap that let F5/F6 go undiagnosed for
+    3+ days.
+  - Closure note records: whether the fix landed as designed with zero
+    deviations; explicit confirmation that NO real-model smoke test
+    ran and NO live daemon restart happened in this stage (both
+    require a separate operator decision given the VRAM constraint and
+    the live run's continuity); what Tier 1b and Tier 2 still need
+    (unchanged from the 22.2 addendum's candidate-directions list,
+    not re-decided here).
+  - Single commit: "Implement Phase 22 Stage 22.2b — native
+    thinking-mode suppression (F5/F6 Tier 1 root fix)".
+
+
+REFERENCE
+---------
+
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  Root-cause investigation this stage fixes:
+    docs/plans/PHASE22_STAGE22_2_OVERNIGHT_DAEMON_CADENCE.txt
+    (ADDENDUM section)
+  Backend: src/nova/inference/llama_cpp_backend.py
+  llama_cpp chat formatting internals:
+    .venv/lib/python3.12/site-packages/llama_cpp/llama_chat_format.py
+    (Jinja2ChatFormatter, ChatFormatterResponse)
+
+
+CLOSURE NOTE (2026-07-15, Fable 5)
+=====================================
+
+D1-D8 implemented exactly as pinned, one deviation worth recording:
+the tests/ fixture template initially used bare literal whitespace
+adjacent to `{%- if %}`/`{%- endfor %}` tags (e.g.
+`"<|im_start|>assistant\n" "{%- if ... %}"`), which Jinja2's
+lstrip_blocks/trim_blocks (set by Jinja2ChatFormatter's environment)
+silently ate, along with the dash (`-`) trim markers on the tags
+themselves stripping adjacent literal newlines. First test run failed
+on this (the rendered prompt was missing the newline after
+"assistant" and the trailing "\n\n" after "</think>"). Fixed by
+inspecting the REAL Qwen 3 template's own tail (pulled directly from
+the live GGUF's metadata) and matching its pattern: put ALL literal
+text, including embedded newlines, inside `{{- '...' }}` expression
+blocks rather than as bare text next to a tag. This was a test-fixture
+authoring bug, not a bug in the implementation being tested — worth
+recording because it's the second time in this project a test wrote
+the wrong expectation rather than the code being wrong (see Stage
+22.1's closure note for the first), and both times were only caught
+because the fixture was checked against real behavior rather than
+assumed correct on the first write.
+
+No other deviations. Suite: 902 -> 912 (10 new tests in
+tests/test_llama_cpp_backend.py, the first test coverage this backend
+module has ever had).
+
+Explicitly confirmed NOT done in this stage, per its own scope:
+  - No real-model smoke test. The live daemon holds ~10GB on each of
+    the two RTX 3060s (checked via nvidia-smi immediately before and
+    again immediately after this stage's code changes — unchanged,
+    confirming the daemon was never touched); there is not enough free
+    VRAM (~1.9GB / ~1.5GB) to load a second 14B model alongside it.
+    Verifying this fix against the real model requires either
+    momentarily stopping nova-live.service to free VRAM, or waiting
+    for a window where that's acceptable — an operator decision, not
+    made here.
+  - No live daemon restart. nova-live.service confirmed still
+    `active` after this stage's commit, same session, uninterrupted.
+    The code change in this commit has NO EFFECT on the currently
+    running daemon process until it is restarted (Python already has
+    the old llama_cpp_backend.py loaded in memory) — the live run
+    continues on the OLD text-hint-only /no_think behavior until an
+    explicit restart happens, which is intentionally left for a
+    separate decision.
+  - Tier 1b (wall_clock_seconds/max_ticks reconciliation) and Tier 2
+    (self_state_tick retry-on-parse-failure) are unchanged from the
+    22.2 addendum's candidate-directions list — not decided, not
+    implemented, not part of this stage.
+
+Natural next steps, in the order they'd need to happen, NOT started
+here: (1) operator decides when to accept a brief live-daemon pause
+for a real-model smoke test against this fix (a throwaway/side
+data_dir, not the live one, to observe actual generation output and
+confirm metadata()["native_chat_template"] reports True against the
+real GGUF as it did in the vocab_only inspection during this stage's
+CODE FACTS verification); (2) if the smoke test looks right, a
+deliberate live daemon restart to pick up the fix, treated with the
+same care as the original Stage 22.2 rollout; (3) after some real
+live data accumulates under the fix, re-run a parse_ok/quarantine
+check comparable to Stage 22.2's evaluation to confirm F5/F6 actually
+resolve, not just that the code compiles and unit tests pass; (4) Tier
+1b and Tier 2 remain open, undecided, for whenever the operator wants
+to take them up.
