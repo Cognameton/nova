@@ -338,3 +338,77 @@ check comparable to Stage 22.2's evaluation to confirm F5/F6 actually
 resolve, not just that the code compiles and unit tests pass; (4) Tier
 1b and Tier 2 remain open, undecided, for whenever the operator wants
 to take them up.
+
+
+ADDENDUM (2026-07-15, same day, Fable 5): LIVE RESTART + FIRST VERIFICATION
+==============================================================================
+
+Operator explicitly authorized restarting the live daemon now, framed
+deliberately as "not to test the behavior of the 3 day test, but to
+test this uncovered issue" over a shorter window — i.e. a targeted
+bug-fix verification, not a continuation of Stage 22.2's temporal-
+realism methodology. This addendum records what that produced.
+
+Before restart: nova-live.service had just rotated to session
+nova-live-20260715 (0 ticks, clean boundary). `systemctl --user
+restart nova-live.service` was used (not --daemon-stop, since the
+whole point was picking up the new code). KillMode=control-group
+handled it exactly as designed — NovaDaemon._on_sigterm ran its
+graceful shutdown before restart, model reloaded cleanly (confirmed
+via journalctl: "llama_context: n_ctx_seq..." load-complete line),
+same session id reused (today's date unchanged), daemon back to
+`active`/responsive within ~40s.
+
+Verification method: rather than wait for natural cadence, drove ticks
+directly via `--attach` meta-commands (`!tick`, `!explore start`,
+`!explore status`) — a sanctioned, existing mechanism (the same one
+used for Stage 22.2's original infra smoke test), not a new tool.
+One assertion-register tick, then an operator-initiated exploration
+(`!explore start`) driven through its full 12-tick budget via 12
+manual ticks, deliberately chosen to stress-test exactly the
+exploratory-register path where F5/F6 were found.
+
+RESULT: 12/12 ticks in the test exploration parsed cleanly
+(parse_ok=true, zero quarantine events all day) — inspected the raw
+tick_output journal content directly: pure JSON tool calls, zero
+`<think>` tags, zero reasoning narration. This is a stark, visible
+contrast with the pre-fix quarantine samples (which were dominated by
+multi-hundred-word `<think>Okay, I need to...` traces). Tick 12 (the
+exact boundary where all 39 pre-fix explorations were force-closed by
+the wall-clock budget before it could even run) executed successfully
+this time and the model called close_exploration on it —
+**close_reason: "nova_close", the first voluntary live exploration
+close in the project's history.** export_findings ran automatically
+and succeeded (`{"status": "exported", "claim_id":
+"7749de38c2c14aaaac67ce03dbb5c938"}`) — the first-ever rung-0 claim
+ladder record from live data;
+data/live/qwen3-14b/self_state/claim_ladder.jsonl did not exist before
+this. The findings text is fresh, non-echoing prose (Stage 22.1's
+novelty rule, exercised live for the first time and holding). Note:
+claim_class on that record is still "" — expected and correct, that's
+F3's known gap (Stage 22.4's fix), unrelated to and unaffected by this
+stage.
+
+One honest side effect, not a defect in the fix: an exploration from
+YESTERDAY's session (nova-live-20260714, "Quantifying session
+interaction frequency and its impact on identity stability", 6/12
+ticks used) was in flight at restart time and is now permanently
+stranded in status="active" — its session ended, so nothing will ever
+tick it again, and no code path currently interrupts/closes
+explorations orphaned by a cross-session daemon restart. Left as-is
+per "nothing is deleted" — recorded here rather than silently
+patched, since Stage 22.3's D3 discipline (record surprises as
+findings, don't fix mid-stream) applies here too even though this
+isn't Stage 22.3. Not urgent (harmless, doesn't block anything
+observed so far) but worth a line in whichever stage next touches
+daemon restart/session-rotation logic.
+
+This is ONE test exploration, deliberately driven, immediately after
+restart — encouraging and clean, but not yet the multi-hour/natural-
+cadence sample that would confirm this holds under real unattended
+conditions (self-initiated explorations, ordinary daemon-interval
+timing rather than manually-forced back-to-back ticks). The daemon has
+been left running normally (not manually driven) since this test
+concluded, at tick_count=14, to accumulate exactly that kind of
+sample. No further code changes in this addendum — investigation/
+verification only.
