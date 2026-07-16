@@ -412,3 +412,65 @@ been left running normally (not manually driven) since this test
 concluded, at tick_count=14, to accumulate exactly that kind of
 sample. No further code changes in this addendum — investigation/
 verification only.
+
+
+ADDENDUM 2 (2026-07-16, Sonnet 5): NATURAL-CADENCE SAMPLE — F5 CONFIRMED,
+F6 CORRECTED
+==============================================================================
+
+A host OS reboot happened between the prior addendum and this one
+(apt upgrade, kernel 6.17.0-35 -> 40; nova-live.service auto-recovered
+via lingering as designed, confirmed clean: same driver 580.159.03,
+DKMS built for the new kernel, daemon back up with no login needed).
+Roughly 1.5 days of ordinary, unattended daemon cadence accumulated
+since the Stage 22.2b restart (2026-07-15 ~06:01 UTC) before this
+check, none of it manually driven.
+
+F5 — CONFIRMED FIXED, no qualification needed. 424 ticks since the
+restart (190 assertion, 234 exploratory), **100% parse_ok on both
+sides, 0 quarantine events across both days**. The native thinking-
+suppression fix holds under real unattended cadence, not just the one
+manually-driven test.
+
+F6 — NOT FIXED. This corrects the prior addendum's framing. 22 new
+explorations opened since the restart (all nova_tick origin, self-
+initiated entry still fully intact). Of the 21 that closed, **21/21
+closed via budget_exhausted, 0 via nova_close** — i.e. under natural
+cadence, the result is IDENTICAL to the pre-fix pattern: every single
+one stopped at exactly ticks_used=11/12, at elapsed times of 3627-
+3639 seconds (checked directly against explorations.jsonl). Token
+usage per exploration is now dramatically lower (500-900 tokens vs.
+the pre-fix range that included multi-thousand-token failed think-
+block attempts) — proof the individual ticks really are running
+clean and fast now — but this makes no difference to F6, because
+the constraint was never generation time. It's arithmetic:
+max_ticks(12) x tick_interval(300s) = wall_clock_seconds(3600) exactly.
+The daemon's tick_interval is fixed by its own cadence design, not by
+how fast the model responds, so a 12th tick always requires a 12th
+300-second wait to have elapsed, and by then dispatch/journal
+overhead has already pushed real elapsed time a few seconds past
+3600 — tripping the Governor's wall-clock check (runtime.py:916-924,
+checked BEFORE the next tick generates) before tick 12 can even
+start, exactly as documented in Stage 22.2's original addendum.
+
+The one voluntary close reported in Addendum 1 (source_exploration
+a203ac11) is now understood to be a methodology artifact, not a
+genuine sign of live-condition resolution: that test drove 12 `!tick`
+commands back-to-back in under two minutes of real time, so the
+wall-clock gate — which only matters once ~3600 real seconds have
+elapsed — was never actually exercised. It correctly proved the
+MECHANISM works (parsing succeeds, close_exploration dispatches
+cleanly, export_findings runs, when the model is actually given the
+chance to reach that tick) but it did not, and could not, demonstrate
+that natural cadence would produce the same outcome. This is worth
+recording plainly rather than letting the earlier framing stand
+uncorrected: F5 is genuinely fixed; F6 requires Tier 1b (the
+wall_clock_seconds/max_ticks/tick_interval reconciliation, still
+undecided and unimplemented) independent of anything in this stage.
+
+Practical consequence: Stage 22.4's ladder-progression procedure
+(part b) remains blocked on real close-with-findings data exactly as
+it was before this stage — the single claim_ladder.jsonl record that
+exists is still the one from the artificially-driven test, not a
+naturally-produced one. No new code changes in this addendum —
+observation only.

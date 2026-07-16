@@ -210,35 +210,50 @@ STAGES
 ------
 
 Stage 22.2b: Native Thinking-Mode Suppression (F5/F6 Tier 1 root fix)
-  — LIVE, FIRST VERIFICATION CLEAN
+  — LIVE; F5 CONFIRMED FIXED; F6 NOT FIXED (needs Tier 1b)
   Commit 2f306f3, 2026-07-15 (Fable 5). Fully pinned in
   docs/plans/PHASE22_STAGE22_2B_NATIVE_THINKING_SUPPRESSION.txt
-  (closure note + 2026-07-15 same-day addendum). Replaces
-  chat_format="chatml" (generic, discards the model's own template)
-  with a Jinja2ChatFormatter built from the GGUF's own embedded
+  (closure note + two addenda). Replaces chat_format="chatml"
+  (generic, discards the model's own template) with a
+  Jinja2ChatFormatter built from the GGUF's own embedded
   tokenizer.chat_template + enable_thinking=False passed at render
   time — the model's real template-level switch, not a text hint.
   Falls back to the old create_chat_completion path unchanged when no
   embedded template exists. Suite 902 -> 912.
-  LIVE SINCE 2026-07-15 ~00:01 CDT: operator explicitly authorized a
-  restart ("not to test the behavior of the 3 day test, but to test
-  this uncovered issue") for a targeted, short verification rather
-  than a temporal-realism run. nova-live.service restarted cleanly
-  (same session id, model reloaded, no data loss). A manually-driven
-  test exploration (12/12 ticks) came back 100% clean parse (0
-  quarantine, 0 <think> leakage vs. pre-fix quarantine samples
-  dominated by leaked reasoning) and — for the first time in this
-  project's live history — reached tick 12, called close_exploration
-  voluntarily (close_reason: "nova_close"), and export_findings
-  succeeded, creating the first-ever live claim_ladder.jsonl record.
-  Both F5 and F6 look resolved on this one sample; daemon left running
-  on normal autonomous cadence afterward to accumulate a natural
-  (non-manually-driven) sample before calling it fully confirmed. One
-  minor side effect recorded, not a defect: an exploration open in
-  yesterday's session at restart time is now permanently stranded in
-  status="active" (no code path interrupts cross-session-boundary
-  orphans) — harmless, noted for whenever daemon-restart/session-
-  rotation logic is next touched.
+  LIVE SINCE 2026-07-15 ~00:01 CDT (restarted at the operator's
+  explicit request for a targeted short verification, not a
+  temporal-realism run). A host OS reboot happened the same day
+  (kernel 6.17.0-35->40); nova-live.service auto-recovered cleanly via
+  lingering, confirmed via three checks (systemd status, nvidia-smi,
+  --daemon-status) — no issue.
+  ~1.5 DAYS OF NATURAL CADENCE NOW CHECKED (2026-07-16, Sonnet 5,
+  Addendum 2): F5 CONFIRMED — 424 ticks since the restart (190
+  assertion, 234 exploratory), 100% parse_ok both sides, 0 quarantine
+  events. F6 NOT FIXED — 22 new self-initiated explorations, 21/21
+  closures were budget_exhausted (0 nova_close), every one stopping at
+  exactly ticks_used=11/12 and ~3627-3639s elapsed, matching the
+  pre-fix pattern exactly. This is arithmetic, not a parsing issue:
+  max_ticks(12) x tick_interval(300s) = wall_clock_seconds(3600)
+  exactly, so a 12th tick always needs real time already past the
+  wall-clock budget by the time dispatch overhead is accounted for —
+  independent of how fast or clean each tick's generation is. The one
+  "nova_close" reported right after the restart (Addendum 1) is now
+  understood as a methodology artifact: it came from 12 manually-fired
+  `!tick` commands in under two minutes, never actually exercising the
+  wall-clock gate (which only binds after ~3600 REAL seconds). It
+  proved the mechanism works when the model reaches tick 12, not that
+  natural cadence reaches tick 12. Net: Tier 1 is done and confirmed;
+  **Tier 1b (wall_clock_seconds/max_ticks/tick_interval reconciliation)
+  is now the sole, clearly-identified remaining blocker on F6** — not
+  optional/secondary as the original three-tier framing implied, but
+  the actual next step if F6 is to be resolved. Still blocks Stage
+  22.4's ladder-progression procedure (part b): the only claim_ladder
+  record that exists is still the one from the artificial test, not a
+  natural one. One minor side effect recorded, not a defect: an
+  exploration open in yesterday's session at restart time is
+  permanently stranded in status="active" (no code path interrupts
+  cross-session-boundary orphans) — harmless, noted for whenever
+  daemon-restart/session-rotation logic is next touched.
 
 Stage 22.1: Findings Novelty and Export Dedup (F1 hard + F2) — CLOSED
   Commit c512988, 2026-07-11 (Fable 5). Prompt-level novelty rule for
