@@ -32,7 +32,26 @@ REGISTER_EXPLORATORY = "exploratory"
 # Default budgets applied when an entry path omits them.
 DEFAULT_MAX_TICKS = 12
 DEFAULT_MAX_TOKENS = 24_000
-DEFAULT_WALL_CLOCK_SECONDS = 3_600
+
+# This module has no knowledge of the daemon's real tick_interval (a
+# CLI/daemon-level setting, not passed into NovaConfig or NovaRuntime).
+# DEFAULT_WALL_CLOCK_SECONDS was originally set to 3_600 independently
+# of DEFAULT_MAX_TICKS, before any live daemon cadence existed to test
+# it against. Once the daemon's real tick_interval (300s in production,
+# configs/nova.qwen3-14b.live.yaml) was combined with it, 12 * 300
+# coincided EXACTLY with 3_600, silently pre-empting every 12th tick
+# before it could even run (Phase 22 Stage 22.2 finding F6 — the wall-
+# clock check fires before the next tick generates, so this wasn't a
+# generation timeout, it was the last tick never starting at all).
+# Derived explicitly here against the known production tick_interval
+# plus a large fixed headroom, so the tick budget — not an accidental
+# collision with daemon pacing — is what actually binds. If the real
+# production tick_interval changes, this constant needs revisiting;
+# it is not wired to read it dynamically (see Stage 22.2b Tier 1b
+# closure note for why a fully dynamic derivation was considered and
+# deferred).
+PRODUCTION_TICK_INTERVAL_SECONDS = 300
+DEFAULT_WALL_CLOCK_SECONDS = DEFAULT_MAX_TICKS * PRODUCTION_TICK_INTERVAL_SECONDS + 1_800
 
 # Hard caps. Budgets are clamped to these regardless of what any entry path
 # (including a Nova-originated enter_exploration call) requests.

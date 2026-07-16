@@ -13,6 +13,8 @@ from nova.agent.exploration import (
     CAP_MAX_TOKENS,
     CAP_WALL_CLOCK_SECONDS,
     DEFAULT_MAX_TICKS,
+    DEFAULT_WALL_CLOCK_SECONDS,
+    PRODUCTION_TICK_INTERVAL_SECONDS,
     REGISTER_ASSERTION,
     REGISTER_EXPLORATORY,
     ExplorationController,
@@ -205,6 +207,60 @@ class BudgetEnforcementTests(unittest.TestCase):
         record = self.controller.record_tick(session_id="s1", tick_id="t2")
         self.assertEqual(record.tick_ids, ["t1", "t2"])
         self.assertEqual(record.ticks_used, 2)
+
+
+class WallClockTickBudgetReconciliationTests(unittest.TestCase):
+    """Phase 22 Stage 22.2b Tier 1b — F6 root cause regression pin.
+
+    Under real daemon cadence, DEFAULT_MAX_TICKS * the production
+    tick_interval used to coincide exactly with the old
+    DEFAULT_WALL_CLOCK_SECONDS (12 * 300 == 3600), so the wall-clock
+    check always pre-empted the last tick before it could run. These
+    tests pin the derived value and the margin directly so this class
+    of collision cannot silently recur.
+    """
+
+    def test_default_wall_clock_seconds_is_derived_value(self):
+        self.assertEqual(
+            DEFAULT_WALL_CLOCK_SECONDS,
+            DEFAULT_MAX_TICKS * PRODUCTION_TICK_INTERVAL_SECONDS + 1_800,
+        )
+
+    def test_default_wall_clock_seconds_has_real_margin_over_tick_budget(self):
+        tick_budget_seconds = DEFAULT_MAX_TICKS * PRODUCTION_TICK_INTERVAL_SECONDS
+        self.assertGreater(
+            DEFAULT_WALL_CLOCK_SECONDS - tick_budget_seconds,
+            600,
+            "wall-clock budget must comfortably outlast the tick budget "
+            "under production cadence, not merely equal it",
+        )
+
+    def test_full_tick_budget_survives_under_simulated_production_cadence(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        controller = _controller(tmp.name)
+        record = controller.open(
+            session_id="s1", topic="t", rationale="r", origin="operator"
+        )
+        self.assertEqual(record.max_ticks, DEFAULT_MAX_TICKS)
+        # Simulate every tick landing exactly PRODUCTION_TICK_INTERVAL_SECONDS
+        # apart, the real daemon's cadence, plus a few seconds of per-tick
+        # dispatch/generation overhead — the exact conditions that used to
+        # force budget_exhausted at ticks_used=11/12 every time.
+        for i in range(1, DEFAULT_MAX_TICKS + 1):
+            elapsed = i * PRODUCTION_TICK_INTERVAL_SECONDS + i * 5
+            record.opened_at = (
+                datetime.now(timezone.utc) - timedelta(seconds=elapsed)
+            ).isoformat()
+            controller.store.update(record)
+            self.assertFalse(
+                controller.budget_exhausted(record),
+                f"wall-clock budget exhausted early at simulated tick {i}",
+            )
+            record = controller.record_tick(session_id="s1", tick_id=f"t{i}")
+        self.assertEqual(record.ticks_used, DEFAULT_MAX_TICKS)
+        self.assertEqual(record.status, "closed")
+        self.assertEqual(record.close_reason, "budget_exhausted")
 
 
 class JournalTests(unittest.TestCase):

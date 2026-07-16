@@ -1,0 +1,179 @@
+PHASE 22 — STAGE 22.2c: WALL-CLOCK / TICK BUDGET RECONCILIATION (F6 TIER 1B)
+==============================================================================
+
+Status: implemented
+Date: 2026-07-16
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.2b (native thinking-mode suppression, Tier 1 — fixed
+  F5 confirmed; F6 traced to a separate, independent cause in its
+  Addendum 2)
+
+This stage implements Tier 1b of the three-tier F5/F6 fix plan: the
+wall_clock_seconds / max_ticks / tick_interval reconciliation. Tier 2
+(self_state_tick retry-on-parse-failure) remains out of scope.
+
+Design was worked out in conversation with the operator (not
+re-derived here): given exploration.py has no wiring to the daemon's
+real tick_interval at all, a fully dynamic derivation was considered
+and explicitly deferred as a materially bigger, riskier change than
+this stage's scope; the operator chose the smaller, static-formula
+fix, pinned to the known production tick_interval.
+
+
+OBJECTIVE
+---------
+
+Stop the wall-clock budget from silently pre-empting the last tick of
+every exploration before it can run. Confirmed via Stage 22.2b's
+Addendum 2 (1.5 days of natural post-Tier-1 cadence): 21/21 new
+closures still hit exactly ticks_used=11/12 at ~3627-3639s elapsed,
+identical to the pre-Tier-1 pattern — proving this is independent of
+the thinking-mode bug.
+
+
+CODE FACTS (verified 2026-07-16 against commit d98540a, suite 912
+  green)
+-----------------------------------------------------------------------
+
+  - src/nova/agent/exploration.py: DEFAULT_MAX_TICKS = 12,
+    DEFAULT_WALL_CLOCK_SECONDS was 3_600 — set independently at Stage
+    21.1 (commit b794e57), before any live daemon cadence existed to
+    test against. No comment or doc anywhere derived one from the
+    other.
+  - The daemon's tick_interval (src/nova/daemon.py, default 300,
+    configured to 300 in the live deployment) is NOT wired into
+    NovaConfig or NovaRuntime at all — confirmed via grep, zero hits.
+    self_state_tools.py's enter_exploration() calls
+    exploration_controller.open(...) without passing max_ticks/
+    max_tokens/wall_clock_seconds, so it always uses the module-level
+    DEFAULT_* constants, with no path for the real daemon cadence to
+    influence them.
+  - ExplorationController._budget_exhaustion_reason (exploration.py,
+    ~line 358) checks wall-clock elapsed time BEFORE the next tick
+    runs (via model_self_state_tick's pre-tick check at
+    runtime.py:916-924), not during/after generation — confirmed this
+    is why F6 is a "last tick never starts" bug, not a "generation cut
+    off mid-thought" bug (that was the separate, now-fixed F5).
+  - Existing budget tests (tests/test_exploration.py,
+    BudgetEnforcementTests) all pass explicit max_ticks/max_tokens/
+    wall_clock_seconds overrides per test — none depend on the
+    DEFAULT_* constants, so changing the default value regresses
+    nothing there.
+  - ExplorationStore is JSONL-file-backed (re-reads from disk on every
+    open_for_session() call, not an in-memory object cache) —
+    mutating a fetched ExplorationRecord in place does not persist
+    without an explicit store.update() call. Relevant to how the new
+    simulated-cadence test needed to be written.
+
+
+DECIDED DESIGN
+--------------
+
+D1. New named constant `PRODUCTION_TICK_INTERVAL_SECONDS = 300` in
+    exploration.py, documented as the known real daemon tick_interval
+    in production (configs/nova.qwen3-14b.live.yaml) — explicit and
+    named specifically so it cannot be silently confused for an
+    arbitrary constant again.
+
+D2. `DEFAULT_WALL_CLOCK_SECONDS` is now derived:
+      DEFAULT_MAX_TICKS * PRODUCTION_TICK_INTERVAL_SECONDS + 1_800
+    = 12 * 300 + 1800 = 5400s (90 minutes). The +1800s (30 min) margin
+    is deliberately generous rather than tuned to the ~30s of real
+    per-tick overhead actually observed — a static formula pinned to a
+    constant that isn't dynamically read from the daemon should not
+    be cut close to the edge a second time.
+
+D3. Scope exclusion: DEFAULT_MAX_TICKS, DEFAULT_MAX_TOKENS, and the
+    CAP_* hard ceilings are unchanged. This stage only reconciles wall
+    clock against ticks; it does not change how many ticks or tokens
+    an exploration is allowed, and does not touch Tier 2 (self_state_
+    tick retry-on-parse-failure) or Stage 22.4's ladder progression at
+    all.
+
+D4. Explicitly NOT done: wiring the daemon's actual tick_interval
+    through NovaConfig/NovaRuntime into ExplorationController so this
+    derivation is dynamic/self-correcting. Considered and deferred —
+    a materially bigger change (config schema + daemon startup wiring
+    + runtime construction) than this stage's scope. If
+    PRODUCTION_TICK_INTERVAL_SECONDS or the real daemon's
+    --tick-interval value ever diverge, this constant needs manual
+    revisiting; that risk is accepted, not eliminated.
+
+
+TESTS REQUIRED (implemented in tests/test_exploration.py,
+  WallClockTickBudgetReconciliationTests)
+-----------------------------------------------------------------------
+
+  - DEFAULT_WALL_CLOCK_SECONDS equals the derived formula exactly
+    (pins the formula itself, not just its numeric result).
+  - DEFAULT_WALL_CLOCK_SECONDS exceeds DEFAULT_MAX_TICKS *
+    PRODUCTION_TICK_INTERVAL_SECONDS by a real margin (>600s) — a
+    direct, permanent regression pin against this exact class of
+    collision recurring silently.
+  - A full simulated-production-cadence test: opens an exploration
+    with default budgets, replays all DEFAULT_MAX_TICKS ticks spaced
+    PRODUCTION_TICK_INTERVAL_SECONDS + per-tick overhead apart (the
+    exact conditions that used to force budget_exhausted at
+    ticks_used=11/12 every time), asserting the wall-clock budget is
+    NOT exhausted early at any point and the full tick budget is
+    actually reachable.
+
+
+DEFINITION OF DONE
+-------------------
+
+  - D1-D4 implemented exactly as decided.
+  - New tests pass; full suite green (912 -> 915).
+  - Single commit; closure note appended here.
+  - NOT live yet without an explicit restart — same pattern as Stage
+    22.2b: the code change has no effect on a running daemon process
+    until restarted. The daemon was already stopped by the operator
+    before this stage began (to free VRAM/avoid ambiguity, not
+    strictly required for a pure-Python change with no model/GPU
+    interaction) and restart is a separate, deliberate follow-up step.
+
+
+CLOSURE NOTE (2026-07-16, Sonnet 5)
+======================================
+
+Zero deviations from the design above. The only wrinkle during
+implementation: the simulated-cadence test initially mutated a fetched
+ExplorationRecord's opened_at in place and expected record_tick() to
+see it — failed silently wrong (budget_exhausted never tripped when
+it should have, later would have tripped early) until re-checking
+ExplorationStore's actual persistence model (file-backed, re-read on
+every call, not an in-memory reference) and adding the missing
+store.update(record) call before each simulated tick. Caught before
+the test was trusted, not left as a latent false-positive — worth
+naming since it's the third time in this project a test's own
+assumption, not the implementation, was the thing that needed fixing
+(Stage 22.1's whitespace-normalization fix, Stage 22.2b's Jinja
+whitespace fix, now this).
+
+Suite: 912 -> 915. No changes to DEFAULT_MAX_TICKS, DEFAULT_MAX_TOKENS,
+or any CAP_* constant. Not live: the daemon was stopped by the
+operator before this stage began; restarting to pick this up is a
+separate, deliberate decision, same as Stage 22.2b's rollout.
+
+Open question this stage deliberately leaves unanswered, flagged
+honestly in conversation with the operator before implementing: even
+once the wall-clock budget stops pre-empting the 12th tick, there is
+no evidence yet that Nova will actually choose to call
+close_exploration when she reaches it — the post-Tier-1 natural sample
+showed her declining to close on every reachable tick (1-11), not just
+being blocked from a hypothetical closing decision on tick 12. This
+stage removes an artificial barrier; it does not manufacture a close
+decision. Whether F6 is actually resolved, partially resolved, or
+reveals a third, deeper finding can only be answered by watching real
+data after this lands live.
+
+
+REFERENCE
+---------
+
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  F5/F6 root cause + Tier 1 fix + corrected F6 status:
+    docs/plans/PHASE22_STAGE22_2B_NATIVE_THINKING_SUPPRESSION.txt
+  Original F6 finding: docs/plans/PHASE22_STAGE22_2_OVERNIGHT_DAEMON_
+    CADENCE.txt (ADDENDUM)
+  Budget module: src/nova/agent/exploration.py
