@@ -203,7 +203,8 @@ CODE FACTS (updated 2026-07-11, post-Stage-22.1 close, commit c512988
     but NOT decided — needs an explicit operator/planning decision and
     its own stage doc before any code changes. UPDATE 2026-07-15:
     Tier 1 (the native enable_thinking fix) is now IMPLEMENTED — see
-    Stage 22.2b below. Tier 1b and Tier 2 remain undecided.
+    Stage 22.2b below. UPDATE 2026-07-16: Tier 1b is now IMPLEMENTED
+    too — see Stage 22.2c below. Tier 2 remains undecided.
 
 
 STAGES
@@ -254,6 +255,30 @@ Stage 22.2b: Native Thinking-Mode Suppression (F5/F6 Tier 1 root fix)
   permanently stranded in status="active" (no code path interrupts
   cross-session-boundary orphans) — harmless, noted for whenever
   daemon-restart/session-rotation logic is next touched.
+
+Stage 22.2c: Wall-Clock/Tick Budget Reconciliation (F6 Tier 1b) —
+  CODE LANDED, NOT YET LIVE
+  Commit 9de15e5, 2026-07-16 (Sonnet 5). Fully pinned in
+  docs/plans/PHASE22_STAGE22_2C_WALL_CLOCK_TICK_BUDGET_RECONCILIATION
+  .txt. DEFAULT_WALL_CLOCK_SECONDS (exploration.py) was 3_600,
+  independent of DEFAULT_MAX_TICKS(12) and the daemon's real
+  tick_interval(300s in production) — coincidentally exactly equal to
+  12*300, pre-empting every 12th tick before it could start. Now
+  derived explicitly: DEFAULT_MAX_TICKS * PRODUCTION_TICK_INTERVAL_
+  SECONDS + 1800 margin = 5400s. Static formula pinned to the known
+  production value, NOT dynamically wired to the daemon's actual
+  --tick-interval (considered, deferred as a bigger change — see the
+  stage doc's D4). New regression tests pin the formula and simulate a
+  full production-cadence exploration to confirm the tick budget now
+  actually binds. Suite 912 -> 915. Daemon was stopped by the operator
+  before this stage began (not strictly required for this pure-Python
+  change) — NOT YET LIVE, restart is a separate next decision.
+  Explicitly does NOT guarantee F6 resolves: it removes a mechanical
+  barrier that was blocking the 12th tick regardless of Nova's own
+  choices, but whether she chooses to use that room to close is an
+  open question only live data can answer — the post-Tier-1 natural
+  sample showed her declining to close on every tick she DID reach
+  (1-11), not just being blocked from a hypothetical tick-12 decision.
 
 Stage 22.1: Findings Novelty and Export Dedup (F1 hard + F2) — CLOSED
   Commit c512988, 2026-07-11 (Fable 5). Prompt-level novelty rule for
