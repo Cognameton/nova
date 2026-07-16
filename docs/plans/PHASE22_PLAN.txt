@@ -257,7 +257,7 @@ Stage 22.2b: Native Thinking-Mode Suppression (F5/F6 Tier 1 root fix)
   daemon-restart/session-rotation logic is next touched.
 
 Stage 22.2c: Wall-Clock/Tick Budget Reconciliation (F6 Tier 1b) —
-  CODE LANDED, NOT YET LIVE
+  LIVE since 2026-07-16 ~14:02 CDT
   Commit 9de15e5, 2026-07-16 (Sonnet 5). Fully pinned in
   docs/plans/PHASE22_STAGE22_2C_WALL_CLOCK_TICK_BUDGET_RECONCILIATION
   .txt. DEFAULT_WALL_CLOCK_SECONDS (exploration.py) was 3_600,
@@ -271,8 +271,12 @@ Stage 22.2c: Wall-Clock/Tick Budget Reconciliation (F6 Tier 1b) —
   stage doc's D4). New regression tests pin the formula and simulate a
   full production-cadence exploration to confirm the tick budget now
   actually binds. Suite 912 -> 915. Daemon was stopped by the operator
-  before this stage began (not strictly required for this pure-Python
-  change) — NOT YET LIVE, restart is a separate next decision.
+  before this stage began, then restarted 2026-07-16 ~14:02 CDT
+  (session nova-live-20260716 continued, model reloaded cleanly on
+  both GPUs) — both Tier 1 (22.2b) and Tier 1b (22.2c) are now live
+  together for the first time. Watch --tick-analysis/--register-report
+  and explorations.jsonl for whether any exploration now reaches past
+  tick 11, and whether a natural nova_close ever occurs.
   Explicitly does NOT guarantee F6 resolves: it removes a mechanical
   barrier that was blocking the 12th tick regardless of Nova's own
   choices, but whether she chooses to use that room to close is an
