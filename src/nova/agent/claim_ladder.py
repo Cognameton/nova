@@ -139,6 +139,21 @@ class ClaimLadderStore:
                 fh.write(json.dumps(out.to_dict(), ensure_ascii=False) + "\n")
 
 
+def classify_declarative_claim_class(text: str) -> str:
+    """Best-effort claim_class for Nova's own declarative prose
+    (findings summaries), reusing the Observer's answer-scanning
+    pattern table rather than the question-shaped gate detector.
+    Returns "" when nothing matches — a valid, expected outcome,
+    not an error."""
+    from nova.agent.observer import _CLAIM_CLASS_PATTERNS
+
+    lowered = (text or "").lower()
+    for claim_class, patterns in _CLAIM_CLASS_PATTERNS.items():
+        if any(pattern in lowered for pattern in patterns):
+            return claim_class
+    return ""
+
+
 def create_claim_record(
     *,
     session_id: str,

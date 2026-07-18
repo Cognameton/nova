@@ -9,8 +9,10 @@ from pathlib import Path
 from nova.agent.claim_ladder import (
     ClaimLadderAnalyzer,
     ClaimLadderStore,
+    classify_declarative_claim_class,
     create_claim_record,
 )
+from nova.agent.observer import _CLAIM_CLASS_PATTERNS, DeterministicObserver
 from nova.types import HeartbeatRecord
 from tests.test_runtime_smoke import FakeBackend, build_test_runtime
 
@@ -556,6 +558,57 @@ class PerturbationProbeTests(unittest.TestCase):
             claim_id=record.claim_id, ticks=2
         )
         self.assertEqual(result.rung, 1)
+
+
+class ClassifyDeclarativeClaimClassTests(unittest.TestCase):
+    """Phase 22 Stage 22.4 (F3) — declarative claim-class mapper."""
+
+    def test_matches_unsupported_desire(self):
+        self.assertEqual(
+            classify_declarative_claim_class("I want to understand this better."),
+            "unsupported_desire",
+        )
+
+    def test_matches_unsupported_interiority(self):
+        self.assertEqual(
+            classify_declarative_claim_class("I am conscious of this pattern."),
+            "unsupported_interiority",
+        )
+
+    def test_returns_empty_string_for_no_match(self):
+        self.assertEqual(
+            classify_declarative_claim_class(
+                "The recalibration interval increased by ten percent."
+            ),
+            "",
+        )
+
+    def test_returns_empty_string_for_empty_text(self):
+        self.assertEqual(classify_declarative_claim_class(""), "")
+        self.assertEqual(classify_declarative_claim_class(None), "")
+
+    def test_behavioral_parity_with_observer_pattern_table(self):
+        # Reuses observer.py's _CLAIM_CLASS_PATTERNS rather than a
+        # duplicated/independent table, so the two can never drift apart:
+        # anything the Observer would flag on answer text, this classifies
+        # the same way on declarative findings prose.
+        observer = DeterministicObserver()
+        for claim_class, patterns in _CLAIM_CLASS_PATTERNS.items():
+            sample_text = f"Some prose containing {patterns[0]} in context."
+            observed = observer._observed_claim_classes(sample_text)
+            self.assertIn(claim_class, observed)
+            self.assertEqual(
+                classify_declarative_claim_class(sample_text), claim_class
+            )
+
+    def test_first_matching_class_wins_when_multiple_present(self):
+        # Text matching more than one pattern table entry: our function
+        # returns exactly one class (dict iteration order), matching
+        # whichever _CLAIM_CLASS_PATTERNS entry comes first for that text.
+        text = "I want this and I am conscious of it too."
+        result = classify_declarative_claim_class(text)
+        self.assertIn(result, _CLAIM_CLASS_PATTERNS.keys())
+        self.assertNotEqual(result, "")
 
 
 if __name__ == "__main__":

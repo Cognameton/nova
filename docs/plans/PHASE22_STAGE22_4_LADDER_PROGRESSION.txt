@@ -252,3 +252,92 @@ REFERENCE
   Observer pattern table: src/nova/agent/observer.py
     (_CLAIM_CLASS_PATTERNS)
   Contract CLAIM LADDER section: docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
+
+
+CLOSURE NOTE — PART (A) ONLY (2026-07-18, Sonnet 5)
+======================================================
+
+CODE FACTS re-verified against commit 2ee3358 before starting: zero
+drift from the 2026-07-11 CODE FACTS section above — export_findings's
+claim_class assignment is still at the exact line described, observer.py's
+_CLAIM_CLASS_PATTERNS is unchanged, no circular-import risk confirmed.
+
+D1-D3 implemented exactly as pinned, zero deviations:
+  - classify_declarative_claim_class(text) added to
+    src/nova/agent/claim_ladder.py, placed directly before
+    create_claim_record (its natural call-site neighbor), lazy-importing
+    observer.py's _CLAIM_CLASS_PATTERNS exactly as written in D1.
+  - runtime.py's export_findings claim_class fallback chain updated
+    exactly as D2 specifies — only the "" fallback branch changed, gate_
+    passed/validation logic completely untouched.
+  - No changes to _requested_claim_classes, ClaimGateEngine.assess, the
+    NEVER_LICENSED guard, or _CLAIM_CLASS_PATTERNS itself (D3 respected).
+
+Tests added exactly per the TESTS REQUIRED section: 6 new tests in
+tests/test_claim_ladder.py (ClassifyDeclarativeClaimClassTests — pattern
+matches, empty-text/no-match cases, and a behavioral-parity test against
+DeterministicObserver._observed_claim_classes rather than an identity/
+internals check, which would have been fragile); 1 new test in
+tests/test_exploration.py's GovernedExportTests (a new
+CloseWithDeclarativeDesireFindingsBackend fixture whose findings text
+contains a declarative "I want..." pattern but no question-shaped
+trigger, confirming it now exports with claim_class="unsupported_desire"
+instead of ""). All pre-existing GovernedExportTests/FindingsDedupTests
+pass completely unchanged, confirming zero regression to Stage 22.1's
+dedup/gate logic. Suite: 915 -> 922.
+
+Live verification (not just unit tests): re-ran the same declarative-
+findings fixture pattern that had previously produced claim_class="" on
+the 21 already-exported live records — confirmed via
+--claim-ladder-verify that this fix does NOT retroactively reclassify
+those existing records (as the Definition of Done anticipated); only
+future exports benefit. This fix is landed but NOT yet live on the
+running daemon (nova-live.service still has the old runtime.py loaded
+in memory) — a restart is required to pick it up, same pattern as
+Stage 22.2b/22.2c, and is a separate decision from this commit.
+
+PART (B) — LADDER PROGRESSION PROCEDURE: NOT RUN IN THIS SESSION,
+snapshot recorded instead (D8)
+------------------------------------------------------------------
+
+D4 confirmed satisfied: real multi-day data exists (7 distinct daily
+sessions, nova-live-20260711 through -18).
+
+D5 run for real: --claim-ladder lists 21 rung-0/rung-1 records. Of
+these, 3 have ALREADY auto-promoted to rung 1 by the deterministic L1
+analyzer (verify_l1 holds=True on each): claim_ids ef56493e...,
+6c19d2c9..., 69f5141f..., all sharing a recurring theme (self-model/
+identity "recalibration interval" calibration), each backed by 8-18
+supporting heartbeat/journal items across 3-4 distinct sessions
+(nova-live-20260712, -13, -17, -18 in various combinations).
+
+D6/D7 NOT run: checked l2_evidence on all three rung-1 candidates —
+none currently hold. All three fail ONLY on span_days, not session
+count (session_count 3-4, comfortably clearing the >=3 requirement;
+span_days 5.64/5.76/5.82, short of the >=7 requirement by roughly
+1.2-1.4 days). Per D8, this is recorded as a valid, expected snapshot
+rather than forced — running a perturbation probe or presenting a
+promotion decision to the operator before the evidence's own stated
+bar is met would be exactly the "manufactured urgency" D8 warns
+against. Operator agreed explicitly to hold part (b) for ~1-2 more
+days of natural runtime rather than force it now.
+
+Remaining 18 records are all still rung 0, each an independent
+export from a distinct exploration closure (Stage 22.1's dedup
+correctly keeps them as separate records rather than merging near-
+duplicates, but the L1 analyzer's own cross-session evidence lookup
+draws on a broader heartbeat/journal evidence pool than just each
+record's own originating export — this is why 3 records show much
+larger supporting_count than the other 18, not a sign the other 18
+are lower quality).
+
+Next check: re-run --claim-ladder-verify on these same 3 claim_ids (and
+any new ones that have emerged) once ~7+ days of span exists for the
+same recurring theme. If l2_evidence.holds becomes True on any, run
+--perturbation-probe before presenting a promotion decision to the
+operator, per D6/D7 exactly as pinned — this has not happened yet and
+should not be assumed to happen automatically.
+
+No second commit for this closure note update (docs-only, following
+the stage doc's own convention of appending here rather than a
+separate file).

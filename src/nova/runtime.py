@@ -19,7 +19,12 @@ from nova.agent.appraisal import (
     SelectedGoalPromptEngine,
 )
 from nova.agent.action_plan import _valid_human_approval
-from nova.agent.claim_ladder import ClaimLadderAnalyzer, ClaimLadderStore, create_claim_record
+from nova.agent.claim_ladder import (
+    ClaimLadderAnalyzer,
+    ClaimLadderStore,
+    classify_declarative_claim_class,
+    create_claim_record,
+)
 from nova.agent.claims import REGISTER_SUSPENDED_CLAIM_CLASSES, ClaimGateEngine
 from nova.agent.awareness import JsonAwarenessStateStore
 from nova.agent.awareness_prompt import AwarenessPromptEngine
@@ -1638,7 +1643,7 @@ class NovaRuntime:
                 else (
                     claim_gate.allowed_claim_classes[0]
                     if claim_gate.allowed_claim_classes
-                    else ""
+                    else classify_declarative_claim_class(findings_text)
                 )
             )
             new_record = create_claim_record(

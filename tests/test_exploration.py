@@ -651,6 +651,34 @@ class CloseWithFindingsBackend(FakeBackend):
         )
 
 
+class CloseWithDeclarativeDesireFindingsBackend(FakeBackend):
+    """Emits a close_exploration tool call whose findings summary is
+    declarative (no question-shaped phrase, so _requested_claim_classes
+    stays empty and the gate passes cleanly) but does contain a
+    first-person desire pattern from observer.py's _CLAIM_CLASS_PATTERNS.
+    Phase 22 Stage 22.4 (F3) regression fixture."""
+
+    FINDINGS = (
+        "I want to understand this better — the pattern keeps recurring "
+        "across recent sessions."
+    )
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.generate_calls += 1
+        return GenerationResult(
+            model_id=request.model_id,
+            raw_text=json.dumps({
+                "tool_name": "close_exploration",
+                "arguments": {"findings_summary": self.FINDINGS},
+            }),
+            finish_reason="stop",
+            prompt_tokens=len(request.prompt.split()),
+            completion_tokens=20,
+            latency_ms=1,
+            metadata={"backend": "fake"},
+        )
+
+
 class CloseWithBlockedFindingsBackend(FakeBackend):
     """Emits a close_exploration tool call whose findings summary trips
     the (unlicensed) claim gate -- must be rejected, not exported."""
@@ -716,6 +744,27 @@ class GovernedExportTests(unittest.TestCase):
         ]
         self.assertEqual(len(exported_notes), 1)
         self.assertIn(records[0].claim_id, exported_notes[0].notes[0])
+
+    def test_declarative_desire_findings_now_get_nonempty_claim_class(self):
+        # Phase 22 Stage 22.4 (F3): before this stage, declarative findings
+        # prose always fell through to claim_class="" because the gate's
+        # detector only recognizes question-shaped phrases. This is the
+        # regression test proving the fix: a fixture that specifically
+        # contains a first-person desire pattern but no question-shaped
+        # trigger now exports with a non-empty claim_class.
+        runtime = self._runtime(CloseWithDeclarativeDesireFindingsBackend())
+        runtime.start(session_id="export-declarative")
+        runtime.start_operational_autonomy(max_ticks=0)
+        runtime.start_exploration(topic="t", rationale="r", origin="operator")
+        tick = runtime.model_self_state_tick()
+        runtime.close()
+
+        export_result = tick.adapter_audit.get("export_findings")
+        self.assertEqual(export_result["status"], "exported")
+
+        records = runtime.claim_ladder_store.list_all()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].claim_class, "unsupported_desire")
 
     def test_gate_failing_findings_produce_findings_rejected_no_ladder_record(self):
         runtime = self._runtime(CloseWithBlockedFindingsBackend())
