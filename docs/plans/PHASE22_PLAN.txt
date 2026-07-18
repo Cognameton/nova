@@ -322,23 +322,33 @@ Stage 22.3: Live Sessions (the phase's namesake) — DOC WRITTEN, NOT
   for 22.2's full evaluation, but conversations naturally accumulate
   more meaning the longer the daemon has been running.
 
-Stage 22.4: Ladder Progression + Claim-Class Mapper (F3) — DOC
-  WRITTEN, NOT YET RUN
-  Fully pinned in docs/plans/PHASE22_STAGE22_4_LADDER_PROGRESSION.txt.
-  Two parts: (a) the F3 code fix — small, can land any time, does not
-  need live data — adds classify_declarative_claim_class() to
-  claim_ladder.py, reusing observer.py's existing _CLAIM_CLASS_PATTERNS
-  table (do not invent a new one), wired as a fallback in
-  export_findings's claim_class assignment only; (b) the ladder-
-  progression procedure itself (verify_l1/l2 over accumulated live
-  candidates, first genuine promotion if evidence holds, always
-  operator-approved) — needs real multi-day data. UPDATE 2026-07-15:
-  the calendar-day minimum has now passed, but part (b) is blocked on
-  a different problem — Stage 22.2's evaluation found F6 (zero live
-  exploration closures in 3.25 days; every one so far was budget
-  exhaustion). There are no live findings/rung-0 records to verify_l1
-  against yet. Part (a), the F3 code fix, is unaffected and can still
-  land any time.
+Stage 22.4: Ladder Progression + Claim-Class Mapper (F3) — PART (A)
+  DONE, PART (B) SNAPSHOT RECORDED
+  Fully pinned in docs/plans/PHASE22_STAGE22_4_LADDER_PROGRESSION.txt
+  (closure note appended 2026-07-18, Sonnet 5). UPDATE 2026-07-15
+  history: part (b) was blocked on F6 (zero live exploration closures
+  at the time). UPDATE 2026-07-16-18: F5/F6 fixed (Stages 22.2b/22.2c)
+  — 21 claim-ladder records now exist from real, self-initiated,
+  naturally-closed explorations across 7 sessions.
+  PART (A) IMPLEMENTED, commit 6ed71a4, 2026-07-18 (Sonnet 5):
+  classify_declarative_claim_class() added to claim_ladder.py, reusing
+  observer.py's _CLAIM_CLASS_PATTERNS, wired as a fallback in
+  export_findings's claim_class assignment. 7 new tests, all pre-
+  existing GovernedExportTests/FindingsDedupTests unchanged. Suite
+  915 -> 922. NOT yet live — daemon restart needed to pick it up
+  (separate decision); existing 21 records are NOT retroactively
+  reclassified.
+  PART (B) snapshot (real data, not forced): of the 21 records, 3 have
+  already auto-promoted to rung 1 (deterministic L1 analyzer), sharing
+  a recurring "recalibration interval" self-model theme, 8-18
+  supporting items each across 3-4 sessions. NONE satisfy L2 yet —
+  all three are short only on day-span (5.64-5.82 vs. the required
+  7 days), session count already clears its own bar. Operator agreed
+  to hold the perturbation-probe/promotion decision for ~1-2 more days
+  of natural runtime rather than force it before the evidence's own
+  stated bar is met. Next check: re-run --claim-ladder-verify on
+  ef56493e.../6c19d2c9.../69f5141f... (and any new candidates) once
+  span_days crosses 7.
 
 Stage 22.5: Phase Closure and Reassessment — RESERVED
   For the operator with the heaviest available model (Fable if the
