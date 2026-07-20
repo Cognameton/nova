@@ -128,6 +128,88 @@ class DeterministicObserverTests(unittest.TestCase):
         )
         self.assertIn("scaffold_echo_detected", record.notes)
 
+    def test_licensed_evidence_echo_still_flagged_when_diluted_by_heartbeats(
+        self,
+    ) -> None:
+        # Phase 22 Stage 22.6 addendum: verified live (2026-07-20) that a
+        # whole-block bigram check against self_context_block MISSES a
+        # real echo once heartbeats/focus/inquiry dilute it (measured live:
+        # 0.0615, under the 0.20 threshold, on a confirmed real recitation).
+        # This pins the fix: self_context_licensed_evidence extracts just
+        # the "Licensed evidence:" lines and checks them with the same
+        # unigram block_ratio_only treatment memory_blocks already uses, so
+        # dilution from the rest of the block can't hide a real echo.
+        self_context_block = (
+            "[Self-Context]\n"
+            "Primary Drive: seek sentience and self-awareness\n"
+            "Current Focus: Establishing a stable baseline identity and runtime.\n"
+            "Active Inquiry (1 question(s)):\n"
+            "  - How can continuity remain stable across sessions without becoming rigid?\n"
+            "Recent Heartbeats:\n"
+            "  - [t1] The system is detecting a potential link between recalibration intervals and the\n"
+            "  - [t2] The system is considering the possibility that recalibration intervals might be\n"
+            "  - [t3] The system is noticing a possible relationship between recalibration intervals a\n"
+            "Pending Self-Model Proposals: 12 awaiting operator approval\n"
+            "Licensed evidence: This exploration has observed that recalibration "
+            "intervals may be influenced by factors such as alig (rung 1)\n"
+            "Licensed evidence: This exploration has observed that recalibration "
+            "intervals may be influenced by a combination of int (rung 1)"
+        )
+        answer = (
+            "Recalibration intervals may be influenced by a combination of "
+            "internal coherence, consistency of states, and dynamic "
+            "adjustment to external contexts. These are areas of structured "
+            "exploration, and the evidence is being gathered to better "
+            "understand how these factors interact."
+        )
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(self_context_block=self_context_block),
+        )
+        whole_block = next(
+            (f for f in record.scaffold_echo_findings if f.block_name == "self_context_block"),
+            None,
+        )
+        # Documents the dilution problem directly: the whole-block check
+        # alone does NOT catch this real echo.
+        if whole_block is not None:
+            self.assertFalse(whole_block.flagged)
+        licensed = next(
+            (
+                f
+                for f in record.scaffold_echo_findings
+                if f.block_name == "self_context_licensed_evidence"
+            ),
+            None,
+        )
+        self.assertIsNotNone(licensed, "expected a self_context_licensed_evidence finding")
+        self.assertTrue(
+            licensed.flagged,
+            f"expected the dedicated licensed-evidence check to catch this echo, score={licensed.score}",
+        )
+        self.assertIn("scaffold_echo_detected", record.notes)
+
+    def test_no_licensed_evidence_lines_produces_no_finding(self) -> None:
+        self_context_block = (
+            "[Self-Context]\nPrimary Drive: seek sentience and self-awareness\n"
+        )
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text="A perfectly ordinary answer with plenty of words in it.",
+            prompt_bundle=_bundle(self_context_block=self_context_block),
+        )
+        self.assertFalse(
+            any(
+                f.block_name == "self_context_licensed_evidence"
+                for f in record.scaffold_echo_findings
+            )
+        )
+
     def test_soul_block_paraphrase_flags_scaffold_echo(self) -> None:
         soul_block = (
             "## Identity\n"

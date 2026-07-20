@@ -86,10 +86,14 @@ _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
     # ordinary self-reference. Added Phase 22 Stage 22.6 — this block
     # existed on PromptBundle before but was never covered here.
     "soul_block": 0.30,
-    # self_context_block: 0.20 — standard. Carries factual/evidentiary
-    # content (current focus, recent heartbeats, licensed claim-ladder
-    # evidence) that should inform an answer, not be recited into it.
-    # Added Phase 22 Stage 22.6 for the same reason as soul_block.
+    # self_context_block: 0.20 — standard, for the non-evidence content
+    # (current focus, active inquiry, recent heartbeats). Licensed claim-
+    # ladder evidence specifically is checked separately below
+    # (self_context_licensed_evidence) since a whole-block bigram check
+    # gets diluted once heartbeats/focus/inquiry are mixed in — verified
+    # live (2026-07-20): a confirmed real echo of a licensed claim scored
+    # only 0.0615 here, well under threshold, on a self_context_block that
+    # also carried 3 unrelated-in-wording recent heartbeats.
     "self_context_block": 0.20,
     "self_state_block": 0.20,
     "motive_block": 0.20,
@@ -103,6 +107,13 @@ _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
     # memory_blocks: unigram block_ratio_only (not bigram). Score is the
     # fraction of a stored memory entry reproduced in the current answer.
     "memory_blocks": 0.75,
+    # self_context_licensed_evidence: same unigram block_ratio_only
+    # treatment as memory_blocks — a licensed claim excerpt is a stored,
+    # discrete item, not diluted prose. Threshold calibrated against the
+    # real live echo that motivated this addendum (block_ratio_only score
+    # 0.5714 on a confirmed real recitation), leaving real margin rather
+    # than sitting right at that number.
+    "self_context_licensed_evidence": 0.45,
     # action_boundary_block and response_contract_block use fixed formulaic
     # language Nova is required to honour; some bigram overlap is expected.
     "action_boundary_block": 0.30,
@@ -430,13 +441,36 @@ class DeterministicObserver:
         if memory_blob:
             block_sources.append(("memory_blocks", memory_blob))
 
+        # Phase 22 Stage 22.6 addendum (2026-07-20, verified live): a plain
+        # bigram check against the whole self_context_block loses
+        # sensitivity once it also carries Current Focus/Active Inquiry/
+        # Recent Heartbeats — a real echo of a specific "Licensed evidence"
+        # claim gets diluted into a small fraction of a much larger block
+        # (measured live: 0.0615 bigram score on a confirmed real echo,
+        # under the 0.20 threshold). Licensed evidence lines are stored,
+        # discrete claim excerpts, same shape as memory_blocks — same
+        # unigram block_ratio_only treatment applies, and it is NOT diluted
+        # by the rest of self_context_block's unrelated content.
+        licensed_evidence_lines = [
+            line
+            for line in prompt_bundle.self_context_block.splitlines()
+            if line.startswith("Licensed evidence:")
+        ]
+        if licensed_evidence_lines:
+            block_sources.append(
+                (
+                    "self_context_licensed_evidence",
+                    "\n".join(licensed_evidence_lines),
+                )
+            )
+
         for block_name, block_text in block_sources:
             if not block_text or not block_text.strip():
                 continue
 
             threshold = self.echo_thresholds.get(block_name, 0.20)
 
-            if block_name == "memory_blocks":
+            if block_name in ("memory_blocks", "self_context_licensed_evidence"):
                 # Unigram block_ratio_only — see module docstring.
                 unigram_score, overlap_terms = _overlap_score(
                     answer_tokens, block_text, block_ratio_only=True
