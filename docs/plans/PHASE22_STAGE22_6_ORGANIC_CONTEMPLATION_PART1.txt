@@ -248,3 +248,66 @@ the recitation pattern — it closes a real detection gap and reduces
 content saturation, but does not by itself force genuinely novel
 synthesis. See Part 2 (thinking-space experiment) for the harder,
 more speculative piece of this same investigation.
+
+
+ADDENDUM (2026-07-20, live verification + a dilution gap found and
+fixed + an open design tension found and NOT yet resolved)
+==============================================================================
+
+Daemon restarted onto this stage's code and tested live via --attach,
+re-running the exact exchange that originally surfaced the problem.
+
+FIRST FINDING (fixed same session, commit 011912b): the whole-block
+bigram check against self_context_block missed the real echo. By the
+time of this live test, self_context_block also carried 3 Recent
+Heartbeats independently discussing "recalibration intervals" (genuine
+recent autonomous activity, not an artifact) — diluting a confirmed
+real echo down to a 0.0615 bigram score, under the 0.20 threshold.
+Fixed by extracting "Licensed evidence:" lines and checking them with
+the same unigram block_ratio_only treatment memory_blocks already
+uses (a stored claim excerpt, not diluted prose) — new
+self_context_licensed_evidence threshold 0.45, calibrated against the
+real measured echo (0.5714). Suite 937 -> 939.
+
+SECOND FINDING (open, NOT resolved — a real design tension, not a bug):
+restarted onto the fix and re-ran the same live exchange again.
+scaffold_echo:self_context_licensed_evidence correctly fired on the
+first attempt. Both retries genuinely reworded the answer (verified
+by reading the raw text of each attempt) rather than repeating
+verbatim, but stayed close enough to the licensed claim's core
+vocabulary to keep tripping the check. After 2 retries (the config
+default), respond() fell back to its existing generic failure message
+("I need to restate that more clearly. Please try again." —
+runtime.py:3435, pre-existing code, not introduced by this stage) —
+a worse outcome for the user than before this fix existed.
+
+The root issue: this stage's fix does not distinguish two different
+situations that the original live conversation conflated:
+  - "What types of ideas can you contemplate?" -> she volunteered
+    "recalibration intervals" UNPROMPTED, answering a general question
+    that wasn't about that topic. This is the real problem the whole
+    investigation started from, and the fix correctly targets it.
+  - "What influences recalibration intervals?" -> a DIRECT, on-topic
+    question about exactly that claim. Answering it by drawing on her
+    own licensed evidence is not recitation-as-a-flaw here — it is the
+    licensed-evidence mechanism working exactly as Stage 21.5 intended
+    ("this informs" it does not license"). The current check flags
+    substantial overlap with licensed evidence regardless of whether
+    the user's OWN question invited that content, so a genuinely
+    on-topic, honest answer can get blocked the same way an unprompted
+    insertion would.
+
+NOT fixed here — this is an operator decision, not a code call to make
+unilaterally. Candidate refinement (not decided, not implemented):
+only flag self_context_licensed_evidence overlap when the user's own
+question does NOT itself reference the claim's topic/vocabulary —
+i.e. gate the check on relevance of the QUESTION, not just overlap in
+the ANSWER. This would let direct, on-topic engagement with earned
+evidence through while still catching unprompted insertion into
+unrelated answers. Left open for the operator to decide whether the
+current stricter behavior (occasionally an unhelpful generic fallback,
+never risk recitation) is the intended tradeoff, or whether this
+refinement should be built.
+
+Daemon confirmed healthy throughout both restarts and this test
+(session nova-live-20260720 continued each time, no data loss).
