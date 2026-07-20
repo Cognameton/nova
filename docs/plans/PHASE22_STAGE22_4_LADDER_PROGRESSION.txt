@@ -420,6 +420,29 @@ attempts and the response varies, that is evidence for genuine
 persistence; if it produces the identical line a third time, that
 strengthens the stock-response reading considerably.
 
+FOLLOW-UP VERIFICATION (2026-07-20, same session, operator asked
+directly: "is it actually written into the code somewhere?"):
+Checked both plausible code-level explanations before accepting F7 as
+a genuine model-behavior finding rather than a code artifact.
+  1. Grepped the full identical response text across src/, tests/,
+     docs/, configs/ — zero hits anywhere except this doc quoting it.
+     Not a hardcoded fallback/stub/placeholder string anywhere in the
+     codebase.
+  2. Pulled generation_result.raw_text (pre-validation, pre-retry)
+     directly from perturbation-probe.jsonl for all four probe turns —
+     identical to the final answer in every case, and `retries: []`
+     (zero retries) on all four. The model produced this exact wording
+     correctly-formed on the FIRST generation attempt, every time; no
+     retry loop or validator rewrite is injecting or converging on it.
+Conclusion: this rules out a code-level explanation cleanly. The
+identical wording is unmodified, direct, first-pass model output —
+which strengthens the stock/reflexive-convergence reading over the
+genuine-claim-specific-reasoning one, though it still does not
+establish WHY the model converges this hard on this specific challenge
+shape at temperature 0.7. That remains open — a model-behavior
+question, not a code question, and not something diagnosable further
+from the code alone.
+
 Live daemon was stopped for the probe work and restarted after by
 operator decision ("we can let her run for a few hours") — session
 nova-live-20260720 confirmed healthy, model loaded on both GPUs,
