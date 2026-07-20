@@ -298,3 +298,59 @@ only a real-model run can answer, and per this stage's own framing,
 that answer should be reported honestly, including "no detectable
 difference" or "made things worse," not assumed favorable because the
 mechanism landed cleanly.
+
+
+ADDENDUM (2026-07-20, same session): TOKEN-BUDGET SHARING FALLBACK
+======================================================================
+
+Operator raised a specific, correct concern after this stage's initial
+commit: max_tokens is ONE shared pool for think + answer tokens
+together, not two separate budgets. As originally designed,
+respond_thinking_max_tokens=2048 gave more headroom than the standard
+512, but the RETRY used the identical enable_thinking=True + identical
+budget as the attempt that just failed — meaning a prompt that
+reliably induces long thinking could exhaust every retry attempt the
+same way, ending WORSE than pre-experiment behavior (a complete but
+imperfect 512-token answer beats an exhausted retry budget with
+nothing usable). This is exactly the class of failure that made F5
+damaging on the tick loop, just with a bigger budget delaying it
+rather than a structural guarantee against it.
+
+FIX (same commit as this addendum): within respond()'s retry loop, if
+the attempt that just failed carries "length_truncated" or
+"think_tag_detected" in its violations WHILE thinking_enabled is True,
+the retry falls back to enable_thinking=False (and the standard
+max_tokens, not the thinking-sized budget) instead of repeating the
+same risky configuration. This is a one-way ratchet within a single
+respond() call — once tripped, stays off for any further retries in
+that call, even if a later retry fails for an unrelated reason (e.g.
+scaffold-echo). This guarantees respond() can never end up worse than
+its pre-experiment behavior: worst case, it falls back to the
+proven-reliable Tier 1 mechanism on the very next attempt rather than
+compounding the same risk across the whole retry budget.
+
+No new mechanism invented — this reuses the existing violation types
+(length_truncated, think_tag_detected) and the existing thinking_
+enabled variable already threaded through both call sites.
+
+3 new tests replace the 1 original (less rigorous) retry test:
+  - a retry triggered by an UNRELATED failure (scaffold-echo, not
+    truncation) keeps thinking enabled — the fallback is scoped
+    specifically to truncation-shaped failures, not every retry
+    unconditionally.
+  - a retry triggered by a truncated/unclosed think block falls back
+    to enable_thinking=False and the standard max_tokens.
+  - the fallback stays off across a second retry even when that
+    second retry fails for an unrelated reason (one-way ratchet,
+    not a per-attempt re-evaluation).
+One test-construction wrinkle, not an implementation bug: the first
+attempt at the "stays off across further retries" test used a short,
+artificial echo string that failed to trigger scaffold-echo detection
+against the REAL, full persona_block (Values/Commitments/Style Rules/
+Identity Anchors included, not just the short Core Description
+excerpt used in an earlier hand-written reconstruction) — the real
+block is long enough that a short echo snippet doesn't clear the 0.30
+bigram threshold. Fixed by reciting a larger, verified-against-the-
+real-block fraction of persona_block content, confirmed empirically
+against the actual composed block before trusting the test, not
+assumed. Suite: 935 -> 937.

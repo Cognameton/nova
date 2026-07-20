@@ -3273,6 +3273,24 @@ class NovaRuntime:
                 turn_id=turn_id,
             )
             retry_count += 1
+            # Phase 22 Stage 22.6 part 2 refinement: max_tokens is ONE shared
+            # pool for think + answer tokens together, not two separate
+            # budgets — a verbose think block can starve the answer of room
+            # (the exact class of failure that made F5 damaging on the tick
+            # loop). If the attempt that just failed looks like the
+            # thinking budget was exhausted (truncated output or an unclosed
+            # <think> tag), fall back to enable_thinking=False for the rest
+            # of this call's retries instead of risking the same truncation
+            # again on the same finite budget. One-way: once tripped, stays
+            # off for any further retries in this call — this guarantees
+            # respond() can never end up worse than its pre-experiment
+            # behavior, even if a given prompt reliably induces long
+            # thinking.
+            if thinking_enabled and (
+                "length_truncated" in validation.violations
+                or "think_tag_detected" in validation.violations
+            ):
+                thinking_enabled = False
             retry_instruction = self.retry_policy.build_retry_instruction(
                 user_text=user_text,
                 raw_answer=final_answer,

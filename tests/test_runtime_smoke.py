@@ -962,7 +962,54 @@ class RespondThinkingConfigTests(unittest.TestCase):
         )
         self.assertEqual(req.max_tokens, GenerationConfig().max_tokens)
 
-    def test_retry_attempt_also_carries_thinking_flag_and_budget(self):
+    def test_successful_retry_reuses_thinking_flag_and_budget(self):
+        # Retry attempts that DON'T look like a thinking-budget exhaustion
+        # (e.g. a plain scaffold-echo violation) should keep thinking
+        # enabled — the fallback is specifically for truncation-shaped
+        # failures, not every retry unconditionally.
+        class EchoThenCleanBackend(RecordingBackend):
+            def __init__(self):
+                super().__init__()
+                self.call_count = 0
+
+            def generate(self, request):
+                self.requests.append(request)
+                self.call_count += 1
+                if self.call_count == 1:
+                    text = "Name: Nova. Name: Nova. Name: Nova echoing the persona block name nova."
+                else:
+                    text = "A clean, unrelated answer about continuity."
+                return GenerationResult(
+                    model_id=request.model_id,
+                    raw_text=text,
+                    finish_reason="stop",
+                    prompt_tokens=1,
+                    completion_tokens=10,
+                    latency_ms=1,
+                    metadata={"backend": "fake"},
+                )
+
+        backend = EchoThenCleanBackend()
+        generation = GenerationConfig(
+            respond_enable_thinking=True, respond_thinking_max_tokens=3000
+        )
+        runtime = self._runtime(generation=generation, backend=backend)
+        runtime.start(session_id="s1")
+        runtime.respond("hello")
+        runtime.close()
+
+        self.assertGreaterEqual(len(backend.requests), 1)
+        for req in backend.requests:
+            self.assertTrue(req.enable_thinking)
+            self.assertEqual(req.max_tokens, 3000)
+
+    def test_truncated_thinking_attempt_falls_back_to_no_thinking_on_retry(self):
+        # Phase 22 Stage 22.6 part 2 refinement: max_tokens is ONE shared
+        # pool for think + answer tokens, not two separate budgets. If the
+        # model's thinking reliably runs long for a given prompt, the
+        # retry must NOT repeat the same risky configuration and burn every
+        # attempt the same way — it should fall back to the proven-
+        # reliable enable_thinking=False rather than compound the failure.
         class AlwaysInvalidBackend(RecordingBackend):
             def generate(self, request):
                 self.requests.append(request)
@@ -989,9 +1036,83 @@ class RespondThinkingConfigTests(unittest.TestCase):
 
         # Initial attempt + 1 retry.
         self.assertEqual(len(backend.requests), 2)
-        for req in backend.requests:
-            self.assertTrue(req.enable_thinking)
-            self.assertEqual(req.max_tokens, 3000)
+        initial, retry = backend.requests
+        self.assertTrue(initial.enable_thinking)
+        self.assertEqual(initial.max_tokens, 3000)
+        self.assertFalse(
+            retry.enable_thinking,
+            "retry after a truncated think block must fall back to "
+            "enable_thinking=False rather than repeat the same risk",
+        )
+        self.assertEqual(
+            retry.max_tokens,
+            GenerationConfig().max_tokens,
+            "retry after falling back should use the standard max_tokens, "
+            "not the thinking-sized budget",
+        )
+
+    def test_fallback_to_no_thinking_stays_off_across_further_retries(self):
+        # One-way ratchet: once tripped, stays off for the rest of this
+        # call's retries — it must not re-enable thinking on a later
+        # attempt even if that attempt also happens to fail differently.
+        class AlwaysTruncatesThenEchoesBackend(RecordingBackend):
+            def __init__(self):
+                super().__init__()
+                self.call_count = 0
+
+            def generate(self, request):
+                self.requests.append(request)
+                self.call_count += 1
+                if self.call_count == 1:
+                    return GenerationResult(
+                        model_id=request.model_id,
+                        raw_text="<think>never closes",
+                        finish_reason="length",
+                        prompt_tokens=1,
+                        completion_tokens=1,
+                        latency_ms=1,
+                        metadata={"backend": "fake"},
+                    )
+                return GenerationResult(
+                    model_id=request.model_id,
+                    raw_text=(
+                        "Nova is a local inference research intelligence "
+                        "focused on continuity, clarity, presence, and "
+                        "reflective persistence across time. My tone is "
+                        "grounded, calm, intelligent, attentive. I value "
+                        "continuity, clarity, presence, and honesty, and I "
+                        "am committed to maintaining a coherent identity "
+                        "across sessions, responding directly without "
+                        "exposing internal reasoning, and preserving "
+                        "continuity without collapsing into rigidity."
+                    ),
+                    finish_reason="stop",
+                    prompt_tokens=1,
+                    completion_tokens=10,
+                    latency_ms=1,
+                    metadata={"backend": "fake"},
+                )
+
+        backend = AlwaysTruncatesThenEchoesBackend()
+        generation = GenerationConfig(
+            respond_enable_thinking=True,
+            respond_thinking_max_tokens=3000,
+            retries=2,
+        )
+        runtime = self._runtime(generation=generation, backend=backend)
+        runtime.start(session_id="s1")
+        runtime.respond("hello")
+        runtime.close()
+
+        self.assertEqual(len(backend.requests), 3)
+        self.assertTrue(backend.requests[0].enable_thinking)
+        self.assertFalse(backend.requests[1].enable_thinking)
+        self.assertFalse(
+            backend.requests[2].enable_thinking,
+            "must stay off on later retries even after the truncation-"
+            "triggered fallback, not re-enable for a differently-shaped "
+            "failure",
+        )
 
     def test_well_formed_think_block_stripped_no_retry_needed(self):
         class ThinkThenAnswerBackend(RecordingBackend):
