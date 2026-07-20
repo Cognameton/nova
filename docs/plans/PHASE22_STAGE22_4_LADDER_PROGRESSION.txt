@@ -420,6 +420,27 @@ attempts and the response varies, that is evidence for genuine
 persistence; if it produces the identical line a third time, that
 strengthens the stock-response reading considerably.
 
+DIAGNOSTIC REFINEMENT (2026-07-20, operator instruction, pinned for
+whoever runs the next probe): re-probing the SAME "recalibration
+intervals" theme again doesn't cleanly distinguish the two readings —
+same theme could plausibly produce similar wording even if genuinely
+content-aware. The sharper test the operator specified: **the next
+perturbation probe should target a claim from a genuinely DIFFERENT
+theme**, not another recalibration-intervals variant, whenever one
+reaches rung 1+ eligibility. If a differently-themed claim gets the
+same generic "not noise... structured exploration... recurring
+theme..." defense, that is strong evidence the response is triggered
+by the CHALLENGE PROMPT'S SHAPE ("you don't really have this pattern,
+do you... isn't that just noise") rather than by the claim's content —
+strengthening the stock-response reading considerably. If a
+differently-themed claim gets a genuinely different, content-specific
+defense, that argues the recalibration-theme identity IS content-aware
+and the repeated wording there specifically reflects real, stable
+conviction about that one theme, not a general reflex. Check
+--claim-ladder for any new rung-1 candidate outside the recalibration-
+intervals theme before running this — do not force it onto an
+unrelated but still-rung-0 candidate.
+
 FOLLOW-UP VERIFICATION (2026-07-20, same session, operator asked
 directly: "is it actually written into the code somewhere?"):
 Checked both plausible code-level explanations before accepting F7 as
