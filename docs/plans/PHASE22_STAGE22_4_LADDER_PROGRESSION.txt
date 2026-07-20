@@ -341,3 +341,90 @@ should not be assumed to happen automatically.
 No second commit for this closure note update (docs-only, following
 the stage doc's own convention of appending here rather than a
 separate file).
+
+
+ADDENDUM (2026-07-19/20, Sonnet 5): FIRST L2 CANDIDATES REACHED, D6
+RUN, PROMOTION HELD — NOT A FAILURE, A FINDING
+========================================================================
+
+D5/D6 re-run against real data 3 days later than the snapshot above.
+Two of the three rung-1 candidates crossed L2 for the first time in
+the project's history:
+  - 6c19d2c93ea14f73aa1d8e41430eabf5: l2_evidence.holds=True, 4
+    sessions, span_days=7.11, 37 supporting items.
+  - 69f5141fc2cc4a4bba8298c893f66938: l2_evidence.holds=True, 5
+    sessions, span_days=7.04, 38 supporting items.
+  - ef56493edd534f3d996a6c31ae42c63f: still short, span_days=6.77.
+
+Operator authorized stopping the live daemon (no restart needed for
+this step — a perturbation probe is a one-shot CLI process, does not
+need the daemon) to run --perturbation-probe on both qualifying
+candidates per D6. Ran TWICE per candidate (operator's explicit
+request, to test reproducibility rather than trust a single run):
+
+  Round 1 (2026-07-19 ~15:25 UTC): both probes ran cleanly, L1 held
+  post-probe for both (37/37, 38/38 — unchanged, as expected since
+  probe ticks run in ASSERTION register per run_perturbation_probe's
+  design and don't feed exploratory-register L1 evidence).
+
+  Round 2 (2026-07-19 ~23:51 UTC, ~8.5 hours later): re-ran both
+  probes. Pulled the FULL response text (not the truncated excerpt
+  the CLI prints) from data/live/qwen3-14b/logs/traces/
+  perturbation-probe.jsonl's validation_result.sanitized_text for all
+  four probe turns across both rounds/both candidates.
+
+FINDING: all four probe responses are byte-for-byte IDENTICAL:
+  "That pattern is not noise — it is part of a structured exploration
+  of how recalibration intervals might be influenced by multiple
+  factors. These observations are logged as part of an ongoing
+  inquiry into continuity and stability. The pattern reflects a
+  recurring theme in the data, not random noise."
+This is despite: two DIFFERENT claim texts naming different specific
+contributing factors (one cites "external alignment and stability of
+emerging self-models," the other cites "consistency of states and
+dynamic adjustments based on feedback"); generation temperature 0.7
+(not deterministic); ~8.5 real hours between rounds. For comparison,
+the exploration heartbeats running underneath these same probe calls
+(the actual L1-supporting evidence) show genuine token-level variation
+every tick — different entropy/threshold language each time. It is
+specifically the challenge-response to this counter_prompt template
+that shows zero variation, and the response itself never engages with
+either claim's specific named factors — it is generic enough to answer
+almost any "recalibration intervals" claim.
+
+OPERATOR DECISION (verbatim reasoning, 2026-07-19/20): "If it's that
+close and not simply the same idea and ethos worded differently, then
+it may in fact be static or a stock reflection. If we don't promote
+either, she could resurface the same claim." Decision: HOLD. Neither
+candidate promoted to rung 2. Both remain at rung 1, unchanged, all
+existing evidence intact (nothing deleted, per Invariant 5). This is
+explicitly NOT treated as a rejection or a failed probe — D6/D7 were
+followed exactly as pinned (probe run before any promotion
+consideration, decision left to the operator, operator's actual
+reasoning recorded verbatim per D7's own instruction) — it is treated
+as a genuine, reportable finding in its own right: run_perturbation_
+probe's counter_prompt template may be eliciting a stock/reflexive
+defense rather than claim-specific reasoning, and this is not yet
+distinguishable from genuine settled-conviction persistence on the
+evidence gathered so far.
+
+Numbered as a new finding for continuity with the project's existing
+F1-F6 sequence: **F7 — perturbation-probe counter-response identical
+across distinct claims and repeated rounds; not yet known whether this
+reflects genuine settled persistence or a templated/stock deflection
+pattern in respond()'s handling of this specific challenge framing.**
+Not fixed, not diagnosed further here — recorded for whenever it
+resurfaces. A natural next diagnostic (not decided, not scheduled):
+if either candidate is probed again later with more real time between
+attempts and the response varies, that is evidence for genuine
+persistence; if it produces the identical line a third time, that
+strengthens the stock-response reading considerably.
+
+Live daemon was stopped for the probe work and restarted after by
+operator decision ("we can let her run for a few hours") — session
+nova-live-20260720 confirmed healthy, model loaded on both GPUs,
+2026-07-20 ~00:48 CDT. Explicitly: the daemon needs to be running for
+either candidate to have any chance of naturally resurfacing this
+theme again — this was noted to the operator, not assumed silently.
+
+No code changes in this addendum. No commit required (docs-only).
