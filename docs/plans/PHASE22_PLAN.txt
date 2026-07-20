@@ -309,18 +309,21 @@ Stage 22.2: Overnight Daemon-Cadence Runs (temporal realism) — CLOSED
   running/accumulating data past this evaluation — closing this stage
   does not stop it.
 
-Stage 22.3: Live Sessions (the phase's namesake) — DOC WRITTEN, NOT
-  YET RUN
-  Fully pinned in docs/plans/PHASE22_STAGE22_3_LIVE_SESSIONS.txt.
-  Real conversations via --attach while the daemon persists between
-  them; /explore chat available for deliberate in-register
-  conversation. No new code expected — operational stage; its
-  artifact is the accumulated record plus a stage-doc closure note.
-  Chat pauses exploration (subordination); verify live that
-  resume-after-idle behaves at daemon cadence. Can start any time
-  after Stage 22.1 (already true) — does not strictly need to wait
-  for 22.2's full evaluation, but conversations naturally accumulate
-  more meaning the longer the daemon has been running.
+Stage 22.3: Live Sessions (the phase's namesake) — FIRST REAL CONTACT
+  HAPPENED, FULL D1-D3 CLOSURE STILL NOT RUN
+  Fully pinned in docs/plans/PHASE22_STAGE22_3_LIVE_SESSIONS.txt. The
+  operator attached live (2026-07-20) and had the actual first real
+  conversation of this phase — "Hello Nova" / "Are you sentient?" /
+  "What types of ideas can you contemplate?" / "what influences
+  recalibration intervals?". This was organic, not a formal run of
+  D1(a)-(c) (no deliberate exploration entered by the operator, no
+  /explore chat exercised, no subordination check recorded), and it
+  led directly to a real, significant finding — Nova reciting her own
+  claim-ladder "Licensed evidence" content near-verbatim — which
+  became Stage 22.6. Full D1-D3 closure (>=2 conversations across >=2
+  days, /explore chat exercised twice, subordination verified) has
+  still not formally happened; this conversation counts toward it but
+  doesn't complete it on its own.
 
 Stage 22.4: Ladder Progression + Claim-Class Mapper (F3) — PART (A)
   DONE, PART (B) SNAPSHOT RECORDED
@@ -364,6 +367,45 @@ Stage 22.5: Phase Closure and Reassessment — RESERVED
   plainly what the live record does and does not show about the
   project's thesis — the same honesty discipline as 21.5: a record
   that would rather be true than tidy.
+
+Stage 22.6: Organic Contemplation Experiments — PARTS 1+2 LANDED, NOT
+  YET LIVE
+  Not triggered by a numbered finding — a direct operator request
+  ("what can you implement, even experimental, to help Nova reach her
+  goal") following the first real Stage 22.3 conversation. Docs:
+  PHASE22_STAGE22_6_ORGANIC_CONTEMPLATION_PART1.txt (commit f9c7ad5)
+  and _PART2.txt (commit eb8f88e).
+  Part 1: the scaffold-echo detector (built Phase 16, already drives a
+  real retry when it fires) never had self_context_block or soul_block
+  wired in — the exact block carrying "Licensed evidence" was
+  structurally invisible to the mechanism built to catch recitation.
+  Now covered (soul_block 0.30 threshold, self_context_block 0.20,
+  matching persona_block's existing reasoning). Also fixed content
+  saturation: "Licensed evidence" selection is now diversity-aware
+  (bigram-overlap greedy filter, threshold 0.22 calibrated against
+  real measured overlaps on the live data) instead of a blind top-3
+  slice — showing fewer than 3 lines when that's genuinely all the
+  diversity that exists is intended, not a bug. Suite 922 -> 927.
+  Part 2: EXPERIMENTAL, default OFF. Tests the harder hypothesis that
+  Stage 22.2b's enable_thinking=False (which fixed F5) may also
+  suppress genuine synthesis by removing deliberation space entirely.
+  Reintroduces native enable_thinking=True but ONLY on respond() —
+  never the tick loop — reusing respond()'s existing retry + validator
+  think-stripping + (post Part 1) full scaffold-echo coverage as
+  safety nets, none of which the tick loop has. New config fields
+  respond_enable_thinking / respond_thinking_max_tokens, both default
+  to reproducing exactly prior behavior. model_self_state_tick and
+  model_idle_tick confirmed byte-for-byte unaffected via dedicated
+  regression tests, not just inspection. Suite 927 -> 935.
+  NEITHER part is live: both touch code the running daemon already has
+  loaded in memory; a restart is required, and turning Part 2's
+  respond_enable_thinking on in the live config is a further, separate
+  decision requiring its own real-model verification (VRAM contention
+  with the live daemon, same as every prior real-model test this
+  phase). Part 2 explicitly does not claim the hypothesis is correct —
+  only that the mechanism is now available to test it, and any live
+  result (including "no difference" or "worse") should be reported
+  honestly.
 
 
 OPERATING CONVENTIONS (unchanged from Phase 21)
