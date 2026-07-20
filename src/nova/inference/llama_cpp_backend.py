@@ -109,7 +109,7 @@ class LlamaCppBackend:
         started_at = time.perf_counter()
         if request.messages and self._chat_formatter is not None:
             formatted = self._chat_formatter(
-                messages=request.messages, enable_thinking=False
+                messages=request.messages, enable_thinking=request.enable_thinking
             )
             stop = list(
                 dict.fromkeys(list(formatted.stop or []) + list(request.stop))

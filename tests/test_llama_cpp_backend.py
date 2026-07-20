@@ -153,6 +153,41 @@ class GenerateNativeTemplatePathTests(unittest.TestCase):
         self.assertEqual(result.raw_text, "emit_heartbeat call")
         self.assertEqual(result.metadata["mode"], "native_template_completion")
 
+    def test_enable_thinking_true_omits_pre_seeded_closed_think_block(self):
+        # Phase 22 Stage 22.6 part 2: request.enable_thinking now threads
+        # through to the formatter instead of the Stage 22.2b hardcoded
+        # False literal. With enable_thinking=True, MINI_TEMPLATE's
+        # conditional does not fire, so no pre-seeded closed think block
+        # is injected — the model is left free to open its own <think>.
+        backend, mock_llm = _load_backend()
+        request = GenerationRequest(
+            model_id="test-model",
+            prompt="",
+            max_tokens=64,
+            temperature=0.7,
+            top_p=0.9,
+            stop=["<|im_end|>"],
+            messages=[{"role": "user", "content": "hi"}],
+            enable_thinking=True,
+        )
+
+        backend.generate(request)
+
+        called_prompt = mock_llm.call_args.args[0]
+        self.assertFalse(called_prompt.endswith("<think>\n\n</think>\n\n"))
+
+    def test_enable_thinking_defaults_to_false(self):
+        request = GenerationRequest(
+            model_id="test-model",
+            prompt="",
+            max_tokens=64,
+            temperature=0.7,
+            top_p=0.9,
+            stop=["<|im_end|>"],
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        self.assertFalse(request.enable_thinking)
+
     def test_merges_formatter_stop_with_request_stop_deduplicated(self):
         backend, mock_llm = _load_backend()
         request = GenerationRequest(

@@ -40,6 +40,11 @@ class GenerationConfig:
     top_p: float = 0.9
     stop: list[str] = field(default_factory=lambda: ["User:", "\nUser:"])
     retries: int = 2
+    # Phase 22 Stage 22.6 part 2 — experimental, default off. Reintroduces
+    # genuine model deliberation on respond() only (never the tick loop);
+    # see docs/plans/PHASE22_STAGE22_6_ORGANIC_CONTEMPLATION_PART2.txt.
+    respond_enable_thinking: bool = False
+    respond_thinking_max_tokens: int = 2048
 
 
 @dataclass(slots=True)

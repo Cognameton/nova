@@ -1,0 +1,300 @@
+PHASE 22 — STAGE 22.6 (PART 2): BOUNDED THINKING-SPACE EXPERIMENT ON
+respond()
+==============================================================================
+
+Status: implemented
+Date: 2026-07-20
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior context: Part 1 (docs/plans/PHASE22_STAGE22_6_ORGANIC_CONTEMPLATION
+  _PART1.txt) closed a detection gap and a saturation problem. This part
+  addresses the harder, more speculative hypothesis named in that same
+  conversation: that Tier 1's enable_thinking=False (Stage 22.2b) fixed
+  F5 by removing the model's deliberation space ENTIRELY, and that this
+  may be part of why respond() answers lean so heavily on salient
+  injected context (self_context, soul) instead of visibly working
+  through something before answering.
+
+This is explicitly labeled EXPERIMENTAL. It is a real, bounded test of
+a real hypothesis, not a proven fix — the closure note must report
+what actually happens, including "no detectable difference" or "made
+things worse," honestly.
+
+
+OBJECTIVE
+---------
+
+Reintroduce genuine model deliberation (native enable_thinking=True,
+the same mechanism Stage 22.2b built) but ONLY on respond() — never on
+model_self_state_tick or model_idle_tick — and only ever as an
+ephemeral scratchpad: the <think> block must never reach the user,
+never be persisted as the answer, never become memory or evidence.
+Default OFF (opt-in via config), so this ships fully reversible and
+inert until explicitly turned on.
+
+
+WHY respond() SPECIFICALLY AND NOT THE TICK LOOP
+---------------------------------------------------
+
+model_self_state_tick has ZERO retry on parse failure (confirmed in
+code comment, runtime.py, Stage 22.2b's own root-cause investigation)
+— this is exactly why F5 was damaging there: a truncated or malformed
+tick was simply lost. respond() already has three independent layers
+of protection that self_state_tick does not:
+  1. A real retry loop (retry_policy.should_retry, up to
+     config.generation.retries attempts).
+  2. Validator-level <think> handling that ALREADY EXISTS and already
+     works correctly for the case that matters: _sanitize_completion_
+     artifacts (validator.py:84-92) strips well-formed <think>...
+     </think> blocks via regex BEFORE the think_tag_detected check
+     runs against the ALREADY-STRIPPED effective_text (validator.py:
+     32-45). A cleanly-closed think block does NOT trigger a
+     violation — only an unclosed/malformed one does (the retry-
+     worthy failure case). This was verified by reading the code, not
+     assumed.
+  3. Post Part 1: full scaffold-echo coverage across all 14 text
+     blocks including self_context_block and soul_block.
+No new stripping logic is invented here — the existing validator
+mechanism is reused exactly as-is, matching the project's standing
+discipline (Stage 22.4's F3 fix, Stage 21.4's NEVER_LICENSED guard,
+etc. all reused existing mechanisms rather than inventing parallel
+ones).
+
+
+CODE FACTS (verified 2026-07-20 against commit f9c7ad5, suite 927
+  green)
+-----------------------------------------------------------------------
+
+  - GenerationRequest (types.py) currently has no enable_thinking
+    field — LlamaCppBackend.generate() hardcodes enable_thinking=False
+    as a literal at the call site (llama_cpp_backend.py, Stage
+    22.2b), applying uniformly regardless of caller.
+  - _generation_request (runtime.py:4129) has exactly 4 call sites:
+    line 968 (model_self_state_tick), line 2074 (model_idle_tick),
+    line 3204 (respond(), initial generation), line 3280 (respond(),
+    retry generation). It currently takes only prompt/messages and
+    always uses self.config.generation.max_tokens uniformly for all
+    four call sites — there is no per-surface override mechanism.
+  - GenerationConfig (config.py:37-42): max_tokens=512, temperature=
+    0.7, top_p=0.9, stop=[...], retries=2. No thinking-related fields
+    exist yet.
+  - Validator's <think> handling (validator.py): confirmed by direct
+    reading — _sanitize_completion_artifacts strips <think>...</think>
+    via re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL)
+    BEFORE the think_tag_detected check runs against the stripped
+    effective_text. An UNCLOSED <think> tag (e.g. from hitting
+    max_tokens mid-thought) will NOT be matched/stripped by that
+    regex, leaving the literal "<think>" substring in effective_text,
+    which DOES trigger think_tag_detected -> should_retry=True. This
+    is the exact failure mode to budget against with a generous
+    max_tokens override, not a new bug to fix.
+  - run_perturbation_probe (runtime.py:1329) calls self.respond(
+    counter_prompt) — it shares respond()'s code path entirely. This
+    means enabling thinking on respond() will ALSO affect perturbation
+    probes once live. This is a genuine, welcome side effect for the
+    F7 investigation (a probe with real deliberation may produce a
+    less templated defense), not scope creep — respond() is shared
+    infrastructure and there is no clean way to exclude probes from a
+    respond()-level change without inventing a second code path.
+
+
+DECIDED DESIGN
+--------------
+
+D1. GenerationRequest (types.py) gains `enable_thinking: bool = False`.
+    Default False preserves current behavior for every field that
+    doesn't set it explicitly.
+
+D2. LlamaCppBackend.generate() (llama_cpp_backend.py) reads
+    `request.enable_thinking` instead of the hardcoded `False` literal
+    when calling the native chat formatter:
+      formatted = self._chat_formatter(
+          messages=request.messages, enable_thinking=request.enable_thinking
+      )
+    No other change to generate() — the native-template vs. fallback
+    branching from Stage 22.2b is untouched.
+
+D3. New GenerationConfig fields (config.py):
+      respond_enable_thinking: bool = False
+      respond_thinking_max_tokens: int = 2048
+    Both default to preserving exactly current behavior. Turning the
+    experiment on live is a config-file change (one line in
+    configs/nova.qwen3-14b.live.yaml), not a code change — this is
+    deliberate: the mechanism ships now, activating it live is a
+    separate, later decision, same pattern as every other stage this
+    phase.
+
+D4. _generation_request (runtime.py) gains two new optional
+    parameters:
+      def _generation_request(
+          self, *, prompt: str, messages: list[dict[str, str]] | None = None,
+          enable_thinking: bool = False, max_tokens_override: int | None = None,
+      ) -> GenerationRequest:
+    max_tokens_override, when provided, is used instead of
+    self.config.generation.max_tokens; enable_thinking is passed
+    straight through to GenerationRequest. Both default to values that
+    reproduce EXACTLY today's behavior when omitted.
+
+D5. model_self_state_tick (line 968) and model_idle_tick (line 2074)
+    call sites are NOT touched — they keep calling _generation_request
+    with only prompt/messages, so enable_thinking stays False and
+    max_tokens stays the standard config value for both. This is the
+    hard boundary this whole stage exists to respect.
+
+D6. respond()'s two call sites (initial generation ~3204, retry
+    generation ~3280) both compute:
+      thinking_enabled = self.config.generation.respond_enable_thinking
+      generation_request = self._generation_request(
+          prompt=prompt_bundle.full_prompt,
+          messages=prompt_bundle.messages,
+          enable_thinking=thinking_enabled,
+          max_tokens_override=(
+              self.config.generation.respond_thinking_max_tokens
+              if thinking_enabled else None
+          ),
+      )
+    and identically for the retry_request construction using
+    retry_prompt/retry_messages. Both the initial AND retry attempts
+    get the larger budget when the experiment is on — a retry that
+    also thinks needs the same headroom the initial attempt did.
+
+D7. No new stripping/detection logic anywhere. Reuse validator.py's
+    existing _sanitize_completion_artifacts and think_tag_detected
+    check exactly as they already work (confirmed correct for the
+    well-formed case in CODE FACTS above).
+
+D8. Scope exclusion: no change to model_self_state_tick, model_idle_
+    tick, run_perturbation_probe's own logic (it inherits the effect
+    via respond() only), retry_policy, or the scaffold-echo mechanism
+    from Part 1. No change to the live config's actual
+    respond_enable_thinking value in this stage — it lands OFF,
+    turning it on live is a separate decision.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_llama_cpp_backend.py (extend):
+  - generate() with a native-template-capable backend and
+    request.enable_thinking=True renders with enable_thinking=True
+    passed to the formatter (assert on the rendered prompt content,
+    mirroring the existing enable_thinking=False test added in Stage
+    22.2b).
+  - request.enable_thinking defaults to False when omitted from
+    GenerationRequest (regression pin).
+
+tests/test_runtime_smoke.py or wherever respond() is tested (extend):
+  - respond() with config.generation.respond_enable_thinking=False
+    (the default): generation_request built with enable_thinking=
+    False and standard max_tokens — byte-identical behavior to before
+    this stage (hard regression pin: this MUST reproduce exactly, not
+    approximately).
+  - respond() with respond_enable_thinking=True: generation_request
+    built with enable_thinking=True and max_tokens=
+    respond_thinking_max_tokens instead of the standard value.
+  - model_self_state_tick and model_idle_tick generation requests are
+    UNAFFECTED by config.generation.respond_enable_thinking=True
+    (explicit regression pin — the whole point of this stage is that
+    the tick loop never sees this flag).
+  - A well-formed <think>...</think>answer response through respond()
+    with thinking enabled: sanitized_text has the think block
+    stripped and does not trigger think_tag_detected (uses
+    FakeBackend to control the raw response precisely).
+  - An unclosed <think> response (simulating max_tokens truncation
+    mid-thought): think_tag_detected fires and should_retry=True —
+    confirms the existing validator behavior is unchanged, this stage
+    doesn't touch it.
+
+
+DEFINITION OF DONE
+-------------------
+
+  - D1-D8 implemented exactly as decided.
+  - New tests pass; full suite green (baseline 927).
+  - Explicit regression tests proving model_self_state_tick and
+    model_idle_tick are byte-for-byte unaffected — this is the single
+    most important thing to get right in this stage.
+  - Single commit; closure note appended here recording the mechanism
+    as built, NOT any live behavioral result (no live testing happens
+    in this stage — turning it on is a separate decision that would
+    need its own real-model verification, same VRAM-contention
+    consideration as every prior real-model test this phase).
+
+
+REFERENCE
+---------
+
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  Part 1 (scaffold-echo + diversity): docs/plans/PHASE22_STAGE22_6_
+    ORGANIC_CONTEMPLATION_PART1.txt
+  Root fix this builds on: docs/plans/PHASE22_STAGE22_2B_NATIVE_
+    THINKING_SUPPRESSION.txt
+  Backend: src/nova/inference/llama_cpp_backend.py
+  Validator's existing think-block handling: src/nova/prompt/
+    validator.py
+
+
+CLOSURE NOTE (2026-07-20, Sonnet 5)
+======================================
+
+Zero deviations from D1-D8 as pinned. All eight pieces landed exactly
+as designed:
+  - GenerationRequest.enable_thinking (types.py), default False.
+  - LlamaCppBackend.generate() reads request.enable_thinking instead
+    of the Stage 22.2b hardcoded False literal.
+  - GenerationConfig.respond_enable_thinking / respond_thinking_
+    max_tokens (config.py), both default to values reproducing prior
+    behavior exactly.
+  - _generation_request gained enable_thinking/max_tokens_override
+    parameters, both defaulting to no-op values.
+  - model_self_state_tick (line 968) and model_idle_tick (line 2074)
+    call sites left completely untouched — confirmed by dedicated
+    regression tests, not just by inspection.
+  - respond()'s two call sites (initial + retry) both compute
+    thinking_enabled once and pass it plus the conditional max_tokens
+    override to both generation attempts.
+
+Tests: 2 new in test_llama_cpp_backend.py (enable_thinking threads to
+the formatter; defaults to False). 6 new in test_runtime_smoke.py,
+added via a new RecordingBackend fixture (captures every
+GenerationRequest for inspection) and a generation= override
+parameter added to build_test_runtime — both are small, reusable
+additions to shared test infrastructure, not one-off hacks:
+  - default config reproduces prior behavior exactly (byte-for-byte
+    hard regression pin).
+  - thinking-enabled config produces enable_thinking=True and the
+    larger budget.
+  - model_self_state_tick unaffected — explicit regression pin, the
+    single most important property this stage had to get right.
+  - model_idle_tick unaffected — same. (First attempt at this test
+    used start_internal_autonomy(), which doesn't actually reach the
+    generative idle-tick path; fixed by using start_idle(max_ticks=1,
+    evaluation_mode=True), matching the existing
+    test_model_idle_tick_records_valid_model_cognition pattern
+    already in this file. Test-setup bug, not an implementation bug —
+    caught before being trusted.)
+  - retry attempt also carries the thinking flag and larger budget
+    (both generation attempts, not just the first).
+  - a well-formed <think>...</think>answer response is stripped
+    cleanly with no retry needed — confirms the existing validator
+    behavior described in CODE FACTS is exactly as read, not assumed.
+Suite: 927 -> 935.
+
+NOT live, NOT turned on anywhere. configs/nova.qwen3-14b.live.yaml is
+unchanged — respond_enable_thinking remains False by default there
+too, since GenerationConfig's default applies unless the YAML
+explicitly overrides it. Turning this on for the live daemon (a config
+edit) and verifying it against the real model (a fresh real-model
+smoke test, same VRAM-contention consideration as every prior
+real-model verification this phase) are both separate, later
+decisions — this stage delivers the mechanism, fully tested and
+fully inert until explicitly activated.
+
+What this stage does NOT establish: whether the hypothesis is even
+correct. This tests a real mechanism, not a real model. Whether
+enabling it actually reduces recitation and increases genuine
+synthesis — or increases latency/cost for no benefit, or produces
+some other unanticipated effect — is an open empirical question that
+only a real-model run can answer, and per this stage's own framing,
+that answer should be reported honestly, including "no detectable
+difference" or "made things worse," not assumed favorable because the
+mechanism landed cleanly.

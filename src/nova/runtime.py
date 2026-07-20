@@ -3201,9 +3201,20 @@ class NovaRuntime:
             turn_id=turn_id,
         )
 
+        # Phase 22 Stage 22.6 part 2 (experimental, default off): respond()
+        # is the only surface allowed to request real deliberation — it has
+        # retry + validator think-block stripping + scaffold-echo coverage
+        # as safety nets, unlike the tick loop, which never sees this flag.
+        thinking_enabled = self.config.generation.respond_enable_thinking
         generation_request = self._generation_request(
             prompt=prompt_bundle.full_prompt,
             messages=prompt_bundle.messages,
+            enable_thinking=thinking_enabled,
+            max_tokens_override=(
+                self.config.generation.respond_thinking_max_tokens
+                if thinking_enabled
+                else None
+            ),
         )
         generation_result = self.backend.generate(generation_request)
         validation = self.validator.validate(
@@ -3280,6 +3291,12 @@ class NovaRuntime:
             retry_request = self._generation_request(
                 prompt=retry_prompt,
                 messages=retry_messages,
+                enable_thinking=thinking_enabled,
+                max_tokens_override=(
+                    self.config.generation.respond_thinking_max_tokens
+                    if thinking_enabled
+                    else None
+                ),
             )
             retry_result = self.backend.generate(retry_request)
             retry_validation = self.validator.validate(
@@ -4131,17 +4148,24 @@ class NovaRuntime:
         *,
         prompt: str,
         messages: list[dict[str, str]] | None = None,
+        enable_thinking: bool = False,
+        max_tokens_override: int | None = None,
     ):
         from nova.types import GenerationRequest
 
         return GenerationRequest(
             model_id=self.backend.metadata().get("model_name", "nova-model"),
             prompt=prompt,
-            max_tokens=self.config.generation.max_tokens,
+            max_tokens=(
+                max_tokens_override
+                if max_tokens_override is not None
+                else self.config.generation.max_tokens
+            ),
             temperature=self.config.generation.temperature,
             top_p=self.config.generation.top_p,
             stop=list(self.config.generation.stop),
             seed=None,
             retries_allowed=self.config.generation.retries,
             messages=list(messages) if messages else None,
+            enable_thinking=enable_thinking,
         )

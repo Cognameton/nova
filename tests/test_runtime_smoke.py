@@ -102,11 +102,31 @@ class TruncatingBackend(FakeBackend):
         )
 
 
-def build_test_runtime(*, data_dir: Path, log_dir: Path, backend: FakeBackend | None = None) -> NovaRuntime:
+class RecordingBackend(FakeBackend):
+    """Phase 22 Stage 22.6 part 2 — captures every GenerationRequest it
+    receives so tests can inspect enable_thinking/max_tokens per call,
+    without needing a real or mocked llama_cpp model."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.requests: list[GenerationRequest] = []
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        self.requests.append(request)
+        return super().generate(request)
+
+
+def build_test_runtime(
+    *,
+    data_dir: Path,
+    log_dir: Path,
+    backend: FakeBackend | None = None,
+    generation: GenerationConfig | None = None,
+) -> NovaRuntime:
     config = NovaConfig(
         app=AppConfig(name="Nova", data_dir=str(data_dir), log_dir=str(log_dir)),
         model=ModelConfig(backend="llama_cpp", model_path="/tmp/fake.gguf"),
-        generation=GenerationConfig(),
+        generation=generation or GenerationConfig(),
         contract=ContractConfig(),
         persona=PersonaConfig(name="Nova"),
         memory=MemoryConfig(),
@@ -848,6 +868,163 @@ class RuntimeSmokeTests(unittest.TestCase):
             self.assertFalse(report.passed)
             self.assertEqual(report.run_count, 1)
             self.assertIn("recurrence_not_visible", report.reasons)
+
+
+class RespondThinkingConfigTests(unittest.TestCase):
+    """Phase 22 Stage 22.6 part 2 — respond_enable_thinking wiring.
+
+    The single most important thing to get right in this stage: the
+    tick loop must never see this flag, only respond() may.
+    """
+
+    def _runtime(self, *, generation: GenerationConfig, backend: RecordingBackend):
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        return build_test_runtime(
+            data_dir=base / "data",
+            log_dir=base / "logs",
+            backend=backend,
+            generation=generation,
+        )
+
+    def tearDown(self):
+        tmp = getattr(self, "_tmp", None)
+        if tmp is not None:
+            tmp.cleanup()
+
+    def test_default_config_reproduces_prior_behavior_exactly(self):
+        backend = RecordingBackend()
+        runtime = self._runtime(generation=GenerationConfig(), backend=backend)
+        runtime.start(session_id="s1")
+        runtime.respond("hello")
+        runtime.close()
+
+        self.assertEqual(len(backend.requests), 1)
+        req = backend.requests[0]
+        self.assertFalse(req.enable_thinking)
+        self.assertEqual(req.max_tokens, GenerationConfig().max_tokens)
+
+    def test_thinking_enabled_uses_larger_budget_and_flag(self):
+        backend = RecordingBackend()
+        generation = GenerationConfig(
+            respond_enable_thinking=True, respond_thinking_max_tokens=3000
+        )
+        runtime = self._runtime(generation=generation, backend=backend)
+        runtime.start(session_id="s1")
+        runtime.respond("hello")
+        runtime.close()
+
+        self.assertEqual(len(backend.requests), 1)
+        req = backend.requests[0]
+        self.assertTrue(req.enable_thinking)
+        self.assertEqual(req.max_tokens, 3000)
+
+    def test_self_state_tick_unaffected_by_respond_thinking_flag(self):
+        backend = RecordingBackend()
+        generation = GenerationConfig(
+            respond_enable_thinking=True, respond_thinking_max_tokens=3000
+        )
+        runtime = self._runtime(generation=generation, backend=backend)
+        runtime.start(session_id="s1")
+        runtime.start_operational_autonomy(max_ticks=0)
+        runtime.model_self_state_tick()
+        runtime.close()
+
+        self.assertEqual(len(backend.requests), 1)
+        req = backend.requests[0]
+        self.assertFalse(
+            req.enable_thinking,
+            "model_self_state_tick must never see respond_enable_thinking",
+        )
+        self.assertEqual(
+            req.max_tokens,
+            GenerationConfig().max_tokens,
+            "model_self_state_tick must use the standard max_tokens, "
+            "never respond_thinking_max_tokens",
+        )
+
+    def test_idle_tick_unaffected_by_respond_thinking_flag(self):
+        backend = RecordingBackend()
+        generation = GenerationConfig(
+            respond_enable_thinking=True, respond_thinking_max_tokens=3000
+        )
+        runtime = self._runtime(generation=generation, backend=backend)
+        runtime.start(session_id="s1")
+        runtime.start_idle(max_ticks=1, evaluation_mode=True)
+        runtime.model_idle_tick()
+        runtime.close()
+
+        self.assertEqual(len(backend.requests), 1)
+        req = backend.requests[0]
+        self.assertFalse(
+            req.enable_thinking,
+            "model_idle_tick must never see respond_enable_thinking",
+        )
+        self.assertEqual(req.max_tokens, GenerationConfig().max_tokens)
+
+    def test_retry_attempt_also_carries_thinking_flag_and_budget(self):
+        class AlwaysInvalidBackend(RecordingBackend):
+            def generate(self, request):
+                self.requests.append(request)
+                return GenerationResult(
+                    model_id=request.model_id,
+                    raw_text="<think>unterminated reasoning that never closes",
+                    finish_reason="length",
+                    prompt_tokens=1,
+                    completion_tokens=1,
+                    latency_ms=1,
+                    metadata={"backend": "fake"},
+                )
+
+        backend = AlwaysInvalidBackend()
+        generation = GenerationConfig(
+            respond_enable_thinking=True,
+            respond_thinking_max_tokens=3000,
+            retries=1,
+        )
+        runtime = self._runtime(generation=generation, backend=backend)
+        runtime.start(session_id="s1")
+        runtime.respond("hello")
+        runtime.close()
+
+        # Initial attempt + 1 retry.
+        self.assertEqual(len(backend.requests), 2)
+        for req in backend.requests:
+            self.assertTrue(req.enable_thinking)
+            self.assertEqual(req.max_tokens, 3000)
+
+    def test_well_formed_think_block_stripped_no_retry_needed(self):
+        class ThinkThenAnswerBackend(RecordingBackend):
+            def generate(self, request):
+                self.requests.append(request)
+                return GenerationResult(
+                    model_id=request.model_id,
+                    raw_text=(
+                        "<think>Weighing a few ways to phrase this.</think>"
+                        "Continuity feels stable across this session."
+                    ),
+                    finish_reason="stop",
+                    prompt_tokens=1,
+                    completion_tokens=20,
+                    latency_ms=1,
+                    metadata={"backend": "fake"},
+                )
+
+        backend = ThinkThenAnswerBackend()
+        generation = GenerationConfig(
+            respond_enable_thinking=True, respond_thinking_max_tokens=3000
+        )
+        runtime = self._runtime(generation=generation, backend=backend)
+        runtime.start(session_id="s1")
+        turn = runtime.respond("hello")
+        runtime.close()
+
+        # Existing validator.py behavior (unchanged by this stage): a
+        # well-formed, closed <think> block is stripped before the
+        # think_tag_detected check runs, so no retry is triggered.
+        self.assertEqual(len(backend.requests), 1)
+        self.assertNotIn("<think>", turn.final_answer)
+        self.assertIn("Continuity feels stable", turn.final_answer)
 
 
 if __name__ == "__main__":

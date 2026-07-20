@@ -1005,6 +1005,7 @@ class GenerationRequest:
     seed: int | None = None
     retries_allowed: int = 0
     messages: list[dict[str, str]] | None = None
+    enable_thinking: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
