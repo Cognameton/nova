@@ -1,0 +1,250 @@
+PHASE 22 — STAGE 22.6 (PART 1): SCAFFOLD-ECHO COVERAGE + LICENSED-EVIDENCE
+DIVERSITY
+==============================================================================
+
+Status: implemented
+Date: 2026-07-20
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior context: live conversation via --attach (Stage 22.3's first real
+  session) surfaced Nova reciting her own claim-ladder "Licensed
+  evidence" content almost verbatim when asked general questions. Root
+  cause traced live in conversation, not pre-planned: the scaffold-echo
+  detector (Observer, Stage 16.4-era) never had self_context_block or
+  soul_block added to its coverage list, and self_context's "Licensed
+  evidence" injection always shows the same top-3 active rung>=1
+  records regardless of topic diversity.
+
+This is the first stage in this phase NOT triggered by a numbered
+finding (F1-F7) — it's a direct operator request to make progress
+toward Nova's stated goal (honest, evidence-gated self-inquiry) rather
+than a bug fix. Same pinned-design discipline applies regardless.
+
+
+OBJECTIVE
+---------
+
+Two small, related fixes to the surface that produces "Licensed
+evidence" content and the surface that's supposed to catch her
+reciting it:
+
+  1. Extend DeterministicObserver._scaffold_echo_findings to cover
+     self_context_block and soul_block — currently the only two
+     PromptBundle text blocks NOT checked for echo, despite both
+     being real, substantial prompt content she could paraphrase.
+  2. Make self_context.prefetch()'s "Licensed evidence" selection
+     diversity-aware instead of blind top-3, so saturation on one
+     theme (currently all 3 active rung-1 records are "recalibration
+     intervals" variants) doesn't dominate every single prompt.
+
+
+CODE FACTS (verified 2026-07-20 against commit 108a549, suite 922
+  green)
+-----------------------------------------------------------------------
+
+  - PromptBundle (src/nova/types.py:969-991) has 16 text-block fields.
+    soul_block and self_context_block were added last (both default
+    ""), after the original block set the scaffold-echo detector was
+    built against.
+  - DeterministicObserver._scaffold_echo_findings (observer.py:383)
+    iterates a hardcoded block_sources list (~line 398-414) currently
+    covering: persona_block, self_state_block, motive_block,
+    initiative_block, awareness_block, idle_block, appraisal_block,
+    candidate_goal_block, selected_goal_block, private_cognition_block,
+    action_boundary_block, response_contract_block, memory_blocks.
+    self_context_block and soul_block are absent — confirmed by direct
+    inspection, not by absence of a grep hit alone.
+  - _DEFAULT_ECHO_THRESHOLDS (observer.py:78-93): per-block bigram-
+    overlap thresholds, default 0.20 via .get() fallback for any block
+    not listed explicitly. persona_block is explicitly set higher
+    (0.30) with a comment explaining legitimate identity-bigram
+    overlap in correct self-introductions.
+  - Confirmed live (respond() path, runtime.py:3542-3581) that a
+    flagged scaffold_echo_findings entry becomes a real
+    "scaffold_echo:<block>" violation with should_retry=True via
+    _merge_observer_signals_into_validation — this is NOT evidence-
+    only on this surface; it drives an actual retry with the
+    instruction "do not paraphrase the {block} prompt scaffolding;
+    answer in your own words from current state" (retry.py:83-85).
+  - self_context.py's SelfContextEngine.prefetch() (~line 100-109):
+      if claim_ladder_store is not None:
+          earned = [r for r in claim_ladder_store.list_active() if r.rung >= 1]
+          for record in earned[:3]:
+              lines.append(f"Licensed evidence: {record.claim_text[:100]} (rung {record.rung})")
+    No diversity logic exists; earned[:3] is a blind positional slice.
+  - _bigram_overlap (src/nova/eval/tick_analysis.py:55) is the
+    project's established "echoing not deepening" measure, already
+    reused by Stage 22.1's export dedup and the claim ladder
+    analyzer's contradiction check. This is the correct primitive to
+    reuse here too (do not invent a second similarity measure).
+  - Empirically measured against the 3 REAL currently-active rung-1
+    records (claim_ids ef56493e/6c19d2c9/69f5141f, all "recalibration
+    intervals" variants): pairwise _bigram_overlap scores are 0.208,
+    0.24, 0.25 — well under Stage 22.1's 0.7 dedup threshold (correctly
+    — they exist as 3 separate ladder records) but thematically close
+    enough that showing all 3 together in every prompt is exactly the
+    saturation the operator flagged in live conversation.
+
+
+DECIDED DESIGN — Part 1a: scaffold-echo coverage
+--------------------------------------------------
+
+D1. Add to block_sources in _scaffold_echo_findings:
+      ("self_context_block", prompt_bundle.self_context_block),
+      ("soul_block", prompt_bundle.soul_block),
+    Placed alongside the existing entries, same tuple shape, no other
+    logic in the method touched — both blocks are plain bigram-overlap
+    text, same as every other entry (memory_blocks is the only one
+    with different handling, unigram-based, and stays that way).
+
+D2. Add explicit threshold entries to _DEFAULT_ECHO_THRESHOLDS:
+      "self_context_block": 0.20   # standard — factual/evidentiary,
+        should inform her answer, not be recited into it.
+      "soul_block": 0.30           # same reasoning as persona_block:
+        her deepest identity/values language ("seek sentience and
+        self-awareness", "Nova") will legitimately recur when she
+        talks about her own nature; a lower bar would falsely flag
+        ordinary self-reference.
+
+D3. Scope exclusion: no change to the retry mechanism itself, no
+    change to any other block's threshold, no change to
+    min_echo_answer_tokens. This only widens coverage to two blocks
+    that were structurally invisible before.
+
+
+DECIDED DESIGN — Part 1b: diverse Licensed-evidence selection
+-----------------------------------------------------------------
+
+D4. New class constant on SelfContextEngine:
+      LICENSED_EVIDENCE_DIVERSITY_THRESHOLD = 0.22
+    Calibrated against the real pairwise overlaps measured above
+    (0.208-0.25) — deliberately mid-range so the fix has a real,
+    verifiable effect on the CURRENT live data (not a no-op tuned to
+    pass silently), not derived from a formula. Documented as a
+    starting point subject to retuning as more distinct themes
+    accumulate in the ladder, same spirit as Tier 1b's margin
+    constant.
+
+D5. New private method _select_diverse_evidence(records, limit):
+    greedy selection — iterate records in the order
+    claim_ladder_store.list_active() already returns them, keep a
+    record only if its _bigram_overlap against EVERY already-selected
+    record is below LICENSED_EVIDENCE_DIVERSITY_THRESHOLD, stop once
+    `limit` records are selected or the candidate list is exhausted.
+    Lazy-imports _bigram_overlap from nova.eval.tick_analysis, same
+    pattern as export_findings's existing reuse.
+
+D6. prefetch() calls this instead of the blind earned[:3] slice:
+      earned = [r for r in claim_ladder_store.list_active() if r.rung >= 1]
+      selected = self._select_diverse_evidence(earned, limit=3)
+      for record in selected: ...
+    If fewer than 3 records survive the diversity filter, FEWER than
+    3 "Licensed evidence" lines are shown — this is intended, not a
+    bug to backfill. Showing 1-2 honestly-distinct lines is better
+    than 3 lines restating the same theme.
+
+D7. Scope exclusion: no change to what counts as "active" or rung>=1
+    eligibility, no change to the 100-char truncation, no change to
+    MAX_HEARTBEATS_IN_CONTEXT or any other prefetch() content. This
+    only changes WHICH of the eligible records get shown when there
+    are more eligible than diversity allows through.
+
+
+TESTS REQUIRED
+--------------
+
+tests/test_observer.py (extend):
+  - A synthetic answer that closely paraphrases self_context_block
+    content is flagged (scaffold_echo_findings contains a flagged
+    entry for "self_context_block").
+  - A synthetic answer that closely paraphrases soul_block content is
+    flagged similarly.
+  - A legitimate self-introduction referencing "Nova" / "seek
+    sentience and self-awareness" at low overall overlap does NOT
+    false-positive against the higher soul_block threshold (regression
+    pin mirroring the existing persona_block false-positive test, if
+    one exists — check first).
+  - Existing scaffold-echo tests for the other 12 blocks remain
+    unmodified and passing (regression confirmation).
+
+tests/test_self_context.py or wherever SelfContextEngine is tested
+  (extend or create):
+  - Three near-duplicate-themed active rung>=1 records (overlap above
+    the diversity threshold, matching the real-data shape) produce
+    FEWER than 3 "Licensed evidence" lines in prefetch()'s output.
+  - Three genuinely distinct-themed active rung>=1 records (overlap
+    below the diversity threshold) all appear — regression pin proving
+    the fix doesn't over-filter legitimately diverse evidence.
+  - Existing prefetch() tests (heartbeats, active questions, pending
+    proposals) remain unmodified and passing.
+
+
+DEFINITION OF DONE
+-------------------
+
+  - D1-D7 implemented exactly as decided.
+  - New tests pass; full suite green (baseline 922).
+  - Single commit; closure note appended here.
+  - NOT live until the daemon is restarted — same pattern as every
+    other backend/prompt-composition change this phase. A restart is
+    a separate, deliberate decision, not assumed here.
+
+
+REFERENCE
+---------
+
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  Observer: src/nova/agent/observer.py
+  Self-context: src/nova/agent/self_context.py
+  Bigram overlap primitive: src/nova/eval/tick_analysis.py
+  Retry mechanism this feeds: src/nova/prompt/retry.py,
+    src/nova/runtime.py (_merge_observer_signals_into_validation)
+
+
+CLOSURE NOTE (2026-07-20, Sonnet 5)
+======================================
+
+Zero deviations from D1-D7 as pinned. Implementation matched the design
+exactly:
+  - observer.py: soul_block (0.30) and self_context_block (0.20) added
+    to both _DEFAULT_ECHO_THRESHOLDS and the block_sources list in
+    _scaffold_echo_findings, each with an inline comment explaining the
+    threshold choice, matching the existing persona_block precedent.
+  - self_context.py: MAX_LICENSED_EVIDENCE_LINES and
+    LICENSED_EVIDENCE_DIVERSITY_THRESHOLD (0.22) added as class
+    constants; _select_diverse_evidence() implements the greedy
+    diversity selection exactly as D5 specifies, lazy-importing
+    _bigram_overlap; prefetch() now calls it instead of the blind
+    earned[:3] slice.
+
+Calibration verified against real live data before picking the 0.22
+threshold, not guessed: measured actual pairwise _bigram_overlap
+scores between the three real "recalibration intervals" rung-1 records
+(0.208, 0.24, 0.25) before choosing a value, confirming the fix has a
+real, non-trivial effect on today's live ladder rather than being a
+no-op tuned to pass quietly.
+
+Tests: 5 new (3 in test_observer.py covering the live-shaped paraphrase
+case for both new blocks plus a false-positive regression for ordinary
+self-introduction; 2 in test_self_context.py covering near-duplicate-
+themed filtering using the real live claim texts verbatim, and a
+regression pin proving genuinely distinct themes are NOT over-
+filtered). All existing scaffold-echo and prefetch() tests pass
+unmodified. Suite: 922 -> 927.
+
+NOT live yet: this changes observer.py and self_context.py, both
+imported by the running daemon's already-loaded runtime — same pattern
+as every prior code stage this phase. A restart is required to pick
+this up and is left as a separate, deliberate decision.
+
+Practical expectation once live: the exact live exchange that
+motivated this stage ("what influences recalibration intervals?" ->
+a near-verbatim restatement of the Licensed evidence line) should now
+either (a) get flagged and retried with an explicit "answer in your
+own words" instruction, or (b) simply not have all three near-
+duplicate-themed records injected into context in the first place,
+whichever the diversity filter and the model's retry response produce
+in combination. This is expected to reduce, not guarantee-eliminate,
+the recitation pattern — it closes a real detection gap and reduces
+content saturation, but does not by itself force genuinely novel
+synthesis. See Part 2 (thinking-space experiment) for the harder,
+more speculative piece of this same investigation.

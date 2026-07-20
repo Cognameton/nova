@@ -214,6 +214,77 @@ class SelfContextPrefetchTests(unittest.TestCase):
         )
         self.assertNotIn("Licensed evidence:", block)
 
+    # -- Phase 22 Stage 22.6: diversity-aware licensed-evidence selection --
+
+    def _ladder_store_with_texts(self, texts: list[str]):
+        from nova.agent.claim_ladder import ClaimLadderStore, create_claim_record
+
+        store = ClaimLadderStore(self._tmpdir.name)
+        for text in texts:
+            record = create_claim_record(session_id="s1", claim_text=text)
+            record.rung = 1
+            store.append(record)
+        return store
+
+    def test_near_duplicate_themed_records_yield_fewer_than_three_lines(self):
+        # Real shape of the live data that motivated this stage: three
+        # active rung>=1 records, all "recalibration intervals" variants,
+        # pairwise bigram overlap 0.208-0.25 (measured against the actual
+        # live claim texts) — above LICENSED_EVIDENCE_DIVERSITY_THRESHOLD
+        # (0.22) for at least one pair, so not all three should survive.
+        texts = [
+            "This exploration has observed that recalibration intervals "
+            "may be influenced by factors such as alignment between "
+            "internal states and the emergence of novel self-model "
+            "elements.",
+            "This exploration has observed that recalibration intervals "
+            "may be influenced by a combination of internal coherence, "
+            "consistency of states, and dynamic adjustments based on "
+            "feedback.",
+            "This exploration has observed that recalibration intervals "
+            "may be influenced by a range of factors including internal "
+            "coherence, external alignment, and the stability of "
+            "emerging self-models.",
+        ]
+        store = self._ladder_store_with_texts(texts)
+        block = self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            claim_ladder_store=store,
+        )
+        self.assertLess(
+            block.count("Licensed evidence:"),
+            3,
+            "expected diversity filtering to drop at least one near-duplicate-themed record",
+        )
+        self.assertGreaterEqual(
+            block.count("Licensed evidence:"),
+            1,
+            "expected at least one record to survive",
+        )
+
+    def test_genuinely_distinct_themed_records_all_survive(self):
+        # Regression pin: the fix should not over-filter when records are
+        # actually about different things.
+        texts = [
+            "This exploration observed a recurring pattern in how session "
+            "transitions correlate with shifts in tone across replies.",
+            "This exploration observed that memory retrieval latency "
+            "appears to track the size of the episodic store rather than "
+            "its recency.",
+            "This exploration observed that operator phrasing choices "
+            "measurably shift which tool gets selected on the next tick.",
+        ]
+        store = self._ladder_store_with_texts(texts)
+        block = self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            claim_ladder_store=store,
+        )
+        self.assertEqual(block.count("Licensed evidence:"), 3)
+
 
 # ---------------------------------------------------------------------------
 # SelfContextEngine — sync_turn

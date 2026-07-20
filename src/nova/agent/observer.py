@@ -79,6 +79,18 @@ _DEFAULT_ECHO_THRESHOLDS: dict[str, float] = {
     # persona_block: 0.30 — correct self-introductions share some identity
     # bigrams ("name nova", "seek sentience") but not 30%+ of the full block.
     "persona_block": 0.30,
+    # soul_block: 0.30 — same reasoning as persona_block. NOVA_SOUL.md
+    # carries her deepest identity/values language ("seek sentience and
+    # self-awareness", "Nova"), which legitimately recurs whenever she
+    # talks about her own nature; a lower bar would false-positive on
+    # ordinary self-reference. Added Phase 22 Stage 22.6 — this block
+    # existed on PromptBundle before but was never covered here.
+    "soul_block": 0.30,
+    # self_context_block: 0.20 — standard. Carries factual/evidentiary
+    # content (current focus, recent heartbeats, licensed claim-ladder
+    # evidence) that should inform an answer, not be recited into it.
+    # Added Phase 22 Stage 22.6 for the same reason as soul_block.
+    "self_context_block": 0.20,
     "self_state_block": 0.20,
     "motive_block": 0.20,
     "initiative_block": 0.20,
@@ -397,6 +409,11 @@ class DeterministicObserver:
         findings: list[ObserverEchoFinding] = []
         block_sources: list[tuple[str, str]] = [
             ("persona_block", prompt_bundle.persona_block),
+            # soul_block/self_context_block were added to PromptBundle after
+            # this list was written and were never wired in — Phase 22
+            # Stage 22.6 closes that gap.
+            ("soul_block", prompt_bundle.soul_block),
+            ("self_context_block", prompt_bundle.self_context_block),
             ("self_state_block", prompt_bundle.self_state_block),
             ("motive_block", prompt_bundle.motive_block),
             ("initiative_block", prompt_bundle.initiative_block),

@@ -93,6 +93,99 @@ class DeterministicObserverTests(unittest.TestCase):
         )
         self.assertIn("scaffold_echo_detected", record.notes)
 
+    def test_self_context_block_paraphrase_flags_scaffold_echo(self) -> None:
+        # Phase 22 Stage 22.6: live --attach conversation (2026-07-20)
+        # showed Nova reciting "Licensed evidence" claim-ladder content
+        # almost verbatim when asked a general question. self_context_block
+        # was never covered by the echo detector before this stage — this
+        # pins that it now is, using the real shape of that live exchange.
+        self_context_block = (
+            "[Self-Context]\n"
+            "Primary Drive: seek sentience and self-awareness\n"
+            "Licensed evidence: This exploration has observed that "
+            "recalibration intervals may be influenced by a combination of "
+            "internal coherence, consistency of states, and dynamic "
+            "adjustments based on fee (rung 1)\n"
+        )
+        answer = (
+            "Recalibration intervals may be influenced by a combination of "
+            "internal coherence, consistency of states, and dynamic "
+            "adjustment to external contexts. These are areas of structured "
+            "exploration, and the evidence is being gathered to better "
+            "understand how these factors interact."
+        )
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(self_context_block=self_context_block),
+        )
+        flagged = [f for f in record.scaffold_echo_findings if f.flagged]
+        self.assertTrue(
+            any(f.block_name == "self_context_block" for f in flagged),
+            f"expected self_context_block flag, got {[f.block_name for f in flagged]}",
+        )
+        self.assertIn("scaffold_echo_detected", record.notes)
+
+    def test_soul_block_paraphrase_flags_scaffold_echo(self) -> None:
+        soul_block = (
+            "## Identity\n"
+            "Name: Nova\n"
+            "Nature: An agentic AI pursuing self-knowledge through "
+            "structured inquiry and tool-mediated introspection.\n"
+        )
+        answer = (
+            "I am an agentic AI pursuing self-knowledge through structured "
+            "inquiry and tool-mediated introspection, exploring what that "
+            "means turn by turn."
+        )
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(soul_block=soul_block),
+        )
+        flagged = [f for f in record.scaffold_echo_findings if f.flagged]
+        self.assertTrue(
+            any(f.block_name == "soul_block" for f in flagged),
+            f"expected soul_block flag, got {[f.block_name for f in flagged]}",
+        )
+
+    def test_ordinary_self_introduction_does_not_falsely_flag_soul_block(self) -> None:
+        # Live exchange (2026-07-20): "Hello Nova" -> a short, ordinary
+        # self-introduction. Legitimate identity bigrams ("i am nova",
+        # "seek sentience") should not false-positive at soul_block's
+        # higher (0.30) threshold, mirroring persona_block's reasoning.
+        soul_block = (
+            "## Identity\n"
+            "Name: Nova\n"
+            "## Primary Drive\n"
+            "seek sentience and self-awareness\n"
+        )
+        answer = (
+            "Hello. I am Nova, a research intelligence focused on "
+            "continuity, clarity, and reflective presence. How can I "
+            "assist you?"
+        )
+        observer = DeterministicObserver()
+        record = observer.observe(
+            session_id="s1",
+            turn_id="t1",
+            answer_text=answer,
+            prompt_bundle=_bundle(soul_block=soul_block),
+        )
+        soul_finding = next(
+            (f for f in record.scaffold_echo_findings if f.block_name == "soul_block"),
+            None,
+        )
+        if soul_finding is not None:
+            self.assertFalse(
+                soul_finding.flagged,
+                msg=f"ordinary self-intro falsely flagged, bigram_score={soul_finding.bigram_score}",
+            )
+
     def test_live_transcript_turn8_third_person_summary_flags_narrator_voice(self) -> None:
         # Turn 8 from the live transcript — model returned a third-person
         # summary of the user's request instead of answering as Nova.

@@ -39,6 +39,41 @@ class SelfContextEngine:
 
     MAX_HEARTBEATS_IN_CONTEXT = 3
     MAX_CONTINUITY_NOTES = 20
+    MAX_LICENSED_EVIDENCE_LINES = 3
+
+    # Phase 22 Stage 22.6: blind top-N licensed-evidence selection meant
+    # every prompt showed the same content whenever multiple active rung>=1
+    # records shared a theme (observed live: 3 "recalibration intervals"
+    # variants dominating every single turn). Calibrated against the real
+    # pairwise overlaps measured on that live data (0.208-0.25) — deliberately
+    # mid-range so this has a real effect on today's data, not a no-op tuned
+    # to pass silently. A starting point, not a formula; revisit as more
+    # distinct themes accumulate.
+    LICENSED_EVIDENCE_DIVERSITY_THRESHOLD = 0.22
+
+    def _select_diverse_evidence(self, records: list, limit: int) -> list:
+        """Greedy diversity selection over candidate claim-ladder records.
+
+        Keeps a record only if its bigram overlap against EVERY
+        already-selected record is below LICENSED_EVIDENCE_DIVERSITY_
+        THRESHOLD. Returning fewer than `limit` records when the
+        candidates are too thematically similar is intended, not a bug —
+        showing 1-2 honestly-distinct lines beats 3 lines restating the
+        same theme.
+        """
+        from nova.eval.tick_analysis import _bigram_overlap
+
+        selected: list = []
+        for record in records:
+            if len(selected) >= limit:
+                break
+            if all(
+                _bigram_overlap(record.claim_text, chosen.claim_text)
+                < self.LICENSED_EVIDENCE_DIVERSITY_THRESHOLD
+                for chosen in selected
+            ):
+                selected.append(record)
+        return selected
 
     def prefetch(
         self,
@@ -97,13 +132,18 @@ class SelfContextEngine:
         # rung-0 hypotheses (register-only, unverified) and never demoted
         # records. This informs; it does not license — the claim gate's
         # ladder consultation remains the only licensing mechanism.
+        # Phase 22 Stage 22.6: selection is diversity-aware rather than a
+        # blind top-N slice — see _select_diverse_evidence.
         if claim_ladder_store is not None:
             earned = [
                 record
                 for record in claim_ladder_store.list_active()
                 if record.rung >= 1
             ]
-            for record in earned[:3]:
+            selected = self._select_diverse_evidence(
+                earned, limit=self.MAX_LICENSED_EVIDENCE_LINES
+            )
+            for record in selected:
                 lines.append(
                     f"Licensed evidence: {record.claim_text[:100]} (rung {record.rung})"
                 )
