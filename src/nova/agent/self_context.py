@@ -7,6 +7,70 @@ from nova.agent.motive import PRIMARY_DRIVE
 from nova.types import MotiveState, SelfState
 
 
+def cluster_texts(texts: list[str], *, overlap_threshold: float = 0.4) -> dict:
+    """Greedy single-link content-word clustering — Phase 22 Stage 22.7 (F8).
+
+    A text joins the first cluster containing ANY member whose symmetric
+    overlap (shared content words / smaller word set) is >=
+    overlap_threshold, else starts a new cluster. Single-link with a
+    min-normalized score, NOT seed-coverage: exploration topics are short
+    and reworded ("dynamic recalibration mechanisms" vs "recalibration
+    intervals and internal coherence"), so seed-only coverage fragments a
+    genuinely monothematic set — calibrated against the real live last-30
+    topics, where seed@0.4 reported 14/30 and single-link@0.4 the correct
+    30/30. Deterministic in input order. Returns {"total",
+    "largest_cluster_size", "top_words"} where top_words are the 3 most
+    frequent content words of the largest cluster. Used for the
+    tick-surface ladder summary (part A) and the exploration-history
+    saturation note (part B).
+    """
+    from nova.agent.claim_ladder import _content_words
+
+    def _symmetric_overlap(a: set, b: set) -> float:
+        if not a or not b:
+            return 0.0
+        return len(a & b) / min(len(a), len(b))
+
+    clusters: list[dict] = []  # {"word_sets": [set], "texts": [str]}
+    for text in texts:
+        words = _content_words(text)
+        placed = False
+        for cluster in clusters:
+            if any(
+                _symmetric_overlap(words, member) >= overlap_threshold
+                for member in cluster["word_sets"]
+            ):
+                cluster["word_sets"].append(words)
+                cluster["texts"].append(text)
+                placed = True
+                break
+        if not placed:
+            clusters.append({"word_sets": [words], "texts": [text]})
+
+    if not clusters:
+        return {"total": 0, "largest_cluster_size": 0, "top_words": []}
+
+    largest = max(clusters, key=lambda c: len(c["texts"]))
+    counts: dict[str, int] = {}
+    for text in largest["texts"]:
+        for word in _content_words(text):
+            counts[word] = counts.get(word, 0) + 1
+    # Ties broken toward longer words — at equal frequency the longer word
+    # is usually the more distinctive theme marker (e.g. "recalibration"
+    # over "internal"). Alphabetical last for full determinism.
+    top_words = [
+        w
+        for w, _ in sorted(
+            counts.items(), key=lambda kv: (-kv[1], -len(kv[0]), kv[0])
+        )[:3]
+    ]
+    return {
+        "total": len(texts),
+        "largest_cluster_size": len(largest["texts"]),
+        "top_words": top_words,
+    }
+
+
 _SELF_REFLECTIVE_PATTERNS = (
     "i am",
     "i notice",
@@ -75,6 +139,14 @@ class SelfContextEngine:
                 selected.append(record)
         return selected
 
+    # Phase 22 Stage 22.7 (F8): the tick surface replaces verbatim licensed-
+    # evidence lines with an aggregate ladder summary. Records whose theme
+    # dominates the ladder are reported as a concentration figure — more
+    # self-knowledge than three near-identical sentences, with none of the
+    # verbatim echo material that created the permanent context attractor.
+    LADDER_SUMMARY_MAX_RECORDS = 200
+    LADDER_CLUSTER_OVERLAP_THRESHOLD = 0.4
+
     def prefetch(
         self,
         *,
@@ -83,11 +155,23 @@ class SelfContextEngine:
         heartbeat_store: HeartbeatStore,
         proposal_store: SelfModelProposalStore | None = None,
         claim_ladder_store=None,
+        surface: str = "respond",
+        include_heartbeats: bool = True,
+        include_drive_line: bool = True,
+        drive_descriptive: bool = False,
     ) -> str:
-        lines: list[str] = [
-            "[Self-Context]",
-            f"Primary Drive: {PRIMARY_DRIVE}",
-        ]
+        lines: list[str] = ["[Self-Context]"]
+        # Phase 22 Stage 22.7 part D: drive-line dosage is a tick-surface
+        # experiment; respond() callers use the defaults, which reproduce
+        # prior behavior exactly.
+        if include_drive_line:
+            if drive_descriptive:
+                lines.append(
+                    "Standing drive (background context, not this tick's task): "
+                    f"{PRIMARY_DRIVE}"
+                )
+            else:
+                lines.append(f"Primary Drive: {PRIMARY_DRIVE}")
 
         focus = self_state.current_focus
         if focus:
@@ -103,22 +187,27 @@ class SelfContextEngine:
         if self_state.open_tensions:
             lines.append(f"Open Tensions: {len(self_state.open_tensions)} unresolved")
 
-        recent = heartbeat_store.list_recent(limit=self.MAX_HEARTBEATS_IN_CONTEXT)
-        if recent:
-            lines.append("Recent Heartbeats:")
-            for hb in recent:
-                ts = hb.timestamp[:19] if hb.timestamp else "unknown"
-                obs = hb.observation[:80] if hb.observation else ""
-                gap = (
-                    f" | gap: {hb.gap_assessment[:60]}"
-                    if hb.gap_assessment
-                    else ""
+        # Phase 22 Stage 22.7 part A: the tick surface already renders the
+        # same heartbeats itself (self_state_tick._user_context, with an
+        # explicit do-not-repeat instruction) — rendering them here too put
+        # the dominant theme in front of the model twice per tick.
+        if include_heartbeats:
+            recent = heartbeat_store.list_recent(limit=self.MAX_HEARTBEATS_IN_CONTEXT)
+            if recent:
+                lines.append("Recent Heartbeats:")
+                for hb in recent:
+                    ts = hb.timestamp[:19] if hb.timestamp else "unknown"
+                    obs = hb.observation[:80] if hb.observation else ""
+                    gap = (
+                        f" | gap: {hb.gap_assessment[:60]}"
+                        if hb.gap_assessment
+                        else ""
+                    )
+                    lines.append(f"  - [{ts}] {obs}{gap}")
+            else:
+                lines.append(
+                    "Recent Heartbeats: none yet — this is the earliest recorded session"
                 )
-                lines.append(f"  - [{ts}] {obs}{gap}")
-        else:
-            lines.append(
-                "Recent Heartbeats: none yet — this is the earliest recorded session"
-            )
 
         if proposal_store is not None:
             pending = proposal_store.list_pending()
@@ -128,27 +217,55 @@ class SelfContextEngine:
                 )
 
         # Phase 21 Stage 21.5 (I1): Nova should know what she has earned.
-        # One bounded line per ACTIVE ladder record at rung >= 1 — never
-        # rung-0 hypotheses (register-only, unverified) and never demoted
-        # records. This informs; it does not license — the claim gate's
-        # ladder consultation remains the only licensing mechanism.
-        # Phase 22 Stage 22.6: selection is diversity-aware rather than a
-        # blind top-N slice — see _select_diverse_evidence.
+        # This informs; it does not license — the claim gate's ladder
+        # consultation remains the only licensing mechanism.
+        #
+        # Phase 22 Stage 22.7 (F8): HOW she knows is surface-dependent.
+        #   respond: verbatim diversity-selected lines, unchanged — the
+        #     22.6 echo checks police over-reliance on that surface.
+        #   tick: an aggregate ladder-standing summary. Verbatim rung>=1
+        #     text pinned into every 300s tick prompt was the permanent
+        #     element that locked topic drift (F8); the summary gives her
+        #     MORE self-knowledge (the whole ladder's shape, including
+        #     its own saturation) with no verbatim material to orbit.
         if claim_ladder_store is not None:
-            earned = [
-                record
-                for record in claim_ladder_store.list_active()
-                if record.rung >= 1
-            ]
-            selected = self._select_diverse_evidence(
-                earned, limit=self.MAX_LICENSED_EVIDENCE_LINES
-            )
-            for record in selected:
-                lines.append(
-                    f"Licensed evidence: {record.claim_text[:100]} (rung {record.rung})"
+            active = claim_ladder_store.list_active()
+            if surface == "tick":
+                lines.extend(self._ladder_summary_lines(active))
+            else:
+                earned = [record for record in active if record.rung >= 1]
+                selected = self._select_diverse_evidence(
+                    earned, limit=self.MAX_LICENSED_EVIDENCE_LINES
                 )
+                for record in selected:
+                    lines.append(
+                        f"Licensed evidence: {record.claim_text[:100]} (rung {record.rung})"
+                    )
 
         return "\n".join(lines)
+
+    def _ladder_summary_lines(self, active_records: list) -> list[str]:
+        """Aggregate ladder-standing summary for the tick surface (22.7 A)."""
+        if not active_records:
+            return []
+        recent = active_records[-self.LADDER_SUMMARY_MAX_RECORDS:]
+        licensed = sum(1 for r in recent if r.rung >= 1)
+        lines = [
+            f"Claim ladder standing: {len(recent)} active records "
+            f"({licensed} at rung>=1)."
+        ]
+        stats = cluster_texts(
+            [r.claim_text for r in recent],
+            overlap_threshold=self.LADDER_CLUSTER_OVERLAP_THRESHOLD,
+        )
+        if stats["largest_cluster_size"] >= 2:
+            top = ", ".join(stats["top_words"])
+            lines.append(
+                f"Theme concentration: {stats['largest_cluster_size']} of "
+                f"{stats['total']} active records cluster on one dominant "
+                f"theme (top words: {top})."
+            )
+        return lines
 
     def sync_turn(
         self,

@@ -404,6 +404,148 @@ class TickEngineRegisterTests(unittest.TestCase):
             self.assertEqual(request.tool_name, tool)
 
 
+class Stage227TickPromptTests(unittest.TestCase):
+    """Phase 22 Stage 22.7 — topic-history visibility (part B) and
+    grounding-rule dosage (part D) on the tick prompt surface."""
+
+    def setUp(self):
+        self.engine = SelfStateTickEngine()
+
+    def _messages(self, register: str, **kwargs):
+        return self.engine.build_messages(
+            session_id="s1",
+            tick_id="t1",
+            trigger="test",
+            self_context_block="[Self-Context]",
+            recent_heartbeats=[],
+            register=register,
+            **kwargs,
+        )
+
+    def test_history_block_rendered_in_assertion_register(self):
+        user = self._messages(
+            "assertion",
+            exploration_history_block="Recent explorations marker-history",
+        )[1]["content"]
+        self.assertIn("marker-history", user)
+
+    def test_history_block_suppressed_in_exploratory_register(self):
+        # In-exploration ticks already carry the 22.1 recall block; the
+        # entry-time history would be noise there.
+        user = self._messages(
+            "exploratory",
+            exploration_history_block="Recent explorations marker-history",
+        )[1]["content"]
+        self.assertNotIn("marker-history", user)
+
+    def test_assertion_rules_state_topic_novelty_guidance(self):
+        system = self._messages("assertion")[0]["content"]
+        normalized = " ".join(system.split())
+        self.assertIn("Recent exploration topics are listed in your context", normalized)
+        self.assertIn("state in the rationale why continuing that line is warranted", normalized)
+
+    def test_exploratory_rules_do_not_carry_topic_novelty_guidance(self):
+        system = self._messages("exploratory")[0]["content"]
+        self.assertNotIn("Recent exploration topics", system)
+
+    def test_standard_grounding_rule_is_default(self):
+        system = self._messages("assertion")[0]["content"]
+        self.assertIn("Keep the tool call grounded in current self-context evidence.", system)
+        self.assertNotIn("depart from it", system)
+
+    def test_soft_grounding_replaces_standard_rule(self):
+        system = self._messages("assertion", soft_grounding=True)[0]["content"]
+        normalized = " ".join(system.split())
+        self.assertNotIn("Keep the tool call grounded", normalized)
+        self.assertIn("depart from it when your own accumulated observations point elsewhere", normalized)
+
+    def test_no_unresolved_grounding_placeholder(self):
+        for register in ("assertion", "exploratory"):
+            for soft in (False, True):
+                system = self._messages(register, soft_grounding=soft)[0]["content"]
+                self.assertNotIn("{grounding_rule}", system)
+
+
+class Stage227HistoryBlockHelperTests(unittest.TestCase):
+    """runtime._exploration_history_block via an unbound-method stub —
+    the helper only touches exploration_controller.store and class
+    constants, so no full runtime construction is needed."""
+
+    def _block(self, records):
+        from nova.runtime import NovaRuntime
+
+        class _Store:
+            def list_recent(self, *, limit):
+                return records[-limit:]
+
+        class _Controller:
+            store = _Store()
+
+        class _Stub:
+            EXPLORATION_HISTORY_SHOWN = NovaRuntime.EXPLORATION_HISTORY_SHOWN
+            EXPLORATION_HISTORY_CLUSTER_WINDOW = (
+                NovaRuntime.EXPLORATION_HISTORY_CLUSTER_WINDOW
+            )
+            EXPLORATION_HISTORY_NOTE_FRACTION = (
+                NovaRuntime.EXPLORATION_HISTORY_NOTE_FRACTION
+            )
+            exploration_controller = _Controller()
+
+        return NovaRuntime._exploration_history_block(_Stub())
+
+    def _record(self, topic, *, close_reason="nova_close", opened_at="2026-07-22T05:00:00+00:00"):
+        from nova.types import ExplorationRecord
+
+        return ExplorationRecord(
+            exploration_id="x1",
+            session_id="s1",
+            topic=topic,
+            close_reason=close_reason,
+            opened_at=opened_at,
+            status="closed" if close_reason else "active",
+        )
+
+    def test_empty_store_yields_empty_block(self):
+        self.assertEqual(self._block([]), "")
+
+    def test_lists_most_recent_topics_newest_first(self):
+        records = [self._record(f"distinct topic number {i} about subject-{i}") for i in range(8)]
+        block = self._block(records)
+        self.assertIn("Recent explorations", block)
+        self.assertIn("subject-7", block)
+        self.assertNotIn("subject-2", block)  # only last 5 shown
+        # newest first: topic 7 appears before topic 3
+        self.assertLess(block.index("subject-7"), block.index("subject-3"))
+
+    def test_close_reason_and_date_shown(self):
+        block = self._block([self._record("some topic here", close_reason="budget_exhausted")])
+        self.assertIn("closed: budget_exhausted", block)
+        self.assertIn("[2026-07-22]", block)
+
+    def test_saturation_note_on_monothematic_history(self):
+        records = [
+            self._record(
+                f"recalibration intervals influenced by internal coherence factor {i}"
+            )
+            for i in range(10)
+        ]
+        block = self._block(records)
+        self.assertIn("pursued closely similar topics", block)
+        self.assertIn("10 of your last 10", block)
+
+    def test_no_saturation_note_on_diverse_history(self):
+        topics = [
+            "recalibration intervals and internal coherence",
+            "gardening drought-resistant tomato cultivation methods",
+            "medieval trade route economics in coastal cities",
+            "birdsong pattern acquisition in juvenile finches",
+            "volcanic soil chemistry and mineral composition",
+            "distributed consensus algorithms under network partitions",
+        ]
+        block = self._block([self._record(t) for t in topics])
+        self.assertNotIn("pursued closely similar topics", block)
+
+
 class DispatcherExplorationToolTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

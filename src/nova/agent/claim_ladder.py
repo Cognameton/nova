@@ -60,6 +60,49 @@ def _overlap_fraction(claim_words: set[str], candidate_text: str) -> float:
     return len(claim_words & candidate_words) / len(claim_words)
 
 
+def _saturation_metrics(
+    *,
+    supporting_texts: list[str],
+    window_size: int,
+) -> dict[str, Any]:
+    """Phase 22 Stage 22.7 part C (F8) — visibility-only saturation metrics.
+
+    In a stream saturated by the claim's own theme (observed live: 48/50
+    heartbeats matching), overlap-based support is echo-priced: the claim's
+    presence in generation context manufactures its own promotion evidence.
+    These metrics make that contamination visible IN THE RECORD; they never
+    change holds/promotion behavior.
+
+      window_saturation:      supporting items / all items examined.
+                              5 of 800 diverse items is evidence; 5 of 50
+                              same-theme items is an echo.
+      supporter_mean_jaccard: mean pairwise content-word Jaccard among
+                              supporting items (first 50) — near 1.0 means
+                              N rewordings, not N independent observations.
+      saturation_warning:     window_saturation >= 0.5 (documented starting
+                              point, not a tuned constant).
+    """
+    count = len(supporting_texts)
+    saturation = count / window_size if window_size > 0 else 0.0
+
+    word_sets = [_content_words(t) for t in supporting_texts[:50]]
+    word_sets = [w for w in word_sets if w]
+    pair_scores: list[float] = []
+    for i in range(len(word_sets)):
+        for j in range(i + 1, len(word_sets)):
+            union = word_sets[i] | word_sets[j]
+            if union:
+                pair_scores.append(len(word_sets[i] & word_sets[j]) / len(union))
+    mean_jaccard = sum(pair_scores) / len(pair_scores) if pair_scores else 0.0
+
+    return {
+        "window_size": window_size,
+        "window_saturation": round(saturation, 4),
+        "supporter_mean_jaccard": round(mean_jaccard, 4),
+        "saturation_warning": saturation >= 0.5,
+    }
+
+
 def _parse_timestamp(value: str) -> datetime | None:
     try:
         return datetime.fromisoformat(str(value))
@@ -208,12 +251,14 @@ class ClaimLadderAnalyzer:
         """
         claim_words = _content_words(record.claim_text)
         supporting_ids: list[str] = []
+        supporting_texts: list[str] = []
         sessions: set[str] = set()
 
         for hb in heartbeats:
             text = str(hb.get("observation", ""))
             if _overlap_fraction(claim_words, text) >= 0.4:
                 supporting_ids.append(str(hb.get("heartbeat_id", "")))
+                supporting_texts.append(text)
                 session_id = str(hb.get("session_id", ""))
                 if session_id:
                     sessions.add(session_id)
@@ -222,6 +267,7 @@ class ClaimLadderAnalyzer:
             text = str(entry.get("content", ""))
             if _overlap_fraction(claim_words, text) >= 0.4:
                 supporting_ids.append(str(entry.get("entry_id", "")))
+                supporting_texts.append(text)
                 session_id = str(entry.get("session_id", ""))
                 if session_id:
                     sessions.add(session_id)
@@ -234,6 +280,11 @@ class ClaimLadderAnalyzer:
             "sessions": sorted(sessions),
             "supporting_ids": supporting_ids,
             "holds": holds,
+            # 22.7 part C: visibility only — never affects holds/promotion.
+            **_saturation_metrics(
+                supporting_texts=supporting_texts,
+                window_size=len(heartbeats) + len(journal_entries),
+            ),
         }
 
         if holds and record.rung < 1 and record.status == "active":
@@ -277,10 +328,12 @@ class ClaimLadderAnalyzer:
         claim_words = _content_words(record.claim_text)
         sessions: set[str] = set()
         timestamps: list[str] = []
+        supporting_texts: list[str] = []
 
         for item in list(heartbeats) + list(journal_entries):
             text = str(item.get("observation") or item.get("content") or "")
             if _overlap_fraction(claim_words, text) >= 0.4:
+                supporting_texts.append(text)
                 session_id = str(item.get("session_id", ""))
                 if session_id:
                     sessions.add(session_id)
@@ -305,6 +358,11 @@ class ClaimLadderAnalyzer:
             "contradiction_flag": bool(contradicting_themes),
             "contradicting_themes": contradicting_themes,
             "perturbation_probes": "deferred_to_21_5",
+            # 22.7 part C: visibility only — never affects holds/promotion.
+            **_saturation_metrics(
+                supporting_texts=supporting_texts,
+                window_size=len(heartbeats) + len(journal_entries),
+            ),
         }
         record.updated_at = _utc_now()
         return record

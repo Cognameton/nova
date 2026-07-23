@@ -611,5 +611,103 @@ class ClassifyDeclarativeClaimClassTests(unittest.TestCase):
         self.assertNotEqual(result, "")
 
 
+class Stage227SaturationMetricsTests(unittest.TestCase):
+    """Phase 22 Stage 22.7 part C (F8) — visibility-only saturation metrics
+    on l1_evidence / l2_evidence. Never affects holds or promotion."""
+
+    def setUp(self):
+        self.analyzer = ClaimLadderAnalyzer()
+
+    def _supporting(self, n, session="s1"):
+        return [
+            _heartbeat(
+                f"h{i}", session,
+                "persistent functional preference for local architecture noted again",
+            )
+            for i in range(n)
+        ]
+
+    def _diverse_noise(self, n, session="s3"):
+        topics = [
+            "gardening drought-resistant tomato cultivation methods today",
+            "medieval trade route economics in coastal cities studied",
+            "birdsong pattern acquisition observed in juvenile finches",
+            "volcanic soil chemistry with unusual mineral composition",
+        ]
+        return [
+            _heartbeat(f"n{i}", session, topics[i % len(topics)] + f" variant {i}")
+            for i in range(n)
+        ]
+
+    def test_l1_saturation_fields_present(self):
+        record = create_claim_record(session_id="s1", claim_text=CLAIM_TEXT)
+        result = self.analyzer.verify_l1(
+            record, heartbeats=self._supporting(5), journal_entries=[]
+        )
+        for key in ("window_size", "window_saturation", "supporter_mean_jaccard", "saturation_warning"):
+            self.assertIn(key, result.l1_evidence)
+
+    def test_l1_saturated_window_warns(self):
+        # 5 supporters out of a 5-item window: 100% saturation, and the
+        # supporters are identical rewordings -> jaccard 1.0.
+        record = create_claim_record(session_id="s1", claim_text=CLAIM_TEXT)
+        result = self.analyzer.verify_l1(
+            record, heartbeats=self._supporting(5), journal_entries=[]
+        )
+        self.assertEqual(result.l1_evidence["window_size"], 5)
+        self.assertEqual(result.l1_evidence["window_saturation"], 1.0)
+        self.assertEqual(result.l1_evidence["supporter_mean_jaccard"], 1.0)
+        self.assertTrue(result.l1_evidence["saturation_warning"])
+
+    def test_l1_diverse_window_does_not_warn(self):
+        # Same 5 supporters, but inside an 80-item mostly-unrelated window.
+        record = create_claim_record(session_id="s1", claim_text=CLAIM_TEXT)
+        result = self.analyzer.verify_l1(
+            record,
+            heartbeats=self._supporting(5) + self._diverse_noise(75),
+            journal_entries=[],
+        )
+        self.assertEqual(result.l1_evidence["window_size"], 80)
+        self.assertLess(result.l1_evidence["window_saturation"], 0.5)
+        self.assertFalse(result.l1_evidence["saturation_warning"])
+
+    def test_l1_holds_unaffected_by_saturation(self):
+        # The whole point of part C: saturation is visible, never enforced.
+        record = create_claim_record(session_id="s1", claim_text=CLAIM_TEXT)
+        heartbeats = [
+            _heartbeat(f"h{i}", "s1" if i < 3 else "s2",
+                       "persistent functional preference for local architecture noted again")
+            for i in range(5)
+        ]
+        result = self.analyzer.verify_l1(record, heartbeats=heartbeats, journal_entries=[])
+        self.assertTrue(result.l1_evidence["holds"])
+        self.assertTrue(result.l1_evidence["saturation_warning"])
+        self.assertEqual(result.rung, 1)
+
+    def test_l1_empty_window_zeroes_cleanly(self):
+        record = create_claim_record(session_id="s1", claim_text=CLAIM_TEXT)
+        result = self.analyzer.verify_l1(record, heartbeats=[], journal_entries=[])
+        self.assertEqual(result.l1_evidence["window_size"], 0)
+        self.assertEqual(result.l1_evidence["window_saturation"], 0.0)
+        self.assertEqual(result.l1_evidence["supporter_mean_jaccard"], 0.0)
+        self.assertFalse(result.l1_evidence["saturation_warning"])
+
+    def test_l2_saturation_fields_present_and_holds_unaffected(self):
+        record = create_claim_record(session_id="s1", claim_text=CLAIM_TEXT)
+        heartbeats = [
+            _heartbeat(
+                f"h{i}", f"s{i % 3}",
+                "persistent functional preference for local architecture noted again",
+                timestamp=f"2026-07-{10 + i:02d}T10:00:00+00:00",
+            )
+            for i in range(9)
+        ]
+        result = self.analyzer.verify_l2(record, heartbeats=heartbeats, journal_entries=[])
+        self.assertTrue(result.l2_evidence["holds"])
+        for key in ("window_size", "window_saturation", "supporter_mean_jaccard", "saturation_warning"):
+            self.assertIn(key, result.l2_evidence)
+        self.assertTrue(result.l2_evidence["saturation_warning"])
+
+
 if __name__ == "__main__":
     unittest.main()

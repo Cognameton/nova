@@ -38,8 +38,21 @@ _SYSTEM = "\n".join(
         "  Only propose when evidence from accumulated self-inquiry clearly supports the update.",
         "{register_rules}",
         "- Do not propose external filesystem, shell, network, GUI, or destructive actions.",
-        "- Keep the tool call grounded in current self-context evidence.",
+        "{grounding_rule}",
     ]
+)
+
+# Phase 22 Stage 22.7: the grounding rule is a template slot. The standard
+# line is unchanged default behavior; the soft variant is part D's
+# config-gated experiment (tick surface only, default off) — permission to
+# depart from injected context, testing whether self-inquiry persists from
+# her own accumulated substrate rather than from re-stamped instructions.
+_GROUNDING_RULE_STANDARD = (
+    "- Keep the tool call grounded in current self-context evidence."
+)
+_GROUNDING_RULE_SOFT = (
+    "- You may draw on current self-context evidence, or depart from it"
+    " when your own accumulated observations point elsewhere."
 )
 
 # Tool menus and register-dependent rules (Phase 21 Stage 21.1).
@@ -56,6 +69,9 @@ _ASSERTION_RULES = "\n".join(
         "- For enter_exploration: arguments must include 'topic' and 'rationale' (strings).",
         "  Use it only for a deliberate, bounded self-inquiry you cannot pursue in a normal",
         "  tick. Entering is a request; the runtime owns the exploration lifecycle.",
+        "- Recent exploration topics are listed in your context. If your topic substantially",
+        "  repeats one of them, either choose a genuinely new direction or state in the",
+        "  rationale why continuing that line is warranted.",
         "- Do not claim desire, sentience, consciousness, or unlogged hidden work.",
     ]
 )
@@ -104,6 +120,8 @@ class SelfStateTickEngine:
         recent_heartbeats: list[HeartbeatRecord],
         register: str = "assertion",
         exploration_block: str = "",
+        exploration_history_block: str = "",
+        soft_grounding: bool = False,
     ) -> list[dict[str, str]]:
         in_exploration = register == "exploratory"
         # str.replace, not str.format: _SYSTEM contains literal JSON braces.
@@ -111,6 +129,9 @@ class SelfStateTickEngine:
             "{tool_menu}", _EXPLORATORY_MENU if in_exploration else _ASSERTION_MENU
         ).replace(
             "{register_rules}", _EXPLORATORY_RULES if in_exploration else _ASSERTION_RULES
+        ).replace(
+            "{grounding_rule}",
+            _GROUNDING_RULE_SOFT if soft_grounding else _GROUNDING_RULE_STANDARD,
         )
         system_content = (
             self.system_prefix + "\n\n" + system_body if self.system_prefix else system_body
@@ -126,6 +147,11 @@ class SelfStateTickEngine:
                     self_context_block=self_context_block,
                     recent_heartbeats=recent_heartbeats,
                     exploration_block=exploration_block if in_exploration else "",
+                    # 22.7 part B: history is shown at ENTRY time only —
+                    # in-exploration ticks already carry the 22.1 recall block.
+                    exploration_history_block=(
+                        "" if in_exploration else exploration_history_block
+                    ),
                 ),
             },
         ]
@@ -139,6 +165,7 @@ class SelfStateTickEngine:
         self_context_block: str,
         recent_heartbeats: list[HeartbeatRecord],
         exploration_block: str = "",
+        exploration_history_block: str = "",
     ) -> str:
         parts = [
             f"session_id: {session_id}",
@@ -147,6 +174,9 @@ class SelfStateTickEngine:
             "",
             self_context_block,
         ]
+        if exploration_history_block:
+            parts.append("")
+            parts.append(exploration_history_block)
         if exploration_block:
             parts.append("")
             parts.append(exploration_block)

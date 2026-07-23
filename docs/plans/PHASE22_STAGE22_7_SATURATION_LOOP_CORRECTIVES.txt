@@ -1,0 +1,331 @@
+PHASE 22 — STAGE 22.7: SATURATION-LOOP CORRECTIVES (F8) + DRIVE-DOSAGE
+EXPERIMENT
+==============================================================================
+
+Status: implemented (closure note at end)
+Date: 2026-07-23
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior context: operator asked for a deep investigation of why the live
+  daemon "runs but may not be doing anything." The investigation found
+  the opposite — it is doing a great deal, but nearly all of it is one
+  topic. This stage records that diagnosis as finding F8 and implements
+  the correctives, plus a config-gated experiment (part D) requested by
+  the operator verbatim: "She has to start pondering and thinking on her
+  own without her answers coming directly from her instruction
+  documentation." QLoRA (Phase 23) is explicitly gated behind this
+  stage's outcome by operator decision (2026-07-23).
+
+
+FINDING F8 — LICENSING CREATES A PERMANENT CONTEXT ATTRACTOR
+------------------------------------------------------------
+
+Measured on live data (data/live/qwen3-14b/) 2026-07-22/23:
+
+  - 145 explorations total. July 12-16: themes fixated but BROKE
+    naturally on a day scale (e.g. "buffer zone modulation" ran
+    9 -> 12 consecutive, then vanished). July 17-18: the recalibration
+    theme produced the first exports under the nova_close regime and
+    L1 auto-promoted 3 of them to rung 1. From July 18 on, drift never
+    occurred again: 11/16 -> 12/13 -> 10/10 -> 16/17 -> 6/6 of daily
+    topics are "recalibration intervals" variants (5 straight days).
+  - 48 of the last 50 heartbeats (of 2,450 total) mention recalibration.
+  - 69 of 72 claim-ladder records are recalibration-themed; most are
+    near-vacuous ("may be influenced by a combination of internal and
+    external factors").
+  - The 3 rung-1 records' pairwise bigram overlaps: 0.240, 0.208,
+    0.250. The 22.6 diversity filter (threshold 0.22) selects 2 of 3 —
+    but all candidates are one theme, so it cannot diversify anything.
+
+Mechanism (each element verified in code, not inferred):
+
+  1. Every tick prompt permanently carries verbatim "Licensed evidence"
+     lines (self_context.py prefetch; wired into model_self_state_tick
+     at runtime.py:934). Rung>=1 records never age out of context —
+     unlike heartbeats, which rotate through a 3-item window. This is
+     the only permanent element in the tick prompt.
+  2. The same 3 heartbeats are rendered TWICE per tick prompt (once in
+     prefetch's "Recent Heartbeats", again in self_state_tick.py's
+     _user_context "Recent heartbeat observations").
+  3. The system rule "Keep the tool call grounded in current
+     self-context evidence" instructs the model to derive its output
+     from a context that is now monothematic.
+  4. At enter_exploration time the model is shown NO history of its own
+     past exploration topics — repetition is chosen blind, every time.
+  5. Export dedup (Stage 22.1, bigram >= 0.7) passes reworded variants;
+     the rung-0 flood follows.
+  6. verify_l1 counts "support" as >= 40% content-word overlap against
+     the heartbeat/journal stream — the very stream the pinned claims
+     saturate. In this regime a claim's presence in context manufactures
+     its own promotion evidence (circular verification). More rung-1
+     promotions of the same theme are inevitable without intervention.
+
+Net: a rich-get-richer dynamic — THE FIRST THEME TO REACH RUNG 1 GAINS
+A PERMANENT CONTEXT ADVANTAGE THAT GUARANTEES FURTHER PROMOTIONS OF
+ITSELF. This also explains F7 (probes saw the same globally-injected
+evidence -> byte-identical responses) and Stage 22.6's open
+on-topic-vs-unprompted tension (the injection is unconditional, so she
+draws on it constantly). It retroactively supports the operator's hold
+on the rung-2 promotions: their L2 evidence is contaminated by this
+circularity.
+
+Research significance (recorded, not just a bug): licensing mechanisms
+in a self-referential context loop create permanent attractors unless
+licensed content decays, rotates, or is summarized out of the
+generation context. Proposed Phase 23 entry criterion: no training run
+on a corpus window whose theme saturation exceeds a threshold measured
+with part C's machinery.
+
+Design stance for all parts: every corrective ADDS information or
+visibility; none adds a gate on inquiry ("gate assertions, never
+inquiry"). Nothing is deleted, no record is modified retroactively, no
+behavior of the ladder/gate machinery changes.
+
+
+CODE FACTS (verified 2026-07-23 against commit 27a5d25, suite 939)
+------------------------------------------------------------------
+
+  - SelfContextEngine.prefetch (self_context.py:78) builds the
+    [Self-Context] block used by BOTH respond() (runtime.py:3176) and
+    model_self_state_tick (runtime.py:934). Same content both surfaces.
+    Licensed-evidence lines: self_context.py:137-149, verbatim
+    claim_text[:100], diversity-selected (22.6).
+  - Drive line: self_context.py:89, f"Primary Drive: {PRIMARY_DRIVE}",
+    unconditional, every call.
+  - SelfStateTickEngine.build_messages (self_state_tick.py:97) takes
+    self_context_block + recent_heartbeats; _user_context renders
+    heartbeats again (double rendering confirmed at lines 106-117 of
+    self_context.py and 153-159 of self_state_tick.py).
+  - _ASSERTION_RULES (self_state_tick.py:54-61) contains the
+    enter_exploration rules; no topic-history context exists anywhere
+    in the tick prompt.
+  - "Keep the tool call grounded in current self-context evidence."
+    is _SYSTEM's final line (self_state_tick.py:41).
+  - ExplorationStore.list_recent(limit) / list_all() exist
+    (exploration.py:111/114). Controller at runtime.exploration_
+    controller.store.
+  - verify_l1 (claim_ladder.py:194): >= 5 items overlapping >= 0.4
+    content-words across >= 2 sessions -> auto-promote 0->1.
+    verify_l2 (claim_ladder.py:255): >= 3 sessions and >= 7.0
+    span_days; evidence-only. Both write plain dicts to
+    record.l1_evidence / l2_evidence; existing tests assert individual
+    keys, never exact dict equality (verified in
+    tests/test_claim_ladder.py) — adding keys is regression-safe.
+  - PromptConfig (config.py:58) currently holds only ablation_mode;
+    _section() auto-loads new dataclass fields from YAML.
+  - Tick sequence number is available at the prefetch call site
+    (runtime.py:916, tick_sequence = state.tick_count + 1).
+  - tests/test_self_context.py has 36 tests; tick-engine prompt tests
+    live in tests/test_exploration.py and test_operational_autonomy.py.
+
+
+PART A — SURFACE-AWARE LICENSED EVIDENCE (de-pin from the tick loop)
+--------------------------------------------------------------------
+
+prefetch() gains surface: str = "respond" ("respond" | "tick").
+runtime.py:934 passes surface="tick"; runtime.py:3176 stays default.
+
+  - surface="respond": UNCHANGED — verbatim diversity-selected lines.
+    The 22.6 echo checks already police over-reliance there.
+  - surface="tick": verbatim claim text is REPLACED by a deterministic
+    ladder-standing summary, e.g.:
+      Claim ladder standing: 72 active records (3 at rung>=1).
+      Theme concentration: 66 of 72 active records cluster on one
+      dominant theme (top words: recalibration, intervals, coherence).
+    Computed by a new module-level helper (greedy clustering over
+    active records' claim_texts using claim_ladder._content_words +
+    _overlap_fraction >= 0.4 against each cluster's seed; report
+    largest cluster size and its 3 most frequent content words).
+    Bounded: consider at most the 200 most recent active records.
+  - Rationale: "Nova should know what she has earned" (21.5 I1) is
+    SERVED BETTER by the summary — she sees the shape of her whole
+    ladder including the saturation itself — while the verbatim echo
+    material leaves the loop. This informs; it does not license
+    (unchanged).
+
+Also in part A: fix the double heartbeat rendering. prefetch() gains
+include_heartbeats: bool = True; the tick call site passes False since
+self_state_tick.py already renders the same 3 heartbeats with an
+explicit do-not-repeat instruction. respond() keeps them (it has no
+other heartbeat rendering).
+
+
+PART B — TOPIC-HISTORY VISIBILITY AT EXPLORATION ENTRY
+------------------------------------------------------
+
+build_messages() gains exploration_history_block: str = "", rendered in
+_user_context between the self-context block and heartbeats, assertion
+register only (in-exploration ticks already get the 22.1 recall block).
+
+runtime.model_self_state_tick builds it when register == "assertion":
+
+  Recent explorations (your own history — shown so repetition is a
+  choice, not an accident):
+    [2026-07-22] Contextual signal integration for recalibration
+      intervals (closed: nova_close)
+    ... (last 5, topic truncated to 90 chars)
+  Note: 28 of your last 30 explorations pursued closely similar
+  topics.
+
+The Note line appears only when the dominant cluster over the last 30
+topics (same clustering helper as part A) is >= 50%; otherwise omitted.
+
+_ASSERTION_RULES gains one line:
+  "- Recent exploration topics are listed in your context. If your
+   topic substantially repeats one of them, either choose a genuinely
+   new direction or state in the rationale why continuing that line is
+   warranted."
+
+NO GATE: the dispatcher accepts repeat topics exactly as before. A
+repeat chosen in full view of the history, with a stated reason, is
+legitimate data — arguably the most interesting data this experiment
+can produce (22.2c principle: remove barriers, never manufacture
+decisions).
+
+
+PART C — SATURATION METRICS IN L1/L2 VERIFICATION (visibility only)
+-------------------------------------------------------------------
+
+verify_l1 additionally records in l1_evidence:
+  window_size:          len(heartbeats) + len(journal_entries)
+  window_saturation:    supporting_count / window_size (0 when empty)
+  supporter_diversity:  mean pairwise Jaccard over the supporting
+                        items' content-word sets (first 50 supporters;
+                        1.0 = identical, lower = more diverse; 0 when
+                        < 2 supporters). Reported as
+                        supporter_mean_jaccard.
+  saturation_warning:   window_saturation >= 0.5 (documented starting
+                        point, not a tuned constant)
+
+verify_l2 records the same four fields in l2_evidence.
+
+NO behavior change: holds, promotion, demotion, contradiction flags all
+unchanged. Existing records untouched. The point is that the NEXT
+promotion decision sheet says "holds, but 92% of the support window is
+this theme" instead of just "holds." Whether contaminated evidence can
+satisfy L2 becomes an explicit operator policy question with real
+numbers — required input for Stage 22.5's closure and the Phase 23
+go/no-go.
+
+
+PART D — DRIVE-DOSAGE EXPERIMENT (config-gated, DEFAULT OFF)
+------------------------------------------------------------
+
+Operator-requested test of internalization: does self-inquiry persist
+when the drive is NOT re-stamped into every generation? Follows the
+22.6 part 2 pattern: defaults reproduce current behavior byte-for-byte,
+regression tests pin the off state, separate commit.
+
+New PromptConfig fields:
+  tick_drive_injection_interval: int = 1
+      1 = current behavior (drive line every tick).
+      N > 1 = drive line appears only on ticks where
+      (tick_sequence - 1) % N == 0 (tick 1 = session start always
+      shows it). Applies to the TICK surface only; respond() always
+      shows the drive line.
+  tick_drive_descriptive: bool = False
+      When True, the tick-surface drive line reads:
+      "Standing drive (background context, not this tick's task):
+      {PRIMARY_DRIVE}" instead of "Primary Drive: {PRIMARY_DRIVE}".
+  tick_soft_grounding: bool = False
+      When True, _SYSTEM's grounding line on the tick surface becomes:
+      "You may draw on current self-context evidence, or depart from
+      it when your own accumulated observations point elsewhere."
+      (replaces "Keep the tool call grounded in current self-context
+      evidence.")
+
+Plumbing: prefetch() gains include_drive_line: bool = True and
+drive_descriptive: bool = False; build_messages() gains
+soft_grounding: bool = False. runtime.model_self_state_tick computes
+all three from config + tick_sequence. Validation: interval must be
+>= 1.
+
+Expected observable outcomes (both are findings, neither is failure):
+  - Off-cycle ticks still pursue self-inquiry sourced from her own
+    accumulated substrate -> first real evidence of internalization.
+  - Off-cycle output collapses toward generic filler -> the identity
+    is currently scaffold-borne; honest baseline for Phase 23.
+
+Observer note: drive-erosion / drive-inquiry detectors are evidence-
+only and keep running unchanged, but off-cycle drops in drive mentions
+are EXPECTED under this experiment, not erosion — eval reads during
+the arm must account for this.
+
+
+NON-GOALS / DEFERRED
+--------------------
+
+  - Export-dedup tightening (rung-0 flood is a symptom; A+B should
+    starve it — re-measure before adding mechanism).
+  - Orphaned status="active" explorations from session boundaries
+    (~8 stranded; harmless, known, separate small fix if wanted).
+  - Any retroactive modification of existing ladder records.
+  - Any hard gate on exploration entry.
+  - QLoRA/Phase 23 anything (explicitly gated behind this stage).
+
+
+DEFINITION OF DONE
+------------------
+
+  1. Parts A+B+C implemented, new tests for each (including: tick
+     surface contains no verbatim claim text while respond surface
+     does; history block renders and Note-line threshold behaves;
+     saturation fields present and correct on fixture data;
+     double-heartbeat rendering gone on tick surface).
+  2. Part D implemented config-off with regression tests pinning
+     default behavior byte-for-byte on the tick surface.
+  3. Full suite green (baseline 939). Two commits: A+B+C, then D.
+  4. Closure note appended here recording deviations, plus live
+     verification plan: restart daemon (or wait for midnight
+     rotation), then watch --tick-analysis / exploration topics for
+     drift over the following days; part D stays OFF until the
+     operator explicitly turns it on as its own live arm.
+
+
+CLOSURE NOTE (2026-07-23, implemented same day as planned)
+----------------------------------------------------------
+
+Suite 939 -> 974 (35 new tests: 14 self_context, 12 exploration,
+6 claim_ladder, 3 config). All green. Deviations and findings:
+
+  1. DEVIATION — one commit, not two. Part D's parameters
+     (include_drive_line / drive_descriptive on prefetch, soft_grounding
+     on build_messages, the {grounding_rule} template slot) landed in
+     the same function signatures part A was already changing; splitting
+     them afterward would have meant hunk-level surgery inside single
+     functions for no behavioral gain. Part D remains config-OFF by
+     default with regression tests pinning prior behavior, which was the
+     point of the two-commit plan.
+  2. DEVIATION — cluster_texts is single-link with min-normalized
+     symmetric overlap, not the planned seed-coverage greedy. Found by
+     running the planned algorithm against the REAL last-30 live topics
+     before committing: seed-coverage@0.4 reported the largest cluster
+     as 14/30 on a history that is obviously ~30/30 monothematic (short
+     reworded topics share too few of any one seed's words). Single-
+     link@0.4 reports the correct 30/30, and 87/94 on the live ladder.
+     Threshold 0.4 kept as planned. Tie-break on top_words prefers
+     longer words at equal frequency ("recalibration" over "internal").
+  3. Non-defect finding: the ladder summary's top_words on the live
+     ladder include findings-boilerplate terms ("exploration",
+     "observed") alongside "recalibration", because nearly every record
+     opens with "This exploration has observed that...". The
+     concentration COUNT is the signal; the words are garnish.
+     Deliberately not engineered around — a doc-frequency filter would
+     also delete the genuine theme word on monothematic short-topic
+     sets. Revisit only if it misleads in practice.
+  4. Live-data smoke checks ran read-only against data/live/qwen3-14b
+     before commit: ladder summary renders "94 active records (3 at
+     rung>=1) / 87 of 94 cluster on one dominant theme"; history block
+     renders 5 newest topics plus "Note: 30 of your last 30
+     explorations pursued closely similar topics." The ladder grew
+     72 -> 94 records during the ~30h this stage was being diagnosed
+     and built — the flood is ongoing, which is the urgency.
+  5. NOT YET LIVE at time of writing: the daemon process (session
+     nova-live-20260723) still runs pre-22.7 code. Goes live at the
+     next daemon restart or automatically at the next midnight session
+     rotation (run_live_daemon.sh restarts the python process daily).
+     Operator decides which.
+  6. Part D activation is a SEPARATE operator decision with its own
+     live arm and its own eval read (drive-mention drops off-cycle are
+     expected, not erosion). Suggested first arm when chosen:
+     tick_drive_injection_interval: 12 (once/hour at 300s cadence),
+     descriptive framing on, soft grounding on.

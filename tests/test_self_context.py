@@ -532,5 +532,175 @@ class DispatcherStoreIntegrationTests(unittest.TestCase):
         self.assertNotIn("recent_heartbeats", result)
 
 
+# ---------------------------------------------------------------------------
+# Phase 22 Stage 22.7 (F8) — surface-aware prefetch, ladder summary,
+# heartbeat de-duplication, drive dosage
+# ---------------------------------------------------------------------------
+
+
+class Stage227ClusterTextsTests(unittest.TestCase):
+    def test_empty_input(self):
+        from nova.agent.self_context import cluster_texts
+
+        stats = cluster_texts([])
+        self.assertEqual(stats["total"], 0)
+        self.assertEqual(stats["largest_cluster_size"], 0)
+        self.assertEqual(stats["top_words"], [])
+
+    def test_monothematic_texts_form_one_cluster(self):
+        from nova.agent.self_context import cluster_texts
+
+        texts = [
+            "recalibration intervals influenced by internal coherence factors",
+            "recalibration intervals shaped by internal coherence and stimuli",
+            "recalibration intervals affected by coherence between internal factors",
+        ]
+        stats = cluster_texts(texts)
+        self.assertEqual(stats["total"], 3)
+        self.assertEqual(stats["largest_cluster_size"], 3)
+        self.assertIn("recalibration", stats["top_words"])
+
+    def test_distinct_texts_stay_separate(self):
+        from nova.agent.self_context import cluster_texts
+
+        texts = [
+            "recalibration intervals influenced by internal coherence factors",
+            "gardening techniques for drought-resistant tomato cultivation",
+        ]
+        stats = cluster_texts(texts)
+        self.assertEqual(stats["largest_cluster_size"], 1)
+
+
+class Stage227TickSurfaceTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.engine = SelfContextEngine()
+        self.heartbeat_store = HeartbeatStore(self._tmpdir.name)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _ladder_store_with_texts(self, texts, *, rungs=None):
+        from nova.agent.claim_ladder import ClaimLadderStore, create_claim_record
+
+        store = ClaimLadderStore(self._tmpdir.name)
+        for i, text in enumerate(texts):
+            record = create_claim_record(session_id="s1", claim_text=text)
+            record.rung = (rungs or [1] * len(texts))[i]
+            store.append(record)
+        return store
+
+    def _prefetch(self, **kwargs):
+        return self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            **kwargs,
+        )
+
+    def test_tick_surface_has_no_verbatim_claim_text(self):
+        store = self._ladder_store_with_texts(
+            ["a persistent functional preference for local-first work"]
+        )
+        block = self._prefetch(claim_ladder_store=store, surface="tick")
+        self.assertNotIn("Licensed evidence:", block)
+        self.assertNotIn("persistent functional preference", block)
+        self.assertIn("Claim ladder standing:", block)
+
+    def test_respond_surface_unchanged_verbatim(self):
+        store = self._ladder_store_with_texts(
+            ["a persistent functional preference for local-first work"]
+        )
+        block = self._prefetch(claim_ladder_store=store, surface="respond")
+        self.assertIn("Licensed evidence:", block)
+        self.assertIn("persistent functional preference", block)
+        self.assertNotIn("Claim ladder standing:", block)
+
+    def test_default_surface_is_respond(self):
+        store = self._ladder_store_with_texts(
+            ["a persistent functional preference for local-first work"]
+        )
+        block = self._prefetch(claim_ladder_store=store)
+        self.assertIn("Licensed evidence:", block)
+
+    def test_tick_summary_counts_and_theme_concentration(self):
+        store = self._ladder_store_with_texts(
+            [
+                "recalibration intervals influenced by internal coherence factors",
+                "recalibration intervals shaped by internal coherence and stimuli",
+                "recalibration intervals affected by coherence between internal factors",
+            ],
+            rungs=[1, 1, 0],
+        )
+        block = self._prefetch(claim_ladder_store=store, surface="tick")
+        self.assertIn("3 active records", block)
+        self.assertIn("(2 at rung>=1)", block)
+        self.assertIn("Theme concentration: 3 of 3", block)
+        self.assertIn("recalibration", block)
+
+    def test_tick_summary_absent_when_ladder_empty(self):
+        from nova.agent.claim_ladder import ClaimLadderStore
+
+        store = ClaimLadderStore(self._tmpdir.name)
+        block = self._prefetch(claim_ladder_store=store, surface="tick")
+        self.assertNotIn("Claim ladder standing:", block)
+
+    def test_tick_summary_includes_rung_zero_in_counts(self):
+        # Unlike the respond surface's verbatim lines (rung>=1 only), the
+        # aggregate summary describes the WHOLE active ladder — rung-0
+        # hypotheses included — since no claim text is exposed.
+        store = self._ladder_store_with_texts(
+            ["one hypothesis about internal patterns"], rungs=[0]
+        )
+        block = self._prefetch(claim_ladder_store=store, surface="tick")
+        self.assertIn("1 active records (0 at rung>=1)", block)
+
+    def test_heartbeats_omitted_when_flag_false(self):
+        self.heartbeat_store.append(_heartbeat("I notice persistence across turns"))
+        block = self._prefetch(include_heartbeats=False)
+        self.assertNotIn("Recent Heartbeats", block)
+        self.assertNotIn("I notice persistence across turns", block)
+
+    def test_heartbeats_included_by_default(self):
+        self.heartbeat_store.append(_heartbeat("I notice persistence across turns"))
+        block = self._prefetch()
+        self.assertIn("I notice persistence across turns", block)
+
+
+class Stage227DriveDosageTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.engine = SelfContextEngine()
+        self.heartbeat_store = HeartbeatStore(self._tmpdir.name)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _prefetch(self, **kwargs):
+        return self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            **kwargs,
+        )
+
+    def test_drive_line_present_by_default(self):
+        block = self._prefetch()
+        self.assertIn(f"Primary Drive: {PRIMARY_DRIVE}", block)
+
+    def test_drive_line_omitted_when_flag_false(self):
+        block = self._prefetch(include_drive_line=False)
+        self.assertNotIn(PRIMARY_DRIVE, block)
+        self.assertNotIn("Primary Drive:", block)
+        # block still opens correctly without the drive line
+        self.assertTrue(block.startswith("[Self-Context]"))
+
+    def test_descriptive_framing_rewords_but_keeps_drive(self):
+        block = self._prefetch(drive_descriptive=True)
+        self.assertIn("Standing drive (background context", block)
+        self.assertIn(PRIMARY_DRIVE, block)
+        self.assertNotIn("Primary Drive:", block)
+
+
 if __name__ == "__main__":
     unittest.main()

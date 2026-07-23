@@ -99,6 +99,61 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_config(default_path=default_path)
 
+    # -- Phase 22 Stage 22.7 part D: drive-dosage config ------------------
+
+    def test_drive_dosage_defaults_reproduce_prior_behavior(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            default_path = tmp_path / "default.yaml"
+            default_path.write_text(
+                "model:\n  model_path: /models/default.gguf\n",
+                encoding="utf-8",
+            )
+            config = load_config(default_path=default_path)
+            self.assertEqual(config.prompt.tick_drive_injection_interval, 1)
+            self.assertFalse(config.prompt.tick_drive_descriptive)
+            self.assertFalse(config.prompt.tick_soft_grounding)
+
+    def test_drive_dosage_fields_load_from_yaml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            default_path = tmp_path / "default.yaml"
+            default_path.write_text(
+                "\n".join(
+                    [
+                        "model:",
+                        "  model_path: /models/default.gguf",
+                        "prompt:",
+                        "  tick_drive_injection_interval: 6",
+                        "  tick_drive_descriptive: true",
+                        "  tick_soft_grounding: true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            config = load_config(default_path=default_path)
+            self.assertEqual(config.prompt.tick_drive_injection_interval, 6)
+            self.assertTrue(config.prompt.tick_drive_descriptive)
+            self.assertTrue(config.prompt.tick_soft_grounding)
+
+    def test_drive_dosage_interval_below_one_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            default_path = tmp_path / "default.yaml"
+            default_path.write_text(
+                "\n".join(
+                    [
+                        "model:",
+                        "  model_path: /models/default.gguf",
+                        "prompt:",
+                        "  tick_drive_injection_interval: 0",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError):
+                load_config(default_path=default_path)
+
 
 if __name__ == "__main__":
     unittest.main()

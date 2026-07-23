@@ -57,6 +57,14 @@ class ContractConfig:
 @dataclass(slots=True)
 class PromptConfig:
     ablation_mode: str = "current"
+    # Phase 22 Stage 22.7 part D — drive-dosage experiment, defaults
+    # reproduce prior behavior exactly (drive line every tick, imperative
+    # framing, standard grounding rule). Tick surface only; respond()
+    # always carries the drive line. See
+    # docs/plans/PHASE22_STAGE22_7_SATURATION_LOOP_CORRECTIVES.txt.
+    tick_drive_injection_interval: int = 1
+    tick_drive_descriptive: bool = False
+    tick_soft_grounding: bool = False
 
 
 @dataclass(slots=True)
@@ -134,6 +142,8 @@ class NovaConfig:
                 "prompt.ablation_mode must be one of "
                 f"{sorted(VALID_PROMPT_ABLATION_MODES)}"
             )
+        if self.prompt.tick_drive_injection_interval < 1:
+            raise ValueError("prompt.tick_drive_injection_interval must be >= 1")
         if not self.app.data_dir:
             raise ValueError("app.data_dir is required")
         if not self.app.log_dir:

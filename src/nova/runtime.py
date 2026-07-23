@@ -86,7 +86,7 @@ from nova.agent.action_surface import (
 from nova.agent.boundary import check_operational_boundary
 from nova.agent.heartbeat import DriveGapEngine, HeartbeatStore, SelfModelProposalStore
 from nova.agent.instruction_write import InstructionProposalStore, InstructionWriteEngine
-from nova.agent.self_context import SelfContextEngine
+from nova.agent.self_context import SelfContextEngine, cluster_texts
 from nova.agent.exploration import (
     REGISTER_EXPLORATORY,
     ExplorationController,
@@ -871,6 +871,49 @@ class NovaRuntime:
         )
         return tick
 
+    # Phase 22 Stage 22.7 part B constants: how many topics are listed
+    # verbatim, how many feed the saturation note, and the dominant-cluster
+    # fraction above which the note appears. Starting points, not tuned.
+    EXPLORATION_HISTORY_SHOWN = 5
+    EXPLORATION_HISTORY_CLUSTER_WINDOW = 30
+    EXPLORATION_HISTORY_NOTE_FRACTION = 0.5
+
+    def _exploration_history_block(self) -> str:
+        """Bounded recent-exploration-topics block for assertion-register
+        ticks (Stage 22.7 part B, F8). Pure visibility — the dispatcher
+        accepts repeat topics exactly as before; a repeat chosen in full
+        view of this history, with a stated reason, is legitimate data.
+        """
+        recent = self.exploration_controller.store.list_recent(
+            limit=self.EXPLORATION_HISTORY_CLUSTER_WINDOW
+        )
+        if not recent:
+            return ""
+        lines = [
+            "Recent explorations (your own history — shown so repetition is"
+            " a choice, not an accident):"
+        ]
+        # store order is oldest-first; show the newest entries, newest first
+        for record in reversed(recent[-self.EXPLORATION_HISTORY_SHOWN:]):
+            date = record.opened_at[:10] if record.opened_at else "?"
+            outcome = (
+                f"closed: {record.close_reason}"
+                if record.close_reason
+                else record.status
+            )
+            lines.append(f"  [{date}] {record.topic[:90]} ({outcome})")
+        stats = cluster_texts([r.topic for r in recent])
+        if (
+            stats["total"] >= self.EXPLORATION_HISTORY_SHOWN
+            and stats["largest_cluster_size"]
+            >= stats["total"] * self.EXPLORATION_HISTORY_NOTE_FRACTION
+        ):
+            lines.append(
+                f"Note: {stats['largest_cluster_size']} of your last "
+                f"{stats['total']} explorations pursued closely similar topics."
+            )
+        return "\n".join(lines)
+
     def model_self_state_tick(
         self,
         *,
@@ -931,14 +974,31 @@ class NovaRuntime:
             REGISTER_EXPLORATORY if exploration is not None else "assertion"
         )
 
+        # Phase 22 Stage 22.7 (F8): the tick surface gets a ladder summary
+        # instead of verbatim licensed-evidence lines, skips the duplicate
+        # heartbeat rendering (this method renders them itself below), and
+        # applies part D's config-gated drive dosage (defaults = prior
+        # behavior: drive line every tick, imperative framing).
+        drive_interval = max(1, self.config.prompt.tick_drive_injection_interval)
         self_context_block = self.self_context_engine.prefetch(
             self_state=self.self_state,
             motive_state=self.motive_state,
             heartbeat_store=self.heartbeat_store,
             proposal_store=self.proposal_store,
             claim_ladder_store=self.claim_ladder_store,
+            surface="tick",
+            include_heartbeats=False,
+            include_drive_line=(tick_sequence - 1) % drive_interval == 0,
+            drive_descriptive=self.config.prompt.tick_drive_descriptive,
         )
         recent_heartbeats = self.heartbeat_store.list_recent(limit=3)
+
+        # Phase 22 Stage 22.7 part B: at entry time (assertion register),
+        # show her own recent exploration topics so repetition is a visible
+        # choice, not a blind one. No gate — repeats stay accepted.
+        exploration_history_block = ""
+        if register == "assertion":
+            exploration_history_block = self._exploration_history_block()
 
         exploration_block = ""
         if exploration is not None:
@@ -963,6 +1023,8 @@ class NovaRuntime:
             recent_heartbeats=recent_heartbeats,
             register=register,
             exploration_block=exploration_block,
+            exploration_history_block=exploration_history_block,
+            soft_grounding=self.config.prompt.tick_soft_grounding,
         )
         generation = self.backend.generate(
             self._generation_request(prompt="", messages=messages)
