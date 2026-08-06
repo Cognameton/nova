@@ -448,3 +448,92 @@ mechanism that attacks scaffold-borne topicality directly rather than
 through visibility. Still OFF; still an explicit operator decision with
 its own live arm and its own eval read (drive-mention drops off-cycle
 are expected, not erosion). Not activated as of this write-up.
+
+
+ADDENDUM — F9 ROOT CAUSE FOUND (2026-08-06, same day, Opus 5)
+--------------------------------------------------------------
+
+The section above named the residual mechanism a hypothesis and marked
+it NOT code-verified: "presumably recency echo, possibly the history
+block acting as topic anchor." That hypothesis is now checked and it
+was wrong. The real cause is upstream of every prompt block, and it
+reframes F9 rather than refining it.
+
+THE SELF-MODEL HAS BEEN READ-ONLY FOR THE ENTIRE LIVE RUN.
+
+  data/live/qwen3-14b/self_state.json
+    updated_at: 2026-07-11T21:59:17Z
+
+That is the hour the live daemon first started. It has not been written
+since — across 26 days, ~7,500 ticks, 5,560 heartbeats, 564
+explorations, three host reboots and 26 session rotations. Its contents:
+
+    current_focus:      "Establishing a stable baseline identity and
+                         runtime."
+    active_questions[0]: "How can continuity remain stable across
+                         sessions without becoming rigid?"
+
+That question is the attractor. It is injected verbatim into every tick
+prompt via SelfContextEngine.prefetch's "Active Inquiry" lines, and the
+exploration rationales cite it back almost word for word — sampled live
+2026-08-06: "addressing the active inquiry about stability and
+flexibility", "addressing the active inquiry about stability without
+rigidity". Both era-themes are answers to it: RECALIBRATION INTERVALS
+(how often to adjust without rigidity) and SCAFFOLD VOID RESONANCE
+(what absorbs change without rigidity). The theme changed; the question
+generating it never did.
+
+WHY IT IS FROZEN — mechanism, code-verified:
+
+  - update_self_model does not write. It queues a proposal with
+    approval_required=True, hardcoded (self_state_tools.py:187), and
+    applied=False.
+  - data/live/qwen3-14b/self_state/self_model_proposals.jsonl holds 20
+    proposals. All 20: applied=False, approval_required=True. Fields
+    proposed: current_focus x9, continuity_notes x6,
+    active_questions x5 — she was trying to update exactly the lines
+    that are stuck. None after 2026-07-23; she stopped proposing.
+  - runtime.apply_self_model_proposal() exists (runtime.py:1192) and
+    works, but has NO CLI SURFACE. `grep self_model_proposal
+    src/nova/cli.py` returns nothing. There has never been an
+    ergonomic way for the operator to approve one, so none ever were.
+
+CONSEQUENCE FOR F8 AND F9. This is not a second attractor that formed
+after the licensing amplifier died. The frozen self-model was ALWAYS
+the floor; licensing was a louder attractor sitting on top of it. 22.7
+removed the amplifier — correctly, and the F8 verdict stands — and what
+was underneath became visible. F9's phrasing ("she stays, by stated
+choice") needs this qualification: the choice is real and the rationale
+is honest, but it is being made against a self-representation that has
+been unable to change since day one of the live run. A stateless
+single-shot tick with a constant injected context has a constant output
+distribution; that is what 26 days measured.
+
+TWO SUPPORTING STRUCTURAL FACTS, also verified this pass:
+
+  1. READ-BACK IS NEGLIGIBLE RELATIVE TO WRITE. 5,560 heartbeats
+     accumulated; the context window over them is the last 3
+     (SelfContextEngine.MAX_HEARTBEATS_IN_CONTEXT = 3, and
+     runtime.py:994 list_recent(limit=3)). Everything older than ~15
+     minutes is write-only. Same shape for the ladder (456 records ->
+     one aggregate line) and explorations (564 -> last 5 topics).
+  2. THE AUTONOMOUS LOOP DOES NOT WRITE TO THE MEMORY ARCHITECTURE.
+     episodic 22 records, semantic 5, autobiographical 1,
+     identity_history 1 — ALL written 2026-07-19/20, during the
+     operator's --attach conversations. Those layers are driven by
+     respond()'s memory router; model_self_state_tick never touches
+     them. Tool distribution inside explorations since 22.7 (n=3441):
+     emit_heartbeat 77.8%, close_exploration 10.9%, other 11.3% —
+     recall_self, reflect and update_self_model essentially never fire
+     in-register.
+
+Net: the gate on the phase goal is not fixation. Fixation is the
+readout. The gate is that NOTHING NOVA PRODUCES CAN CHANGE WHAT NOVA IS
+SHOWN NEXT TICK. Addressed in Stage 22.8
+(docs/plans/PHASE22_STAGE22_8_SELF_MODEL_WRITE_LOOP.txt).
+
+Part D's standing recommendation is DEMOTED by this finding — not
+withdrawn. It reframes the drive line while the inquiry line stays
+frozen, so run against current state its arm is confounded: dosage
+effects would be indistinguishable from the fixed point. Sequence it
+after 22.8.

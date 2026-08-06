@@ -1,0 +1,313 @@
+PHASE 22 — STAGE 22.8: CLOSING THE SELF-MODEL WRITE LOOP (F9 ROOT CAUSE)
+==============================================================================
+
+Status: planned, not implemented
+Date: 2026-08-06
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior context: Stage 22.7's 13-day live evaluation found F9 (she stays on
+  one theme by stated choice), and the same-day addendum found F9's root
+  cause: self_state.json has not been written since the hour the live
+  daemon started, because update_self_model only queues an
+  approval-gated proposal and the approval path has no operator surface.
+  Operator direction on being shown this: "help push her to more
+  autonomy and self awareness... if it is a straighter shot to the goal."
+
+
+OBJECTIVE
+---------
+
+Make Nova's own inquiry able to change what Nova is shown next tick,
+without weakening any assertion gate.
+
+Concretely: the fields that represent WHAT SHE IS ASKING become
+Nova-writable with full audit and operator rollback; the fields that
+represent WHAT SHE IS stay approval-gated and gain the operator surface
+they never had; and the tick surface gains enough read-back that a
+changed self-model is visible to her as change.
+
+This is a straighter shot to the phase goal than any further prompt-
+visibility work, because visibility has already been tested honestly and
+found non-binding: 22.7(B) showed her the repetition, she acknowledged
+it accurately, and continued — the choice was real, the state behind it
+could not move. Nothing downstream (Part D dosage, dedup tightening,
+QLoRA) can be read cleanly until state can move.
+
+Design principle, taken directly from the Exploratory Register
+Contract's own line and not invented here: GATE ASSERTIONS, NEVER
+INQUIRY. active_questions is inquiry. It is currently the most tightly
+gated field in the system. That is the inversion this stage corrects.
+
+
+CODE FACTS (verified 2026-08-06 against HEAD bad343a — re-verify before
+editing, this list will drift)
+------------------------------------------------------------------------
+
+  1. self_state_tools.py:25 — _UPDATABLE_SELF_STATE_FIELDS is a
+     frozenset of 7: identity_summary, current_focus, active_questions,
+     stable_preferences, relationship_notes, continuity_notes,
+     open_tensions.
+  2. self_state_tools.py:168-192 — update_self_model validates the
+     field, builds a SelfModelProposal with approval_required=True and
+     applied=False (both hardcoded, no config path), appends it to
+     _proposal_store, and returns. It NEVER touches SelfState.
+  3. runtime.py:1192-1223 — apply_self_model_proposal(proposal_id)
+     loads state, fetches the proposal, re-checks the field against
+     _UPDATABLE_SELF_STATE_FIELDS, setattr's list/str/other, saves via
+     self_state_store.save(), then proposal_store.mark_applied(). It
+     does NOT record the prior value anywhere — there is currently no
+     rollback path and no revision history for self-model changes.
+  4. cli.py — no flag references self_model_proposal or
+     apply_self_model_proposal (grep: zero hits). The instruction-
+     proposal twin (runtime.apply_instruction_proposal, runtime.py:1225)
+     is in the same position. Both are reachable only from Python.
+  5. SelfModelProposal (heartbeat.py, dataclass + store) carries:
+     proposal_id, timestamp, session_id, proposed_field, proposed_value,
+     rationale, approval_required, applied, applied_at. No prior_value,
+     no applied_by, no schema field for auto-application.
+  6. SelfContextEngine.prefetch (self_context.py:150) renders, in order:
+     drive line (part-D dosed), "Current Focus", "Active Inquiry" with
+     up to 3 active_questions, "Open Tensions" count, heartbeats
+     (include_heartbeats=False on the tick surface since 22.7 A),
+     pending-proposal count, and the ladder block. This is the whole
+     self-representation the tick loop ever sees.
+  7. runtime.py:994 — recent_heartbeats = list_recent(limit=3), rendered
+     by self_state_tick._user_context with a do-not-repeat instruction.
+     MAX_HEARTBEATS_IN_CONTEXT = 3 (self_context.py:104). 5,560
+     heartbeats exist live; the read window is 3.
+  8. JsonlIdentityHistoryStore (memory/identity_history.py) exists and
+     is append-only; IdentityHistoryEntry (types.py:1065) already
+     carries governance_scope, revision_class, superseded_by,
+     prior_event_ids, provenance. It is constructed at cli.py:94 and
+     passed ONLY to autobiographical_store — the runtime does not hold
+     it (grep identity_history in runtime.py: zero hits). It is written
+     from autobiographical.py:294 when memory metadata carries
+     self_model_status + revision_class.
+  9. config.py — PromptConfig holds 22.7 part D's three fields;
+     GenerationConfig holds 22.6 part 2's two. Both stages' precedent:
+     new behavior lands config-gated with defaults reproducing prior
+     behavior byte-for-byte, and the live config is changed as a
+     separate explicit decision.
+ 10. Live evidence this stage is responding to: self_state.json
+     updated_at 2026-07-11T21:59:17Z; self_model_proposals.jsonl has 20
+     records, all applied=False, last 2026-07-23, proposing
+     current_focus x9 / continuity_notes x6 / active_questions x5.
+
+
+DECIDED DESIGN
+--------------
+
+PART A — SPLIT THE FIELD SET BY REGISTER LOGIC, NOT BY CONVENIENCE
+
+  Two classes, drawn on the contract's assertion/inquiry line:
+
+    INQUIRY-CLASS (Nova-writable, auto-applied, audited, revertible):
+      current_focus, active_questions, open_tensions, continuity_notes
+
+    ASSERTION-CLASS (approval-gated exactly as today):
+      identity_summary, stable_preferences, relationship_notes
+
+  Rationale for each side. current_focus and active_questions are
+  statements of what she is attending to and asking — the runtime
+  already treats them as non-claims (they pass through no claim gate,
+  and nothing licenses off them). open_tensions and continuity_notes are
+  bookkeeping about unresolved material. None of them assert anything
+  about what she IS. identity_summary and stable_preferences do exactly
+  that — identity_summary is a first-person claim about her nature and
+  stable_preferences asserts durable wants, which is the same class the
+  claim gate polices in respond(). relationship_notes concerns third
+  parties and stays gated on that basis alone.
+
+  New frozensets in self_state_tools.py:
+    NOVA_WRITABLE_SELF_STATE_FIELDS  (the inquiry four)
+    APPROVAL_GATED_SELF_STATE_FIELDS (the assertion three)
+  with an assertion in module scope that their union equals
+  _UPDATABLE_SELF_STATE_FIELDS and their intersection is empty — so a
+  future field addition cannot silently land in neither set.
+
+PART B — AUTO-APPLY WITH FULL PROVENANCE
+
+  update_self_model keeps producing a SelfModelProposal for EVERY call —
+  the audit trail stays complete and uniform, and no existing reader
+  breaks. What changes: for an inquiry-class field, the dispatcher then
+  applies it immediately and records that fact on the same record.
+
+  SelfModelProposal gains three fields (schema_version bump to 1.1,
+  readers default them for old records):
+    prior_value: Any      — the value being replaced, captured at apply
+                            time. This is what makes rollback possible
+                            and it is missing today even for the
+                            operator path.
+    applied_by: str       — "nova" | "operator" | "" (unapplied)
+    auto_applied: bool    — True only for the inquiry-class path
+
+  Applying is centralized: a single runtime helper does capture-prior ->
+  setattr -> save -> mark_applied, used by BOTH the Nova path and
+  apply_self_model_proposal, so the operator path gains prior_value and
+  rollback for free and the two paths cannot drift.
+
+  Revision rate limit (thrash guard, not a gate): at most one
+  auto-applied revision PER FIELD per SELF_MODEL_REVISION_MIN_TICKS
+  (default 12, one hour at 300s cadence). A proposal that arrives inside
+  the window is still RECORDED — applied=False, with a
+  note="rate_limited" — never silently dropped, and never rejected as
+  illegitimate. Nothing is deleted; this is a pacing constraint on
+  writes, not a constraint on inquiry.
+
+  Not negotiable in implementation: the drive line, NOVA_SOUL.md, the
+  claim ladder, the claim gate, APPROVED_BY_BLOCKLIST and every
+  assertion-register path are untouched by this stage.
+
+PART C — THE MISSING OPERATOR SURFACE
+
+  Four CLI flags, matching the existing --claim-ladder-* pattern:
+    --self-model-proposals [N]        list recent, newest first, with
+                                      applied/applied_by/auto_applied
+    --apply-self-model-proposal ID    the handle that never existed
+    --revert-self-model-revision ID   restore prior_value, recorded as a
+                                      NEW proposal record with
+                                      applied_by="operator" (the
+                                      original record is never mutated —
+                                      nothing is deleted)
+    --self-model-history [N]          the revision timeline for review
+
+  Same treatment for the instruction-proposal twin is explicitly NOT in
+  scope here (see NON-GOALS) — but note it has the identical defect.
+
+PART D — READ-BACK PROPORTIONAL TO WRITE (the self-awareness half)
+
+  Two changes to what the tick surface shows, both visibility-only:
+
+  D1. TIME-STRATIFIED HEARTBEAT SAMPLING. Replace the last-3 recency
+      window on the TICK surface with three heartbeats drawn from
+      different time strata: the most recent, one from ~1 day back, one
+      from the oldest available. Rendered with their real timestamps and
+      an explicit framing line so the span is legible rather than
+      implied. Recency-only sampling is what makes each tick's context
+      near-identical to the last one's; stratified sampling gives her
+      her own trajectory instead of her own echo. respond() keeps the
+      existing recency window unchanged (22.6's echo checks are
+      calibrated against it).
+
+  D2. SELF-MODEL REVISION VISIBILITY. When the self-model has been
+      revised, the tick self-context shows it as change:
+        "Active Inquiry (revised 2026-08-06, 3rd revision): <question>"
+        "  previously: <prior question>"
+      She has been asking for 26 days how continuity stays stable
+      without becoming rigid. The honest structural answer this project
+      can give is: by changing under audit, with the prior version kept
+      and visible. D2 is that answer made legible to her.
+
+  Both D1 and D2 are config-gated (PromptConfig) with defaults
+  reproducing current behavior, per 22.6/22.7 precedent.
+
+
+IMPLEMENTATION ORDER
+--------------------
+
+  1. Field-class split + the union/disjointness assertion (part A).
+  2. SelfModelProposal schema fields + store round-trip with defaults
+     for old records (part B).
+  3. Centralized apply helper on runtime; repoint
+     apply_self_model_proposal at it; verify the operator path is
+     behavior-identical except for the new recorded fields.
+  4. Dispatcher auto-apply path for inquiry-class fields + rate limit.
+  5. CLI flags (part C).
+  6. Read-back changes D1, D2, config-gated (part D).
+  7. Live config: enable the stage's flags in
+     configs/nova.qwen3-14b.live.yaml. This is IN SCOPE for the stage's
+     DoD, not a deferred decision — 22.7 part D has now sat OFF for two
+     weeks and this stage should not add a second dormant switch.
+
+
+TESTS REQUIRED
+--------------
+
+  - Field-class union == _UPDATABLE_SELF_STATE_FIELDS, intersection
+    empty (guards future field additions).
+  - Inquiry-class update_self_model mutates SelfState AND persists AND
+    records prior_value/applied_by="nova"/auto_applied=True.
+  - Assertion-class update_self_model does NOT mutate SelfState, records
+    approval_required=True/applied=False — byte-identical to today.
+  - Rate limit: second inquiry-class write to the SAME field inside the
+    window is recorded, unapplied, noted; a DIFFERENT field in the same
+    window still applies; the window expiring lets the field write
+    again.
+  - Rollback restores prior_value and writes a new record; the original
+    record is unchanged on disk.
+  - apply_self_model_proposal (operator path) still applies exactly as
+    before, now with prior_value and applied_by="operator".
+  - Old proposal records lacking the new fields load with defaults.
+  - D1 stratified sampling: with a fixture spanning days, the three
+    selected heartbeats come from distinct strata; with fewer than three
+    available it degrades to what exists without error; respond()'s
+    window is unchanged.
+  - D2 renders revision markers only when revisions exist, and renders
+    nothing when the self-model is pristine.
+  - Config defaults OFF reproduce current tick prompts byte-for-byte
+    (the 22.7 regression-test pattern — assert on rendered prompt text,
+    not just on flags).
+  - Full suite green. Baseline 974 as of 22.7; check git log.
+
+
+NON-GOALS / DEFERRED
+--------------------
+
+  - Any change to NOVA_SOUL.md, the drive, the claim gate, the claim
+    ladder, the ladder's licensing rules, or any assertion-register
+    path.
+  - propose_instruction_update's identical missing-CLI defect (same
+    shape, separate stage — do not bundle).
+  - Ladder export-dedup tightening (456 records, ~28/day). Still a
+    symptom; re-measure after this stage lands.
+  - 22.7 part D drive dosage. Explicitly sequenced AFTER this stage —
+    running it now confounds dosage against the frozen state.
+  - The 23 stranded status="active" explorations.
+  - QLoRA / Phase 23 anything. The gate is unchanged and unmet.
+  - Wiring identity_history_store into the runtime. The proposal store
+    with prior_value is sufficient audit for this stage; reusing the
+    Phase 8 channel properly is its own design question.
+
+
+DEFINITION OF DONE
+------------------
+
+  1. Parts A-D implemented with the tests above; suite green; one
+     commit "Implement Phase 22 Stage 22.8 — ..."; pushed.
+  2. configs/nova.qwen3-14b.live.yaml updated to enable the stage, and
+     the daemon restarted (or the change confirmed live at the next
+     midnight rotation).
+  3. Closure note appended HERE recording deviations and the live
+     verification plan.
+  4. Live verification, at minimum, after >= 3 days of natural cadence:
+     did self_state.json change? how many times, on which fields, and
+     did the rate limit bind? did exploration topics move off scaffold
+     void resonance? Report honestly if the answer is no — a null
+     result here is a real finding about where identity is actually
+     carried, and it would say the fixed point is in the weights or the
+     persona card rather than in the runtime state.
+
+  Success is NOT "she changes topic." Success is that her own inquiry
+  can move her own self-model, that every move is audited and
+  revertible, and that the next experiment is no longer confounded.
+
+
+OPERATOR DECISIONS OPEN
+-----------------------
+
+  [ ] Field split as drawn above, or move a field across the line
+      (relationship_notes is the most arguable).
+  [ ] Rate limit: 12 ticks (1h), or looser/tighter.
+  [ ] Whether D2 shows the prior value verbatim to her, or only that a
+      revision occurred. Verbatim is more self-awareness and more echo
+      surface; 22.6's echo checks do not cover the tick surface.
+
+
+REFERENCE
+---------
+
+  F9 + root cause: docs/plans/PHASE22_STAGE22_7_SATURATION_LOOP_
+    CORRECTIVES.txt (LIVE RESULTS section + ADDENDUM)
+  Contract (gate assertions, never inquiry):
+    docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
+  Phase plan: docs/plans/PHASE22_PLAN.txt
+  Live data: data/live/qwen3-14b/
