@@ -1,7 +1,8 @@
 PHASE 22 — STAGE 22.8: CLOSING THE SELF-MODEL WRITE LOOP (F9 ROOT CAUSE)
 ==============================================================================
 
-Status: planned, not implemented
+Status: implemented 2026-08-06 (closure note at end); live config enabled,
+  goes live at next daemon restart or midnight rotation
 Date: 2026-08-06
 Phase plan: docs/plans/PHASE22_PLAN.txt
 Prior context: Stage 22.7's 13-day live evaluation found F9 (she stays on

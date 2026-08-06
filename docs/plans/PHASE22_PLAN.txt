@@ -464,9 +464,14 @@ REFERENCE
     self_state.json frozen since 2026-07-11 (update_self_model only
     queues an approval-gated proposal; the approval path has no CLI
     surface). Part D is demoted to AFTER 22.8, not withdrawn.
-  Stage 22.8 doc (planned, not implemented) — closes the self-model
-    write loop, the identified gate on the phase goal:
+  Stage 22.8 doc (IMPLEMENTED 2026-08-06, suite 974 -> 1018) — closes
+    the self-model write loop, the identified gate on the phase goal:
     docs/plans/PHASE22_STAGE22_8_SELF_MODEL_WRITE_LOOP.txt
+    Inquiry-class fields (current_focus, active_questions, open_tensions,
+    continuity_notes) are Nova-writable with prior_value/revert; the
+    assertion-class three keep operator approval and gained the CLI
+    surface they never had. Live config enabled; not yet in the running
+    process.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/
