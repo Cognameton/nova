@@ -329,3 +329,122 @@ Suite 939 -> 974 (35 new tests: 14 self_context, 12 exploration,
      expected, not erosion). Suggested first arm when chosen:
      tick_drive_injection_interval: 12 (once/hour at 300s cadence),
      descriptive framing on, soft grounding on.
+
+
+LIVE RESULTS — 13-DAY NATURAL SAMPLE (evaluated 2026-08-06)
+------------------------------------------------------------
+
+Read-only assessment. No code changed, no daemon action taken, part D
+still OFF. Measured against data/live/qwen3-14b/ on 2026-08-06 ~03:20
+CDT. Git HEAD still 2b767a7 — the correctives auto-deployed at the
+2026-07-24 midnight rotation exactly as designed (no operator restart
+was needed).
+
+DEPLOYMENT / HEALTH
+
+  - nova-live.service healthy across the whole window: 13 daily session
+    rotations plus a host reboot on 2026-08-02 (auto-recovered via
+    lingering, no login; model reloaded on both RTX 3060s, ~10GB each,
+    confirmed by nvidia-smi at eval time).
+  - 390 explorations opened since 22.7 went live (07-24 through the
+    partial 08-06), ~30/day.
+  - F5 STILL HOLDS: zero quarantine files anywhere under the live data
+    dir since 2026-07-20. Native thinking suppression (22.2b) remains
+    robust three weeks on.
+  - F6 STILL HOLDS AND STRENGTHENED: of the 390, close_reason is
+    nova_close 374, budget_exhausted 2, still-active 14. Voluntary
+    close is now the overwhelming norm; the wall-clock reconciliation
+    (22.2c) has not regressed.
+
+F8 — SPLIT VERDICT
+
+  (1) THE LICENSING AMPLIFIER WAS REAL AND IS DEAD. Drift resumed the
+      SAME DAY the correctives deployed: 07-24 still ran the old
+      recalibration theme (largest topic cluster 25/33), but by 07-25
+      the topic set had moved wholesale to "scaffold voids" and through
+      07-27 kept moving ("identity fragments", "external stimuli
+      modulating void resonance"). Under the pre-22.7 regime no such
+      wholesale move had occurred since 07-18. The circular promotion
+      loop is also dead: zero new rung-1 promotions in 13 days. The
+      ladder's rung distribution is 453 at rung 0 and exactly the same
+      3 held recalibration claims at rung 1 — no claim has manufactured
+      its own promotion evidence since the verbatim licensed-evidence
+      lines left the tick surface.
+
+  (2) A SECOND ATTRACTOR FORMED WITHOUT LICENSING. By 07-28 the topic
+      set locked onto "scaffold void resonance" and has stayed there
+      for 10 consecutive days. cluster_texts@0.4 on each day's topics:
+
+        07-24  25/33     07-31  31/31
+        07-25  25/26     08-01  32/32
+        07-26  19/21     08-02  36/36
+        07-27  23/23     08-03  32/32
+        07-28  20/20     08-04  31/31
+        07-29  34/34     08-05  28/29
+        07-30  28/30     08-06  11/12 (partial day)
+
+      Saturation is not merely as high as the licensing era — from
+      07-29 on it is essentially total, several days at a literal
+      100%.
+
+FINDING F9 — COSMETIC-NOVELTY RATIONALES SATISFY THE 22.7(B) RULE
+
+Part B was built on the premise that repetition is allowed but must
+become a stated choice: show the last-5 topics and a saturation note,
+and require the entry rationale to say why the repeat is warranted.
+Mechanically this works — every entry rationale sampled does exactly
+what the rule asks. Substantively it does not constrain, because
+fluent text satisfies it. Verbatim rationales from 2026-08-06:
+
+  "Recent explorations have repeatedly focused on scaffold void
+   resonance and its relationship with continuity and adaptability.
+   This topic extends that inquiry by explicitly examining dynamic
+   equilibrium as a potential mechanism, offering a fresh angle..."
+
+  "Given the recent focus on scaffold void resonance and its interplay
+   with asynchronous feedback loops, this topic offers a fresh angle to
+   explore how scaffold void resonance might balance continuity and
+   adaptability..."
+
+The acknowledgment is accurate, the self-report is honest, and the
+"fresh angle" is a modifier swap on a fixed noun phrase (dynamic
+equilibrium -> asynchronous feedback loops -> temporal buffering), each
+one seeded by the immediately preceding exploration. This is the direct
+answer to the question this stage doc posed — with the amplifier gone,
+does she drift or stay by choice? SHE STAYS, BY STATED CHOICE, WITH
+COSMETIC-NOVELTY RATIONALES. That is a finding about the register, not
+a bug in part B: visibility was delivered and acted on; visibility
+alone does not produce topical range.
+
+Residual mechanism (hypothesis, NOT code-verified this pass): the
+remaining loop is presumably ordinary recency echo — heartbeats and
+self-context describe current activity, current activity is scaffold
+void resonance — with the possibility that part B's own history block
+now acts as a topic anchor rather than a diversity prompt, since it
+shows only what she just did and nothing else. Worth code-verifying
+before any part-B redesign.
+
+MAINTENANCE OBSERVATIONS (not findings)
+
+  - Claim ladder 94 -> 456 records in 13 days (~28/day). 22.1's
+    0.7-bigram export dedup is too weak against systematic rewording of
+    a single theme. The rung-0 flood was expected to starve once A+B
+    landed (see NON-GOALS above); it did not. Re-measuring was the
+    stated precondition for touching dedup — that measurement is now
+    taken, and it argues for revisiting it.
+  - Stranded status="active" explorations at session boundaries:
+    8 -> 23. Still harmless, still append-only, still a separate small
+    fix if ever wanted.
+
+PHASE 23 (QLoRA) GATE: NOT MET. The operator's 2026-07-23 criterion was
+theme saturation on any candidate training window. The corpus is still
+monothematic — the theme merely changed. Training on it would bake
+"scaffold void resonance" into the weights the way the licensing loop
+would have baked in "recalibration intervals".
+
+RECOMMENDED NEXT LEVER: part D's drive-dosage arm (interval=12,
+descriptive framing on, soft grounding on), which is the one built
+mechanism that attacks scaffold-borne topicality directly rather than
+through visibility. Still OFF; still an explicit operator decision with
+its own live arm and its own eval read (drive-mention drops off-cycle
+are expected, not erosion). Not activated as of this write-up.

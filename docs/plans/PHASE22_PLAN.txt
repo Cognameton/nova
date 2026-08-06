@@ -450,6 +450,16 @@ REFERENCE
     docs/plans/PHASE22_STAGE22_3_LIVE_SESSIONS.txt
   Stage 22.4 doc (pinned, not yet run):
     docs/plans/PHASE22_STAGE22_4_LADDER_PROGRESSION.txt
+  Stage 22.6 doc (implemented, live-tested, open tension recorded):
+    docs/plans/PHASE22_STAGE22_6_ORGANIC_CONTEMPLATION_PART1.txt
+  Stage 22.7 doc (implemented, live since 2026-07-24, findings F8/F9):
+    docs/plans/PHASE22_STAGE22_7_SATURATION_LOOP_CORRECTIVES.txt
+    F8 = licensing creates a permanent context attractor (dead as of
+    22.7 — proven by drift resuming the day it deployed). F9 = with the
+    amplifier gone she stays on one theme BY STATED CHOICE, satisfying
+    22.7(B)'s rationale rule with cosmetic-novelty wording. Phase 23
+    QLoRA gate still NOT met; part D drive-dosage arm is the
+    recommended next lever and remains OFF pending operator decision.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/
