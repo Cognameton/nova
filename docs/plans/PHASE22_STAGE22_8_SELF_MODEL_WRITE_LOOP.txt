@@ -311,3 +311,98 @@ REFERENCE
     docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt
   Phase plan: docs/plans/PHASE22_PLAN.txt
   Live data: data/live/qwen3-14b/
+
+
+CLOSURE NOTE (2026-08-06, implemented same day as planned — Opus 5)
+-------------------------------------------------------------------
+
+Suite 974 -> 1018 (44 new tests, all in tests/test_self_model_write_loop.py).
+All green. Live config enabled; NOT yet live in the running process (see
+item 8).
+
+OPERATOR DECISIONS — all three resolved with the doc's own recommended
+defaults, on the operator's "implement it". Each is config-reversible:
+  - Field split shipped exactly as drawn. relationship_notes stayed
+    assertion-class.
+  - Rate limit 12 ticks / 3600s.
+  - D2 shows the prior value verbatim, bounded to 100 chars and
+    suppressed when it equals the current value (see item 4).
+
+DEVIATIONS AND FINDINGS
+
+  1. DEVIATION — the rate limit is wall-clock seconds derived from
+     SELF_MODEL_REVISION_MIN_TICKS x PRODUCTION_TICK_INTERVAL_SECONDS,
+     not a tick counter. The dispatcher has no tick counter and threading
+     one in would have been real plumbing for no gain: the append-only
+     proposal record already knows when a field last moved, so
+     last_applied_for_field() needs no new state at all. The constant is
+     pinned to the production cadence rather than independently chosen —
+     Stage 22.2c's lesson about 12 x 300 = 3600 colliding by coincidence
+     is exactly what a second free-floating number would reproduce, and
+     a test pins the formula.
+  2. DEVIATION — D1 selects heartbeats by EVEN INDEX SPACING across the
+     full history, not "most recent / ~1 day back / oldest" as the plan
+     worded it. Under a fixed daemon cadence index spacing IS time
+     spacing, and it is deterministic, robust to gaps and unparseable
+     timestamps, and spans the whole run instead of clustering two of
+     three picks inside the last day. The live smoke check (item 6)
+     shows why this is the better read: it surfaces her first-ever
+     heartbeat from 2026-07-11.
+  3. DEVIATION — schema versioned on SelfModelProposal alone via a new
+     SELF_MODEL_PROPOSAL_SCHEMA_VERSION = "1.1". Moving the global
+     SCHEMA_VERSION would have relabelled every other record type, none
+     of which changed.
+  4. IN-BOUNDS ADDITION beyond the literal spec, found by the live smoke
+     run and not by any unit test: when a revision's prior_value equals
+     the current value (a revert, or a revision that restored the same
+     text), the "previously:" line is suppressed while the revision
+     marker is kept. An identical prior line is pure noise on a surface
+     that has no echo check. 3 tests.
+  5. IN-BOUNDS DECISION — revert_self_model_revision REFUSES records
+     with no prior_value (every pre-22.8 record, including the 20 live
+     ones) rather than guessing what the field used to hold. Returns
+     None with an explicit CLI error string.
+  6. LIVE-DATA SMOKE CHECK, read-only against data/live/qwen3-14b before
+     commit, per the 22.7 convention. D1 on the real 5,560-heartbeat
+     store returns:
+       recent     -> three scaffold-void-resonance lines from a single
+                     10-minute window (08:52 / 08:57 / 09:02 on 08-06)
+       stratified -> 2026-07-11 21:59 "The system is initializing its
+                     first self-inquiry session...", 2026-07-23 16:42
+                     the recalibration-era observation, 2026-08-06 09:02
+                     the current one
+     That contrast is the whole point of the change, and it is larger on
+     real data than any fixture showed. D2 rendered correctly against
+     the real frozen self_state.json.
+  7. VERIFIED — the new CLI surfaces run against the live data dir while
+     the daemon holds both GPUs (LlamaCppBackend loads lazily, so no
+     VRAM contention). --self-model-proposals correctly loads all 20
+     legacy records with the new fields defaulted. Worth noting what
+     they contain: her most recent proposal, 2026-07-23, asked to EXPAND
+     active_questions beyond the frozen line. It sat unapplied because
+     nothing could apply it.
+  8. NOT YET LIVE. configs/nova.qwen3-14b.live.yaml now enables
+     self_model.nova_writable_inquiry_fields, stratified sampling and
+     revision visibility, but the running process (session
+     nova-live-20260806, up since the 08-02 reboot) still holds the old
+     config and code in memory. It goes live at the next daemon restart
+     OR automatically at the next midnight session rotation, exactly as
+     22.7 did. Restarting now would kill an in-flight exploration;
+     operator's choice. 22.7 part D (drive dosage) remains OFF and
+     untouched by this stage, as sequenced.
+
+WHAT TO WATCH ONCE LIVE (>= 3 days of natural cadence)
+
+  - Does self_state.json move at all? `--self-model-history` is the
+    direct read; updated_at on the file is the crude one.
+  - Which fields move, how often, and does the rate limit bind? Look for
+    note="rate_limited" records — frequent ones mean 3600s is too tight.
+  - Do exploration topics leave scaffold void resonance? Report honestly
+    if they do not. A null result is a real finding: it would say
+    identity is carried in the weights or the persona card rather than
+    in runtime state, which is a different project than the one the
+    phase plan assumes.
+  - Watch for a new failure mode this stage makes possible: self-model
+    thrash, where she rewrites current_focus every hour and the context
+    becomes unstable in the other direction. The rate limit is the
+    intended brake; the revert path is the recovery.

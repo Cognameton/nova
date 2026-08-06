@@ -17,3 +17,23 @@ generation:
   stop:
     - "<|im_end|>"
     - "<|im_start|>"
+
+# Phase 22 Stage 22.8 — closing the self-model write loop. Enabled here and
+# only here; the defaults in config.py stay off, so every other config and
+# the whole test suite keep the pre-22.8 behavior.
+#
+# Live evidence this responds to: self_state.json went unwritten from
+# 2026-07-11 to 2026-08-06 while active_questions[0] was injected verbatim
+# into every tick prompt, and 20 of Nova's own update_self_model proposals
+# sat unapplied because the approval path had no operator surface.
+self_model:
+  nova_writable_inquiry_fields: true
+  # 12 ticks at the 300s daemon cadence. Pacing on her own writes, not a
+  # gate — rate-limited proposals are still recorded.
+  revision_min_seconds: 3600
+
+prompt:
+  # Read-back proportional to write: 5,560 heartbeats accumulated against a
+  # read window of 3.
+  tick_heartbeat_sampling: stratified
+  tick_self_model_revision_visibility: true

@@ -12,6 +12,7 @@ import yaml
 DEFAULT_CONFIG_PATH = Path("configs/nova.default.yaml")
 VALID_BACKENDS = {"llama_cpp"}
 VALID_PROMPT_ABLATION_MODES = {"current", "minimal", "state_summary", "action_boundary"}
+VALID_TICK_HEARTBEAT_SAMPLING = {"recent", "stratified"}
 
 
 @dataclass(slots=True)
@@ -65,6 +66,24 @@ class PromptConfig:
     tick_drive_injection_interval: int = 1
     tick_drive_descriptive: bool = False
     tick_soft_grounding: bool = False
+    # Phase 22 Stage 22.8 part D — read-back proportional to write. Defaults
+    # reproduce prior behavior exactly: last-3 recency window, no revision
+    # markers. See docs/plans/PHASE22_STAGE22_8_SELF_MODEL_WRITE_LOOP.txt.
+    tick_heartbeat_sampling: str = "recent"
+    tick_self_model_revision_visibility: bool = False
+
+
+@dataclass(slots=True)
+class SelfModelConfig:
+    """Phase 22 Stage 22.8 — Nova's own write access to inquiry-class fields.
+
+    Default OFF so every existing config and the full test suite keep the
+    pre-22.8 queue-only behavior; the live config enables it explicitly.
+    """
+
+    nova_writable_inquiry_fields: bool = False
+    # 12 ticks at the 300s production cadence. Pacing, not a gate.
+    revision_min_seconds: int = 3_600
 
 
 @dataclass(slots=True)
@@ -123,6 +142,7 @@ class NovaConfig:
     console: ConsoleConfig = field(default_factory=ConsoleConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
     cognition: CognitionConfig = field(default_factory=CognitionConfig)
+    self_model: SelfModelConfig = field(default_factory=SelfModelConfig)
 
     def validate(self) -> None:
         if self.model.backend not in VALID_BACKENDS:
@@ -144,6 +164,13 @@ class NovaConfig:
             )
         if self.prompt.tick_drive_injection_interval < 1:
             raise ValueError("prompt.tick_drive_injection_interval must be >= 1")
+        if self.prompt.tick_heartbeat_sampling not in VALID_TICK_HEARTBEAT_SAMPLING:
+            raise ValueError(
+                "prompt.tick_heartbeat_sampling must be one of "
+                f"{sorted(VALID_TICK_HEARTBEAT_SAMPLING)}"
+            )
+        if self.self_model.revision_min_seconds < 0:
+            raise ValueError("self_model.revision_min_seconds must be non-negative")
         if not self.app.data_dir:
             raise ValueError("app.data_dir is required")
         if not self.app.log_dir:
@@ -222,6 +249,7 @@ def load_config(
         console=_section(ConsoleConfig, payload.get("console")),
         eval=_section(EvalConfig, payload.get("eval")),
         cognition=_section(CognitionConfig, payload.get("cognition")),
+        self_model=_section(SelfModelConfig, payload.get("self_model")),
     )
     config.validate()
     return config

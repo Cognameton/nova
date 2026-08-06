@@ -455,6 +455,37 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="List claim ladder records (id, rung, status, claim text).",
     )
+    # Phase 22 Stage 22.8 — the operator surface apply_self_model_proposal
+    # never had. Without these the approval queue could only be drained from
+    # Python, which is why it never was.
+    parser.add_argument(
+        "--self-model-proposals",
+        nargs="?",
+        type=int,
+        const=20,
+        metavar="N",
+        help="List recent self-model proposals (newest first) with their "
+             "applied / applied_by / auto_applied state.",
+    )
+    parser.add_argument(
+        "--apply-self-model-proposal",
+        metavar="PROPOSAL_ID",
+        help="Apply an approval-gated self-model proposal to SelfState.",
+    )
+    parser.add_argument(
+        "--revert-self-model-revision",
+        metavar="PROPOSAL_ID",
+        help="Restore the value an applied revision replaced. Recorded as a "
+             "new proposal; the original record is never mutated.",
+    )
+    parser.add_argument(
+        "--self-model-history",
+        nargs="?",
+        type=int,
+        const=20,
+        metavar="N",
+        help="Print the self-model revision timeline (applied changes only).",
+    )
     parser.add_argument(
         "--claim-ladder-verify",
         metavar="CLAIM_ID",
@@ -1388,6 +1419,65 @@ def main() -> int:
             for r in records
         ]
         print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+
+    if args.self_model_proposals is not None:
+        runtime = build_runtime(config_override=args.config_override)
+        records = runtime.self_model_history(limit=args.self_model_proposals)
+        print(json.dumps([r.to_dict() for r in records], indent=2, sort_keys=True))
+        return 0
+
+    if args.self_model_history is not None:
+        runtime = build_runtime(config_override=args.config_override)
+        records = [
+            r
+            for r in runtime.self_model_history(limit=0)
+            if r.applied
+        ][: args.self_model_history]
+        timeline = [
+            {
+                "proposal_id": r.proposal_id,
+                "field": r.proposed_field,
+                "applied_at": r.applied_at,
+                "applied_by": r.applied_by,
+                "auto_applied": r.auto_applied,
+                "prior_value": r.prior_value,
+                "new_value": r.proposed_value,
+                "rationale": r.rationale,
+            }
+            for r in records
+        ]
+        print(json.dumps(timeline, indent=2, sort_keys=True))
+        return 0
+
+    if args.apply_self_model_proposal:
+        runtime = build_runtime(config_override=args.config_override)
+        applied = runtime.apply_self_model_proposal(
+            proposal_id=args.apply_self_model_proposal
+        )
+        if applied is None:
+            print(json.dumps({"error": "unknown proposal or non-updatable field"}, indent=2))
+            return 1
+        print(json.dumps(applied.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    if args.revert_self_model_revision:
+        runtime = build_runtime(config_override=args.config_override)
+        reverted = runtime.revert_self_model_revision(
+            proposal_id=args.revert_self_model_revision
+        )
+        if reverted is None:
+            print(
+                json.dumps(
+                    {
+                        "error": "unknown proposal, never applied, or no "
+                                 "prior_value recorded (pre-22.8 record)"
+                    },
+                    indent=2,
+                )
+            )
+            return 1
+        print(json.dumps(reverted.to_dict(), indent=2, sort_keys=True))
         return 0
 
     if args.claim_ladder_verify:

@@ -64,6 +64,36 @@ class HeartbeatStore:
                 records.append(_heartbeat_from_payload(payload))
         return records[-limit:] if limit > 0 else records
 
+    def list_stratified(self, *, limit: int = 3) -> list[HeartbeatRecord]:
+        """Heartbeats drawn from across the whole history, oldest first.
+
+        Phase 22 Stage 22.8 (D1). The tick surface previously saw
+        list_recent(limit=3) — a ~15-minute window over a store that had
+        grown to 5,560 records. Every tick's context was therefore nearly
+        identical to the previous tick's, which is a large part of why the
+        loop's output distribution was constant (F9 root cause). Stratified
+        sampling shows Nova her own trajectory instead of her own echo.
+
+        Selection is evenly spaced by INDEX across the full history, always
+        including the oldest and newest records. Under a fixed daemon
+        cadence index spacing is time spacing, and it is robust to gaps and
+        unparseable timestamps in a way age arithmetic is not. Deterministic:
+        the same store and limit always yield the same picks. Degrades to
+        "return what exists" when the store holds fewer records than limit.
+        """
+        if limit <= 0:
+            return []
+        records = self.list_recent(limit=0)
+        if len(records) <= limit:
+            return records
+        if limit == 1:
+            return [records[-1]]
+        last = len(records) - 1
+        # i/(limit-1) walks 0 -> 1, so the first pick is the oldest record
+        # and the last pick is the newest; interior picks land in between.
+        indices = sorted({round(last * i / (limit - 1)) for i in range(limit)})
+        return [records[index] for index in indices]
+
 
 def _heartbeat_from_payload(payload: dict) -> HeartbeatRecord:
     return HeartbeatRecord(
@@ -167,13 +197,51 @@ class SelfModelProposalStore:
     def list_pending(self) -> list[SelfModelProposal]:
         return [r for r in self._load_all() if not r.applied]
 
-    def mark_applied(self, proposal_id: str, applied_at: str) -> SelfModelProposal | None:
+    def list_all(self) -> list[SelfModelProposal]:
+        """Every proposal, oldest first (Stage 22.8 — operator surface).
+
+        Mirrors the list_all() added to ExplorationStore in Stage 21.3: the
+        review surfaces need applied records too, not only pending ones.
+        """
+        return self._load_all()
+
+    def last_applied_for_field(self, field: str) -> SelfModelProposal | None:
+        """Most recent APPLIED proposal for one field, or None.
+
+        Stage 22.8 uses this for the per-field revision rate limit, so the
+        limit needs no additional state of its own — the append-only record
+        already knows when the field last moved.
+        """
+        applied = [
+            record
+            for record in self._load_all()
+            if record.proposed_field == field and record.applied
+        ]
+        if not applied:
+            return None
+        return max(applied, key=lambda record: record.applied_at or record.timestamp)
+
+    def mark_applied(
+        self,
+        proposal_id: str,
+        applied_at: str,
+        *,
+        prior_value: object = None,
+        applied_by: str = "",
+    ) -> SelfModelProposal | None:
+        """Mark a proposal applied, recording what it replaced and who applied it.
+
+        Stage 22.8 added prior_value/applied_by. Both are keyword-only with
+        defaults so existing callers keep working unchanged.
+        """
         records = self._load_all()
         updated: SelfModelProposal | None = None
         for record in records:
             if record.proposal_id == proposal_id:
                 record.applied = True
                 record.applied_at = applied_at
+                record.prior_value = prior_value
+                record.applied_by = applied_by
                 updated = record
                 break
         if updated is not None:
@@ -218,4 +286,11 @@ def _proposal_from_payload(payload: dict) -> SelfModelProposal:
         approval_required=bool(payload.get("approval_required", True)),
         applied=bool(payload.get("applied", False)),
         applied_at=str(payload.get("applied_at", "")),
+        # Phase 22 Stage 22.8 — absent on pre-1.1 records; defaults are the
+        # honest reading of an old record (nothing captured, nobody
+        # attributed, not auto-applied).
+        prior_value=payload.get("prior_value"),
+        applied_by=str(payload.get("applied_by", "")),
+        auto_applied=bool(payload.get("auto_applied", False)),
+        note=str(payload.get("note", "")),
     )

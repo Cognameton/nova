@@ -122,6 +122,7 @@ class SelfStateTickEngine:
         exploration_block: str = "",
         exploration_history_block: str = "",
         soft_grounding: bool = False,
+        heartbeat_framing: str = "recent",
     ) -> list[dict[str, str]]:
         in_exploration = register == "exploratory"
         # str.replace, not str.format: _SYSTEM contains literal JSON braces.
@@ -152,6 +153,7 @@ class SelfStateTickEngine:
                     exploration_history_block=(
                         "" if in_exploration else exploration_history_block
                     ),
+                    heartbeat_framing=heartbeat_framing,
                 ),
             },
         ]
@@ -166,6 +168,7 @@ class SelfStateTickEngine:
         recent_heartbeats: list[HeartbeatRecord],
         exploration_block: str = "",
         exploration_history_block: str = "",
+        heartbeat_framing: str = "recent",
     ) -> str:
         parts = [
             f"session_id: {session_id}",
@@ -182,7 +185,17 @@ class SelfStateTickEngine:
             parts.append(exploration_block)
         if recent_heartbeats:
             parts.append("")
-            parts.append("Recent heartbeat observations (already recorded — do not repeat these phrases):")
+            # Stage 22.8 D1: when the sample spans the whole history rather
+            # than the last few minutes, say so — an unlabelled span reads as
+            # "these are the latest" and invites her to continue them.
+            if heartbeat_framing == "stratified":
+                parts.append(
+                    "Heartbeat observations sampled across your whole history,"
+                    " oldest first (already recorded — do not repeat these"
+                    " phrases):"
+                )
+            else:
+                parts.append("Recent heartbeat observations (already recorded — do not repeat these phrases):")
             for hb in recent_heartbeats[-3:]:
                 ts = hb.timestamp[:19] if hb.timestamp else "?"
                 obs = hb.observation[:120] if hb.observation else "(no observation)"

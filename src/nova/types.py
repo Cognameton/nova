@@ -8,6 +8,12 @@ from typing import Any
 
 SCHEMA_VERSION = "1.0"
 
+# Phase 22 Stage 22.8 — SelfModelProposal gained prior_value/applied_by/
+# auto_applied/note. Versioned on its own rather than moving the global
+# SCHEMA_VERSION, which every other record type shares and none of which
+# changed.
+SELF_MODEL_PROPOSAL_SCHEMA_VERSION = "1.1"
+
 
 @dataclass(slots=True)
 class PersonaState:
@@ -1239,8 +1245,18 @@ class DriveGapRecord:
 
 @dataclass(slots=True)
 class SelfModelProposal:
-    """Persisted update_self_model proposal awaiting operator approval."""
-    schema_version: str = SCHEMA_VERSION
+    """Persisted update_self_model proposal.
+
+    Phase 22 Stage 22.8: every update_self_model call still produces one of
+    these, so the audit trail stays uniform — but inquiry-class fields are
+    now applied by Nova directly (applied_by="nova", auto_applied=True)
+    while assertion-class fields still wait for the operator. prior_value
+    records what was replaced, which is what makes any revision revertible;
+    before 22.8 nothing captured it, so no self-model change could be undone
+    on either path. Schema 1.1; records written before it load with these
+    fields defaulted.
+    """
+    schema_version: str = SELF_MODEL_PROPOSAL_SCHEMA_VERSION
     proposal_id: str = ""
     timestamp: str = ""
     session_id: str = ""
@@ -1250,6 +1266,10 @@ class SelfModelProposal:
     approval_required: bool = True
     applied: bool = False
     applied_at: str = ""
+    prior_value: Any = None
+    applied_by: str = ""
+    auto_applied: bool = False
+    note: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

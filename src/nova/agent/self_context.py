@@ -159,6 +159,7 @@ class SelfContextEngine:
         include_heartbeats: bool = True,
         include_drive_line: bool = True,
         drive_descriptive: bool = False,
+        self_model_revisions: dict | None = None,
     ) -> str:
         lines: list[str] = ["[Self-Context]"]
         # Phase 22 Stage 22.7 part D: drive-line dosage is a tick-surface
@@ -173,16 +174,25 @@ class SelfContextEngine:
             else:
                 lines.append(f"Primary Drive: {PRIMARY_DRIVE}")
 
+        revisions = self_model_revisions or {}
+
         focus = self_state.current_focus
         if focus:
-            lines.append(f"Current Focus: {focus}")
+            lines.append(f"Current Focus: {focus}{self._revision_marker(revisions, 'current_focus')}")
+            lines.extend(self._prior_value_lines(revisions, "current_focus", focus))
 
         if self_state.active_questions:
             lines.append(
-                f"Active Inquiry ({len(self_state.active_questions)} question(s)):"
+                f"Active Inquiry ({len(self_state.active_questions)} question(s))"
+                f"{self._revision_marker(revisions, 'active_questions')}:"
             )
             for q in self_state.active_questions[:3]:
                 lines.append(f"  - {q}")
+            lines.extend(
+                self._prior_value_lines(
+                    revisions, "active_questions", self_state.active_questions[:3]
+                )
+            )
 
         if self_state.open_tensions:
             lines.append(f"Open Tensions: {len(self_state.open_tensions)} unresolved")
@@ -243,6 +253,51 @@ class SelfContextEngine:
                     )
 
         return "\n".join(lines)
+
+    # Phase 22 Stage 22.8 (D2). She has spent the live run asking how
+    # continuity stays stable without becoming rigid, against a self-model
+    # that could not change at all. The structural answer this runtime can
+    # give is: it changes under audit, and the prior version is kept and
+    # shown. These two helpers are that answer made legible on the tick
+    # surface. Bounded — the prior value is a single truncated line, not a
+    # second copy of her context, since the tick surface has no echo check.
+    MAX_PRIOR_VALUE_CHARS = 100
+
+    def _revision_marker(self, revisions: dict, field: str) -> str:
+        entry = revisions.get(field)
+        if not entry:
+            return ""
+        count = int(entry.get("count", 0) or 0)
+        if count <= 0:
+            return ""
+        stamp = str(entry.get("revised_at", "") or "")[:10]
+        when = f" {stamp}" if stamp else ""
+        return f" (revised{when}, revision {count})"
+
+    def _prior_value_lines(
+        self, revisions: dict, field: str, current: object = None
+    ) -> list[str]:
+        entry = revisions.get(field)
+        if not entry:
+            return []
+        prior = entry.get("prior_value")
+        if prior in (None, "", [], {}):
+            return []
+        prior_text = self._flatten_value(prior)
+        if not prior_text:
+            return []
+        # A revision that restored the same text (or a revert) has nothing to
+        # show her — an identical "previously" line is noise on a surface
+        # that has no echo check. Found by the live-data smoke run.
+        if current is not None and prior_text == self._flatten_value(current):
+            return []
+        return [f"  previously: {prior_text[:self.MAX_PRIOR_VALUE_CHARS]}"]
+
+    @staticmethod
+    def _flatten_value(value: object) -> str:
+        if isinstance(value, list):
+            return "; ".join(str(item) for item in value).strip()
+        return str(value).strip()
 
     def _ladder_summary_lines(self, active_records: list) -> list[str]:
         """Aggregate ladder-standing summary for the tick surface (22.7 A)."""

@@ -94,7 +94,11 @@ from nova.agent.exploration import (
     ExplorationStore,
 )
 from nova.agent.self_state_tick import SelfStateTickEngine
-from nova.agent.self_state_tools import SelfStateToolDispatcher, _UPDATABLE_SELF_STATE_FIELDS
+from nova.agent.self_state_tools import (
+    SelfStateToolDispatcher,
+    _UPDATABLE_SELF_STATE_FIELDS,
+    apply_proposal_to_self_state,
+)
 from nova.agent.soul import load_soul_block
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
@@ -990,8 +994,20 @@ class NovaRuntime:
             include_heartbeats=False,
             include_drive_line=(tick_sequence - 1) % drive_interval == 0,
             drive_descriptive=self.config.prompt.tick_drive_descriptive,
+            # Stage 22.8 D2: a changed self-model should read to her AS
+            # change, not as a silently different line.
+            self_model_revisions=(
+                self._self_model_revision_summary()
+                if self.config.prompt.tick_self_model_revision_visibility
+                else None
+            ),
         )
-        recent_heartbeats = self.heartbeat_store.list_recent(limit=3)
+        # Stage 22.8 D1: recency-only sampling made every tick's context
+        # near-identical to the last one's over a store of thousands.
+        if self.config.prompt.tick_heartbeat_sampling == "stratified":
+            recent_heartbeats = self.heartbeat_store.list_stratified(limit=3)
+        else:
+            recent_heartbeats = self.heartbeat_store.list_recent(limit=3)
 
         # Phase 22 Stage 22.7 part B: at entry time (assertion register),
         # show her own recent exploration topics so repetition is a visible
@@ -1016,6 +1032,7 @@ class NovaRuntime:
             )
 
         messages = self.self_state_tick_engine.build_messages(
+            heartbeat_framing=self.config.prompt.tick_heartbeat_sampling,
             session_id=self.session_id,
             tick_id=tick_id,
             trigger=trigger,
@@ -1089,6 +1106,13 @@ class NovaRuntime:
                 instruction_proposal_store=self.instruction_proposal_store,
                 instruction_write_engine=self.instruction_write_engine,
                 exploration_controller=self.exploration_controller,
+                # Stage 22.8: inquiry-class self-model writes land directly,
+                # so the dispatcher needs the store to persist through.
+                self_state_store=self.self_state_store,
+                self_model_writes_enabled=(
+                    self.config.self_model.nova_writable_inquiry_fields
+                ),
+                revision_min_seconds=self.config.self_model.revision_min_seconds,
             )
             try:
                 result = dispatcher.dispatch(tool_request)
@@ -1205,22 +1229,90 @@ class NovaRuntime:
         if proposal is None or proposal.applied:
             return proposal
 
-        field = proposal.proposed_field
-        value = proposal.proposed_value
-        if field not in _UPDATABLE_SELF_STATE_FIELDS:
+        # Stage 22.8: one shared application path with Nova's own writes, so
+        # the two cannot drift. The operator path gains prior_value — and
+        # therefore revertibility — from the same change.
+        return apply_proposal_to_self_state(
+            proposal=proposal,
+            self_state=self.self_state,
+            self_state_store=self.self_state_store,
+            proposal_store=self.proposal_store,
+            applied_by="operator",
+        )
+
+    def revert_self_model_revision(
+        self, *, proposal_id: str, reverted_by: str = "operator"
+    ) -> SelfModelProposal | None:
+        """Restore the value an applied revision replaced (Stage 22.8).
+
+        Recorded as a NEW proposal whose proposed_value is the original's
+        prior_value; the original record is never mutated. Nothing is
+        deleted — the revision and its reversal both stand in the log, which
+        is the same discipline the journal, quarantine and ladder follow.
+
+        Returns the new applied record, or None if the proposal is unknown,
+        was never applied, or predates prior_value capture.
+        """
+        self._ensure_state_loaded()
+        assert self.self_state is not None
+
+        original = self.proposal_store.get(proposal_id)
+        if original is None or not original.applied:
+            return None
+        if original.prior_value is None:
+            # Pre-22.8 records captured nothing to restore. Refusing beats
+            # guessing at what the field used to hold.
             return None
 
-        if isinstance(value, list):
-            setattr(self.self_state, field, list(value))
-        elif isinstance(value, str):
-            setattr(self.self_state, field, str(value))
-        elif value is not None:
-            setattr(self.self_state, field, value)
+        reversal = SelfModelProposal(
+            proposal_id=uuid4().hex,
+            timestamp=utc_now_iso(),
+            session_id=self.session_id or "",
+            proposed_field=original.proposed_field,
+            proposed_value=original.prior_value,
+            rationale=(
+                f"revert of {original.proposal_id}: restore the value that "
+                f"revision replaced"
+            ),
+            approval_required=False,
+            applied=False,
+            note=f"revert_of:{original.proposal_id}",
+        )
+        self.proposal_store.append(reversal)
+        return apply_proposal_to_self_state(
+            proposal=reversal,
+            self_state=self.self_state,
+            self_state_store=self.self_state_store,
+            proposal_store=self.proposal_store,
+            applied_by=reverted_by,
+        )
 
-        self.self_state_store.save(self.self_state)
-        applied_at = utc_now_iso()
-        updated = self.proposal_store.mark_applied(proposal_id, applied_at)
-        return updated
+    def self_model_history(self, *, limit: int = 20) -> list[SelfModelProposal]:
+        """Self-model proposal timeline, newest first (Stage 22.8)."""
+        records = self.proposal_store.list_all()
+        records.sort(key=lambda record: record.timestamp, reverse=True)
+        return records[:limit] if limit > 0 else records
+
+    def _self_model_revision_summary(self) -> dict[str, dict[str, object]]:
+        """Per-field revision state for the tick surface (Stage 22.8 D2).
+
+        Only applied revisions count — a rate-limited or pending proposal did
+        not change what she is shown, so reporting it as a revision would be
+        a false signal.
+        """
+        summary: dict[str, dict[str, object]] = {}
+        for record in self.proposal_store.list_all():
+            if not record.applied:
+                continue
+            entry = summary.setdefault(
+                record.proposed_field, {"count": 0, "revised_at": "", "prior_value": None}
+            )
+            entry["count"] = int(entry["count"]) + 1
+            stamp = record.applied_at or record.timestamp
+            if stamp >= str(entry["revised_at"]):
+                entry["revised_at"] = stamp
+                entry["prior_value"] = record.prior_value
+        return summary
 
     def apply_instruction_proposal(self, *, proposal_id: str) -> InstructionProposal | None:
         """Apply an operator-approved propose_instruction_update proposal to NOVA_SOUL.md.
