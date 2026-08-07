@@ -407,3 +407,91 @@ WHAT TO WATCH ONCE LIVE (>= 3 days of natural cadence)
     thrash, where she rewrites current_focus every hour and the context
     becomes unstable in the other direction. The rate limit is the
     intended brake; the revert path is the recovery.
+
+
+LIVE VERIFICATION (2026-08-07, ~15.7h after deployment) — DEPLOYED,
+CORRECT, AND ENTIRELY UNEXERCISED
+--------------------------------------------------------------------
+
+DEPLOYMENT CONFIRMED. No operator restart was needed: the 2026-08-07
+00:00:02 CDT midnight rotation restarted the python process onto 22.8
+automatically, exactly as 22.7 deployed. Verified rather than assumed —
+every 22.8 source file and the live config carry mtimes of 2026-08-06
+~04:03-04:10, about 20 hours before the running process started. Session
+nova-live-20260807, 186 ticks, healthy.
+
+RESULT: self_state.json updated_at is STILL 2026-07-11T21:59:17Z.
+
+The write path is open. She has not used it. update_self_model has been
+called ZERO times in the 15.7 hours since deployment — and zero times in
+the seven days of trace data before it, the last call being 2026-07-23.
+
+FINDING F10 — THE ASSERTION REGISTER IS FULLY CONSUMED BY EXPLORATION
+ENTRY
+
+Tool choice by day, both registers (from the operational traces):
+
+    day       ticks  assertion  enter_expl  emit_hb  close  update_self_model
+    08-01      285      35         34        218      33        0
+    08-02      284      35         34        217      33        0
+    08-03      283      34         32        220      31        0
+    08-04      285      35         31        224      30        0
+    08-05      285      31         30        226      29        0
+    08-06      285      34         34        218      33        0
+    08-07      187      24         24        140      23        0
+
+Assertion-register ticks and enter_exploration calls are 1:1 within one
+or two per day. The gap between closing one exploration and opening the
+next, measured across all 31 of today's explorations, is 303-304 seconds
+— exactly one tick at the 300s cadence, every single time.
+
+So the structure is: she closes an exploration, gets exactly ONE
+assertion-register tick, and spends it entering the next exploration.
+update_self_model IS on that tick's menu. She has never chosen it.
+
+This is why 22.8 changed nothing observable, and it is not a defect in
+22.8 — the mechanism works, as its 44 tests and the smoke run show.
+It means the F9 root cause had a second layer underneath it. The
+self-model could not change because the write path was closed; now that
+it is open, the self-model still does not change because the register
+where revising it belongs has no spare capacity, and nothing in the
+prompt tells her the fields are now hers.
+
+Two contributing factors, both code-verified, neither yet addressed:
+
+  1. PROMPT FRAMING. In self_state_tick.py's _SYSTEM block, every other
+     tool carries guidance about WHEN to use it — emit_heartbeat has the
+     novelty requirement, enter_exploration has "use it only for a
+     deliberate, bounded self-inquiry", close_exploration has a full
+     paragraph, propose_instruction_update has "only propose when
+     evidence clearly supports". update_self_model has ONLY its argument
+     schema and the field list. Nothing says when revising the
+     self-model is warranted, and nothing signals that these four fields
+     are now hers to write rather than requests that go into a queue.
+  2. REGISTER LOGIC. 87% of ticks are exploratory, where the rules
+     state that everything produced is "hypothesis material — not an
+     established claim". The self-model is the established surface, so
+     revising it from inside an exploration arguably contradicts the
+     membrane. That reasoning is sound; the consequence is that
+     self-model revision belongs to a register that gets one tick per
+     hour-long exploration cycle, all of which she spends re-entering.
+
+She also never calls recall_self or reflect — three of seven tools
+account for 100% of ticks across the whole week.
+
+RECOMMENDED NEXT, in order (none done, all operator decisions):
+
+  a. Prompt framing for update_self_model on the assertion tick: state
+     when self-model revision is warranted and that the inquiry fields
+     are hers. Cheapest change, directly targets the observed gap, and
+     is a visibility-add rather than a gate — same class as 22.7(B).
+     Note 22.7(B) was honestly acted on and did not bind, so expect
+     information, not a guarantee.
+  b. Give the assertion register more than one tick. E.g. a cooldown of
+     N ticks after close_exploration before enter_exploration is
+     offered — this WOULD be a gate on inquiry and needs the operator's
+     read against the contract, which is why it is not proposed first.
+  c. Only then evaluate whether 22.8's write path helps at all. It
+     cannot be assessed while it is never invoked.
+
+22.7 part D (drive dosage) stays OFF and stays sequenced after this.
