@@ -472,6 +472,18 @@ REFERENCE
     assertion-class three keep operator approval and gained the CLI
     surface they never had. Live config enabled; not yet in the running
     process.
+    LIVE since the 2026-08-07 rotation — verified correct and entirely
+    unexercised (finding F10, recorded in the stage doc's LIVE
+    VERIFICATION section): the assertion register runs 1:1 with
+    enter_exploration, update_self_model has never been chosen.
+  Stage 22.8b doc (IMPLEMENTED 2026-08-16, suite 1018 -> 1024) — F10
+    lever (a), operator-chosen over levers (b)/part D this session:
+    docs/plans/PHASE22_STAGE22_8B_UPDATE_SELF_MODEL_PROMPT_FRAMING.txt
+    WHEN-to-use guidance for update_self_model on the assertion tick
+    surface (the only tool that had none), wording switched on
+    nova_writable_inquiry_fields so the prompt matches what dispatch
+    grants. Visibility-add, no gate; levers (b) and part D remain
+    undone so any change is attributable to this one.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

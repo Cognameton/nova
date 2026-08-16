@@ -1042,6 +1042,11 @@ class NovaRuntime:
             exploration_block=exploration_block,
             exploration_history_block=exploration_history_block,
             soft_grounding=self.config.prompt.tick_soft_grounding,
+            # Stage 22.8b: the prompt's writability wording must match what
+            # dispatch below will actually grant — same flag, same source.
+            inquiry_fields_writable=(
+                self.config.self_model.nova_writable_inquiry_fields
+            ),
         )
         generation = self.backend.generate(
             self._generation_request(prompt="", messages=messages)

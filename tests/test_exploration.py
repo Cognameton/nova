@@ -466,6 +466,92 @@ class Stage227TickPromptTests(unittest.TestCase):
                 self.assertNotIn("{grounding_rule}", system)
 
 
+class Stage228bSelfModelGuidanceTests(unittest.TestCase):
+    """Phase 22 Stage 22.8b (F10 lever a) — update_self_model WHEN-to-use
+    guidance on the assertion tick surface. Visibility-add only: the
+    exploratory prompt and every dispatch path are unchanged."""
+
+    def setUp(self):
+        self.engine = SelfStateTickEngine()
+
+    def _system(self, register: str, **kwargs) -> str:
+        return self.engine.build_messages(
+            session_id="s1",
+            tick_id="t1",
+            trigger="test",
+            self_context_block="[Self-Context]",
+            recent_heartbeats=[],
+            register=register,
+            **kwargs,
+        )[0]["content"]
+
+    def test_assertion_register_carries_guidance(self):
+        for writable in (False, True):
+            normalized = " ".join(
+                self._system("assertion", inquiry_fields_writable=writable).split()
+            )
+            self.assertIn(
+                "changes only when you call update_self_model", normalized
+            )
+            self.assertIn(
+                "entering another exploration is not the only meaningful choice",
+                normalized,
+            )
+
+    def test_exploratory_register_does_not_carry_guidance(self):
+        # The contract frames in-register output as hypothesis material;
+        # revision of the established self-model belongs on the assertion
+        # tick, so the exploratory prompt stays byte-identical to pre-22.8b.
+        for writable in (False, True):
+            normalized = " ".join(
+                self._system("exploratory", inquiry_fields_writable=writable).split()
+            )
+            self.assertNotIn("changes only when you call update_self_model", normalized)
+            self.assertNotIn("yours to revise directly", normalized)
+
+    def test_writable_wording_matches_granted_path(self):
+        normalized = " ".join(
+            self._system("assertion", inquiry_fields_writable=True).split()
+        )
+        self.assertIn("yours to revise directly", normalized)
+        self.assertIn(
+            "audited, rate-limited, and revertible", normalized
+        )
+        # The approval-gated remainder is named, so the prompt never
+        # overstates what the flag grants.
+        self.assertIn(
+            "identity_summary, stable_preferences, relationship_notes", normalized
+        )
+
+    def test_default_wording_promises_only_proposals(self):
+        normalized = " ".join(self._system("assertion").split())
+        self.assertNotIn("yours to revise directly", normalized)
+        self.assertIn(
+            "Self-model revisions are recorded as proposals for operator review",
+            normalized,
+        )
+
+    def test_guidance_prepends_rather_than_replaces_assertion_rules(self):
+        system = self._system("assertion")
+        normalized = " ".join(system.split())
+        # The pre-existing assertion rules survive intact...
+        self.assertIn("For enter_exploration: arguments must include", normalized)
+        self.assertIn("Do not claim desire, sentience", normalized)
+        # ...and the guidance appears before them (positional salience).
+        self.assertLess(
+            normalized.index("changes only when you call update_self_model"),
+            normalized.index("For enter_exploration"),
+        )
+
+    def test_no_unresolved_register_rules_placeholder(self):
+        for register in ("assertion", "exploratory"):
+            for writable in (False, True):
+                system = self._system(
+                    register, inquiry_fields_writable=writable
+                )
+                self.assertNotIn("{register_rules}", system)
+
+
 class Stage227HistoryBlockHelperTests(unittest.TestCase):
     """runtime._exploration_history_block via an unbound-method stub —
     the helper only touches exploration_controller.store and class

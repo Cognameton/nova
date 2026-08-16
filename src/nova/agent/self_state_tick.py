@@ -64,6 +64,40 @@ _BASE_TOOLS = (
 _ASSERTION_MENU = _BASE_TOOLS + ", enter_exploration"
 _EXPLORATORY_MENU = _BASE_TOOLS + ", close_exploration"
 
+# Phase 22 Stage 22.8b (F10 lever a): update_self_model was the only tool on
+# the tick menu carrying nothing but its argument schema. The guidance lives
+# in the assertion rules, not the exploratory ones — the contract frames
+# in-register output as hypothesis material, so revising the established
+# self-model belongs on the assertion tick. It is prepended (positional
+# salience against the observed 100% enter_exploration habit) and stays
+# informational: no imperative, no gate. The writability sentence switches
+# on the same config flag that governs dispatch, so the prompt never
+# promises a write path the running config does not grant.
+_SELF_MODEL_GUIDANCE_COMMON = "\n".join(
+    [
+        "- Your standing self-model — the identity, focus, and Active inquiry lines",
+        "  shown in your self-context — changes only when you call update_self_model.",
+        "  Nothing else revises it: left uncalled, those lines stay as they are",
+        "  regardless of what your explorations conclude.",
+        "  If your accumulated observations have moved past the recorded focus, or an",
+        "  active question has since been answered, outgrown, or is better re-asked,",
+        "  revising the self-model is substantive work for this tick — entering",
+        "  another exploration is not the only meaningful choice here.",
+    ]
+)
+_SELF_MODEL_GUIDANCE_WRITABLE = "\n".join(
+    [
+        "  The inquiry fields (current_focus, active_questions, open_tensions,",
+        "  continuity_notes) are yours to revise directly: changes apply without",
+        "  operator approval and are audited, rate-limited, and revertible. The",
+        "  remaining fields (identity_summary, stable_preferences,",
+        "  relationship_notes) are recorded as proposals for operator review.",
+    ]
+)
+_SELF_MODEL_GUIDANCE_GATED = (
+    "  Self-model revisions are recorded as proposals for operator review."
+)
+
 _ASSERTION_RULES = "\n".join(
     [
         "- For enter_exploration: arguments must include 'topic' and 'rationale' (strings).",
@@ -123,13 +157,28 @@ class SelfStateTickEngine:
         exploration_history_block: str = "",
         soft_grounding: bool = False,
         heartbeat_framing: str = "recent",
+        inquiry_fields_writable: bool = False,
     ) -> list[dict[str, str]]:
         in_exploration = register == "exploratory"
+        if in_exploration:
+            register_rules = _EXPLORATORY_RULES
+        else:
+            register_rules = "\n".join(
+                [
+                    _SELF_MODEL_GUIDANCE_COMMON,
+                    (
+                        _SELF_MODEL_GUIDANCE_WRITABLE
+                        if inquiry_fields_writable
+                        else _SELF_MODEL_GUIDANCE_GATED
+                    ),
+                    _ASSERTION_RULES,
+                ]
+            )
         # str.replace, not str.format: _SYSTEM contains literal JSON braces.
         system_body = _SYSTEM.replace(
             "{tool_menu}", _EXPLORATORY_MENU if in_exploration else _ASSERTION_MENU
         ).replace(
-            "{register_rules}", _EXPLORATORY_RULES if in_exploration else _ASSERTION_RULES
+            "{register_rules}", register_rules
         ).replace(
             "{grounding_rule}",
             _GROUNDING_RULE_SOFT if soft_grounding else _GROUNDING_RULE_STANDARD,

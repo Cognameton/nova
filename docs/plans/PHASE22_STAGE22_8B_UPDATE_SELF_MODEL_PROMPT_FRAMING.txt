@@ -1,0 +1,200 @@
+PHASE 22 — STAGE 22.8b: update_self_model PROMPT FRAMING (F10 lever a)
+============================================================================
+
+Status: implemented (suite 1018 -> 1024); goes live at the next daemon
+  restart or the next midnight rotation
+Date: 2026-08-16
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.8 (self-model write loop — implemented, live since the
+  2026-08-07 rotation, verified correct and ENTIRELY UNEXERCISED; finding
+  F10 recorded in PHASE22_STAGE22_8_SELF_MODEL_WRITE_LOOP.txt, LIVE
+  VERIFICATION section)
+
+Operator decision (2026-08-16, this session): of F10's three recorded
+levers — (a) prompt framing, (b) assertion-register cooldown, (c=22.7
+part D) drive dosage — the operator chose (a) alone. (b) and part D
+remain undone and undecided; they are explicitly OUT OF SCOPE here so
+that any behavior change after this stage goes live is attributable to
+one lever.
+
+Pinned design: where this doc says DECIDED, implement as written. If
+code contradicts a premise, stop and record it in the closure note.
+
+
+OBJECTIVE
+---------
+
+Give `update_self_model` the same WHEN-to-use guidance every other tool
+on the tick menu already has, on the assertion-register tick surface,
+so that choosing it is at least a visible option. F10 established that
+the assertion register runs 1:1 with enter_exploration (one spare tick
+per cycle, always spent re-entering) and that `update_self_model` is
+the only tool whose prompt entry carries nothing but an argument
+schema. This stage is a visibility-add in the same class as 22.7(B) —
+information, not a gate, and (per 22.7(B)'s own live result, which was
+honestly acknowledged by the model and then not acted on) expect
+information, not a guarantee.
+
+Success criterion is NOT "she revises the self-model." It is that the
+observed gap — no guidance, no statement that the inquiry fields are
+hers — is closed, so that a continued null result after ≥3 days live
+becomes evidence about her, not about the prompt. A null result under
+this framing upgrades the case for lever (b), with data in hand.
+
+
+CODE FACTS (verified 2026-08-16 against commit 18d1980, live daemon
+  running the same tree; suite baseline 1018)
+-----------------------------------------------------------------------
+
+  - src/nova/agent/self_state_tick.py: `_SYSTEM` (line 14) lists
+    update_self_model with only its argument schema (lines 31-33).
+    emit_heartbeat, propose_instruction_update, enter_exploration
+    (_ASSERTION_RULES, line 67), and close_exploration
+    (_EXPLORATORY_RULES, line 79) all carry WHEN/how guidance. This is
+    F10 contributing factor (1), re-verified.
+  - `build_messages` (line 113) selects _ASSERTION_RULES vs
+    _EXPLORATORY_RULES on `register` and already threads two
+    config-driven knobs the same way this stage needs
+    (`soft_grounding`, `heartbeat_framing`).
+  - runtime.model_self_state_tick (runtime.py ~1034) is the single
+    call site of build_messages on the tick surface and already reads
+    `self.config.self_model.nova_writable_inquiry_fields` a few lines
+    below (~1113) for dispatch — passing the same flag into
+    build_messages adds no new config plumbing.
+  - Live state re-verified this session: self_state.json updated_at
+    still 2026-07-11; 0 update_self_model calls since 22.8 deployed
+    (self_model_proposals.jsonl unchanged at 20 records, newest
+    2026-07-23); 334 explorations since 08-07, 323 nova_close; topics
+    still the scaffold-void-resonance cluster.
+
+
+DECIDED DESIGN
+--------------
+
+(1) Assertion register only. The guidance block is added to
+    _ASSERTION_RULES. _EXPLORATORY_RULES, the shared _SYSTEM template,
+    and therefore the exploratory-register prompt are byte-identical
+    to before. Rationale: F10 factor (2) — in-register output is
+    contractually "hypothesis material, not an established claim," so
+    the prompt should not encourage revising the established
+    self-model from inside an exploration; the assertion tick is where
+    revision belongs, and it is exactly the tick being consumed.
+
+(2) Position: the guidance block goes FIRST in _ASSERTION_RULES,
+    before the enter_exploration lines. The observed behavior is a
+    100% habitual first-listed-option pattern; giving the alternative
+    positional salience is part of the visibility fix. Content stays
+    informational — no imperative, no ranking, no discouragement of
+    enter_exploration.
+
+(3) Wording (assertion rules, prepended; exact text may be lightly
+    edited at implementation time but must preserve every fact):
+
+      - Your standing self-model — the identity, focus, and Active
+        inquiry lines shown in your self-context — changes only when
+        you call update_self_model. Nothing else revises it: left
+        uncalled, those lines stay as they are regardless of what your
+        explorations conclude.
+      - If your accumulated observations have moved past the recorded
+        focus, or an active question has since been answered,
+        outgrown, or is better re-asked, revising the self-model is
+        substantive work for this tick — entering another exploration
+        is not the only meaningful choice here.
+      + ONE of the following, switched on a new build_messages kwarg
+        `inquiry_fields_writable: bool = False`, wired from
+        config.self_model.nova_writable_inquiry_fields at the runtime
+        call site:
+        [True]  The inquiry fields (current_focus, active_questions,
+                open_tensions, continuity_notes) are yours to revise
+                directly: changes apply without operator approval and
+                are audited, rate-limited, and revertible. The
+                remaining fields (identity_summary, stable_preferences,
+                relationship_notes) are recorded as proposals for
+                operator review.
+        [False] Self-model revisions are recorded as proposals for
+                operator review.
+    Both variants are true of the code they describe (22.8's split for
+    True; the pre-22.8/default path for False) — the switch exists so
+    the prompt never promises the model a write path the running
+    config does not grant.
+
+(4) The guidance block itself is unconditional on the assertion
+    surface (no new config switch). 22.8's closure note warned against
+    accumulating dormant switches; this is a visibility-add in the
+    22.7 parts A-C class, which shipped unconditional.
+
+(5) No behavioral mechanism changes anywhere: no menu change, no
+    dispatch change, no cooldown, no gate. enter_exploration remains
+    fully available and unpenalized.
+
+
+TESTS (target: existing suite green + ~6 new in test_exploration.py,
+  matching TickEngineRegisterTests style)
+-----------------------------------------------------------------------
+
+  - assertion prompt carries the guidance marker; exploratory prompt
+    does not (both flag states).
+  - inquiry_fields_writable=True → "yours to revise directly" present
+    AND the approval-gated remainder named; default/False → proposal
+    wording present, "yours to revise directly" absent.
+  - default-flag assertion prompt still carries the enter_exploration
+    rules unchanged (guard against accidental replacement rather than
+    prepend).
+  - config wiring already covered by existing test_config tests for
+    nova_writable_inquiry_fields; no new config surface added.
+
+
+DEPLOYMENT
+----------
+
+Same as 22.7/22.8: commit to main, goes live at the next daemon
+restart or automatically at the next midnight rotation (operator may
+choose to restart sooner; not required). After ≥3 days live, check:
+  - self_model_proposals.jsonl for ANY new record (even a rejected or
+    rate-limited one is signal — it means the tool was chosen);
+  - --self-model-history / self_state.json updated_at;
+  - exploration cadence: does the 1:1 close→enter pattern loosen at
+    all, and do topics move once (if) active_questions moves.
+If after ≥3 days update_self_model has still never been called, that
+is the null result this stage is designed to make interpretable, and
+the decision on lever (b) should be re-presented to the operator with
+it.
+
+
+CLOSURE NOTE
+------------
+
+Implemented 2026-08-16 (Fable 5), same session as the operator
+decision. Implemented as pinned, with two small in-bounds notes:
+
+  - Placement outcome is slightly better than the doc's framing: since
+    the guidance is prepended to the {register_rules} slot, it renders
+    immediately BELOW update_self_model's argument schema in the final
+    prompt (the shared _SYSTEM block ends right where register rules
+    begin) — the guidance reads as a continuation of the tool's own
+    entry, then the enter_exploration rules follow. Verified by
+    rendering the live-config assertion prompt directly.
+  - The guidance is register-gated inside build_messages (assertion
+    only), not a third module-level rules constant, so the exploratory
+    branch provably cannot pick it up. Exploratory prompt confirmed
+    byte-identical across both flag states by test.
+
+Tests: 6 new in tests/test_exploration.py
+(Stage228bSelfModelGuidanceTests), including a guard that the guidance
+prepends rather than replaces the existing assertion rules, and that
+the True-wording names the still-approval-gated fields (the prompt
+must never overstate what the flag grants). Full suite 1024 green.
+
+Live-state re-verification performed before implementation (this
+session): self_state.json updated_at still 2026-07-11; 0
+update_self_model calls since 22.8 deployed; 334 explorations since
+08-07 (323 nova_close); topics still the scaffold-void-resonance
+cluster; claim ladder 776 records (was 455 on 08-06 — the ~28/day
+reworded-export growth continues, still unaddressed); stranded
+status="active" explorations 33 (was 23).
+
+Deployment: committed to main; auto-deploys at the next midnight
+rotation. Evaluation checklist is in the DEPLOYMENT section above —
+after >=3 days, any new self_model_proposals.jsonl record (even
+rate_limited) counts as the tool being chosen; a continued zero is the
+interpretable null result that re-opens the lever (b) decision.
