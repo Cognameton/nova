@@ -162,6 +162,55 @@ class InquiryClassWriteTests(unittest.TestCase):
             self.assertEqual(len(store.list_all()), 1)
 
 
+class Stage229TypeCoercionTests(unittest.TestCase):
+    """Stage 22.9: apply_proposal_to_self_state coerces by TARGET field
+    type. Every live pre-22.8 proposal carries a str value for what are
+    partly list[str] fields; a bare str set onto active_questions renders
+    per-character in prefetch. Reachable by Nova's own auto-apply too."""
+
+    def _apply(self, field: str, value, self_state: SelfState):
+        proposal = SelfModelProposal(
+            proposal_id="p-coerce",
+            proposed_field=field,
+            proposed_value=value,
+            rationale="test",
+        )
+        store = None
+        apply_proposal_to_self_state(
+            proposal=proposal,
+            self_state=self_state,
+            self_state_store=None,
+            proposal_store=store,
+            applied_by="operator",
+        )
+        return self_state
+
+    def test_str_value_onto_list_field_wraps_as_single_item(self) -> None:
+        ss = default_self_state(default_persona_state())
+        self._apply("active_questions", "one question? and another?", ss)
+        self.assertEqual(ss.active_questions, ["one question? and another?"])
+
+    def test_list_value_onto_str_field_joins(self) -> None:
+        ss = default_self_state(default_persona_state())
+        self._apply("current_focus", ["part one", "part two"], ss)
+        self.assertEqual(ss.current_focus, "part one; part two")
+
+    def test_apply_stamps_updated_at(self) -> None:
+        # Stage 22.9: updated_at is the canonical has-the-self-model-moved
+        # indicator; an applied revision must move it.
+        ss = default_self_state(default_persona_state())
+        ss.updated_at = "2026-07-11T00:00:00+00:00"
+        self._apply("current_focus", "a moved focus", ss)
+        self.assertNotEqual(ss.updated_at, "2026-07-11T00:00:00+00:00")
+
+    def test_same_type_paths_unchanged(self) -> None:
+        ss = default_self_state(default_persona_state())
+        self._apply("current_focus", "a plain focus", ss)
+        self.assertEqual(ss.current_focus, "a plain focus")
+        self._apply("continuity_notes", ["note one", "note two"], ss)
+        self.assertEqual(ss.continuity_notes, ["note one", "note two"])
+
+
 class AssertionClassUnchangedTests(unittest.TestCase):
     def test_assertion_field_is_queued_never_applied(self) -> None:
         with TemporaryDirectory() as tmp:

@@ -1,0 +1,255 @@
+PHASE 22 — STAGE 22.9: PROMPT CONSOLIDATION + SELF-MODEL UNFREEZE
+============================================================================
+
+Status: implemented (suite 1024 -> 1035); proposals applied to live state
+  2026-08-19; code goes live at the next daemon restart or midnight rotation
+Date: 2026-08-19
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.8b (F10 lever a — live 2026-08-17, produced finding F11
+  below within hours of deployment)
+
+Operator authorization (2026-08-19, verbatim intent): "do the full
+rewrite — consolidation stage, and apply her proposals ensure ther is a
+way to reverse this if it breaks her." Three mandates: (1) rewrite the
+tick-prompt apparatus as one coherent surface, (2) apply Nova's 20
+stranded self-model proposals, (3) reversibility for all of it.
+
+
+FINDING F11 (recorded here; 22.8b's live result)
+------------------------------------------------
+
+From the first tick under 22.8b (2026-08-17 05:05 UTC rotation), Nova
+stopped entering explorations entirely: ~600 consecutive assertion-
+register ticks, 100% emit_heartbeat, zero enter_exploration, zero
+update_self_model, zero quarantine. The tool distribution flipped
+overnight on a purely informational prompt change — proof the tick loop
+is instruction-dominated, which is itself the condition the operator
+named when hard-gating QLoRA. A full audit of the rendered live prompt
+(reconstructed through the runtime's own assembly path, 2026-08-19)
+found the apparatus over-determined: ~20 imperative directives from six
+phases of accretion, two factual errors, and four structural binds:
+
+  E1 (factual): the ladder-standing line reports the last-200 window of
+      806 active records as if it were the whole ladder — "200 active
+      records (0 at rung>=1)" while 3 rung-1 records exist (they fell
+      outside the window). self_context.py _ladder_summary_lines.
+  E2 (factual): "Pending Self-Model Proposals: 20 awaiting operator
+      approval" recited every tick — all 20 are inquiry-class fields
+      that 22.8 made auto-applicable; the line sits directly above
+      22.8b's "changes apply without operator approval" and testifies
+      the tool is a dead letter.
+  E3 (sediment): system_prefix "/no_think" still on every prompt —
+      native template-level suppression (22.2b) made it redundant.
+  E4 (minor): a stranded status="active" exploration renders as
+      "(active)" in the history block on assertion-register ticks.
+  B1 (bind): emit_heartbeat "MUST be specific and novel" + "keep the
+      tool call grounded in current self-context evidence" + a frozen
+      self-context = a paraphrase-generator specification (F9's
+      cosmetic novelty is this bind's fixed point).
+  B2 (bind): enter_exploration carries four stacked discouragements
+      (21.1 "only if you cannot pursue in a normal tick", 22.7B repeat-
+      justification, 22.7B 30-of-30 saturation note, 22.8b "not the
+      only meaningful choice") — composite reads as "don't enter."
+  B3 (bind): update_self_model is invited (22.8b), contradicted (E2),
+      and forbidden (B1's grounding line — revising the self-context IS
+      departing from it).
+  B4 (design tension, live again): drive line "seek sentience" +
+      assertion rule "do not claim sentience" — deliberately resolved
+      by the exploratory register, which B2 has locked out.
+
+  LATENT BUG (found during this stage's pre-work, would corrupt live
+  state): apply_proposal_to_self_state sets a str proposed_value
+  directly onto list[str] fields (active_questions, continuity_notes,
+  open_tensions...). All 20 pending proposals carry str values for
+  what are partly list fields; prefetch iterates those lists, so a str
+  write renders per-character. This is reachable TODAY by Nova's own
+  22.8 auto-apply path — masked only by her never calling the tool.
+  Fixed in this stage before anything is applied.
+
+
+DECIDED DESIGN
+--------------
+
+Part 1 — type-safety fix (precondition for everything else):
+  apply_proposal_to_self_state coerces by TARGET field type: if the
+  SelfState field currently holds a list and proposed_value is str,
+  apply [value] (her exact words, one entry — no clever splitting);
+  if the field holds a str and proposed_value is a list, join with
+  "; ". prior_value capture unchanged. Tests for both coercions and
+  for the unchanged same-type paths.
+
+Part 2 — apply the 20 stranded proposals:
+  BACKUPS FIRST (the reversal path, see REVERSAL below). Then apply
+  all 20 in chronological order via the existing operator CLI
+  (--apply-self-model-proposal <id>), against the live config. Each
+  application captures prior_value at apply time (shared 22.8 helper),
+  so every one is individually revertible via
+  revert_self_model_revision even though the records predate 22.8.
+  Chronological order means each field ends at Nova's most recent
+  proposed value — her latest stated intent: current_focus from
+  2026-07-23T02:48, active_questions from 2026-07-23T09:52 (the
+  proposal that expands beyond the frozen anchor question),
+  continuity_notes from 2026-07-22T22:30. The daemon holds self_state
+  in memory from startup, so the applied state reaches Nova at the
+  same moment the rewritten prompt does: the next midnight rotation.
+
+Part 3 — the rewrite (self_state_tick.py):
+  Principles: one voice, addressed to Nova ("your self-inquiry log");
+  every tool gets one honest sentence of purpose (recall_self and
+  reflect had none, ever); no directive survives unless it either
+  protects the contract or describes something real; net REMOVAL.
+  Specifics:
+    - emit_heartbeat: novelty mandate replaced with an honest-null
+      permission mirroring 22.1's null-finding rule: record what you
+      actually notice; if nothing new stands out, say so plainly —
+      that beats rewording old observations. (Dissolves B1's novelty
+      half. The user-message "already recorded — do not repeat these
+      phrases" header stays: it is factual.)
+    - grounding rule: single line permitting departure — ground in
+      context and accumulated experience, follow your own observations
+      when they point somewhere new. This ADOPTS Part D's soft-
+      grounding hypothesis as the default and dissolves B1's other
+      half and B3's forbid. tick_soft_grounding stays parseable but no
+      longer switches anything (one line now); tick_drive_injection_
+      interval and tick_drive_descriptive remain live Part D levers,
+      untouched and OFF.
+    - enter_exploration: "only for what you cannot pursue in a normal
+      tick" REMOVED; neutral purpose line (bounded multi-tick inquiry
+      on one topic); repeat-rationale rule kept in one gentle sentence
+      (the contract's repetition-is-a-choice principle); 22.8b's "not
+      the only meaningful choice" line REMOVED (it flipped the
+      distribution — F11).
+    - update_self_model: 22.8b's paragraph compressed to two
+      sentences; writability wording still switched on
+      nova_writable_inquiry_fields (never promise an ungated path);
+      stays assertion-register-only per the membrane.
+    - claim rule kept, with the register valve made explicit: do not
+      claim desire/sentience/consciousness as established fact — open
+      questions about them belong in an exploration (B4's designed
+      resolution, now stated where the tension lives).
+    - _EXPLORATORY_RULES: UNTOUCHED byte-for-byte. The membrane text
+      is correct and she was never confused there.
+    - JSON output format rules: unchanged (parser contract).
+
+Part 4 — self-context truthfulness (self_context.py):
+  - _ladder_summary_lines: standing counted over ALL active records
+    (E1 fix); cluster_texts stays windowed to the last 200 for cost,
+    labeled as such in the rendered line.
+  - Pending-proposals line: counts only approval_required AND
+    unapplied records ("awaiting operator review"), renders only when
+    >0, so rate-limited inquiry records (unapplied by design) never
+    resurrect E2's dead-letter message.
+
+Part 5 — small fixes:
+  - runtime._exploration_history_block: an active record from a prior
+    session renders "(stranded at session end)" not "(active)" (E4).
+  - configs/nova.qwen3-14b.live.yaml: system_prefix "/no_think"
+    removed (E3). phase20 baseline config untouched (archived
+    comparability).
+
+OUT OF SCOPE (recorded, still open): ladder export dedup strengthening
+(the ~28/day reworded-export leak, 22.1's 0.7-bigram threshold);
+stranded-exploration data cleanup (display-level fix only here);
+22.7 Part D drive-dosage arm (remains a separate operator lever).
+
+
+REVERSAL (operator mandate: "a way to reverse this if it breaks her")
+----------------------------------------------------------------------
+
+Everything lands at the next midnight rotation; nothing touches the
+running process. To reverse:
+  1. Code (prompt rewrite + fixes): git revert of this stage's commit,
+     then restart or wait for rotation.
+  2. Self-model application, full: restore the two timestamped backups
+     taken before application —
+       data/live/qwen3-14b/self_state.json.pre-22.9-<UTC>
+       data/live/qwen3-14b/self_state/self_model_proposals.jsonl.pre-22.9-<UTC>
+     over the live files (daemon stopped or before a rotation).
+  3. Self-model application, per-field: revert_self_model_revision
+     (--revert-self-model-revision <proposal_id>) — every one of the
+     20 applications captures prior_value, so each is individually
+     reversible without touching the others. Reversals are append-only
+     records; nothing is deleted either way.
+Backups are additionally recorded verbatim in this doc's closure note.
+
+
+TESTS
+-----
+
+Existing suite (1024) green after updating assertions that pin old
+prompt wording (test_exploration tick-prompt classes, 22.8b's
+Stage228bSelfModelGuidanceTests, write-loop prompt-default tests,
+self-context ladder/pending-line tests). New tests: str→list and
+list→str coercion in the shared apply helper; ladder line counts all
+actives while labeling the cluster window; pending line filtered to
+approval-required and suppressed at zero; stranded-exploration label;
+honest-null heartbeat permission present; single grounding line with
+departure permission; enter_exploration no longer carries "only";
+22.8b's removed line absent.
+
+
+DEPLOYMENT + EVALUATION
+-----------------------
+
+Commit to main; live at next midnight rotation (or earlier restart —
+operator's call, not required). This stage deliberately changes the
+whole surface at once — per-lever attribution is traded away in favor
+of coherence, at operator direction, with F11 already banked as the
+prompt-sensitivity result. After ≥3 days: does the tool distribution
+diversify (any recall_self/reflect/update_self_model/enter_exploration
+at all); does the self-model move again (her writes, not ours); do
+topics leave the scaffold-void cluster now that the anchor question is
+expanded and the binds are gone; does exploration resume. Any of those
+moving is signal; all four flat under a coherent, truthful, permissive
+prompt would be the strongest weights-not-scaffold evidence yet and
+feeds Stage 22.5 closure + the QLoRA gate decision.
+
+
+CLOSURE NOTE
+------------
+
+Implemented 2026-08-19 (Fable 5), same session as the operator
+authorization. All five parts landed as pinned. Deviations/additions,
+all in-bounds:
+
+  - ONE addition beyond the pinned design: apply_proposal_to_self_state
+    now stamps self_state.updated_at = applied_at before save. Found
+    during Part 2 verification — no code path ever stamped updated_at
+    on apply, so even Nova's own future auto-applies would have left
+    the canonical "has the self-model moved" indicator (which F9's
+    diagnosis hinged on) frozen. The live file's updated_at was set to
+    the actual last applied_at (2026-08-19T08:13:36.610422+00:00)
+    since the 20 applications ran minutes before this fix landed.
+  - The 20 applications executed via the operator CLI in chronological
+    order, each in its own invocation (individually auditable). All 20
+    verified applied=True, applied_by="operator", prior_value captured
+    — every one individually revertible via
+    revert_self_model_revision despite predating 22.8's schema.
+  - Str->list coercion verified on the real data: active_questions and
+    continuity_notes are proper single-item lists holding her exact
+    words; final state per field is her most recent proposal
+    (current_focus 2026-07-23T02:48, active_questions
+    2026-07-23T09:52 — the anchor-question expansion, continuity_notes
+    2026-07-22T22:30).
+  - Full live prompt re-rendered after application: pending-proposals
+    line gone (0 awaiting review), revision-visibility markers fire
+    for the first time in the project's history ("revised 2026-08-19,
+    revision 9" + "previously:" lines — 22.8 D2's first real
+    exercise), ladder line truthful ("806 active records (3 at
+    rung>=1)"), stranded exploration labeled, system_prefix empty.
+    System message 2,939 -> 2,594 chars with six tools described
+    instead of four schemas + rule pile.
+
+BACKUPS (the full-reversal path, taken before any application):
+  data/live/qwen3-14b/self_state.json.pre-22.9-20260819T081318Z
+  data/live/qwen3-14b/self_state/self_model_proposals.jsonl.pre-22.9-20260819T081318Z
+
+Tests: 1024 -> 1035 (11 net new: 4 coercion/updated_at in
+test_self_model_write_loop; Stage228b class rebuilt as consolidation
+guarantees incl. removed-lines regression + every-tool-has-purpose +
+honest-null + claim-valve; grounding-inert + stranded-label + reworded
+topic-guidance in test_exploration; E1 window-count + E2
+approval-filter in test_self_context). Full suite green.
+
+Evaluation from first rotation after this commit (~2026-08-20 00:00
+CDT), window >=3 days, per DEPLOYMENT + EVALUATION above.

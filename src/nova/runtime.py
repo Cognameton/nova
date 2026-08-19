@@ -900,11 +900,19 @@ class NovaRuntime:
         # store order is oldest-first; show the newest entries, newest first
         for record in reversed(recent[-self.EXPLORATION_HISTORY_SHOWN:]):
             date = record.opened_at[:10] if record.opened_at else "?"
-            outcome = (
-                f"closed: {record.close_reason}"
-                if record.close_reason
-                else record.status
-            )
+            if record.close_reason:
+                outcome = f"closed: {record.close_reason}"
+            elif (
+                record.status == "active"
+                and record.session_id
+                and record.session_id != self.session_id
+            ):
+                # Stage 22.9 (E4): an exploration left open at a session
+                # boundary is not actually resumable — showing it as
+                # "(active)" on an assertion-register tick is false.
+                outcome = "stranded at session end"
+            else:
+                outcome = record.status
             lines.append(f"  [{date}] {record.topic[:90]} ({outcome})")
         stats = cluster_texts([r.topic for r in recent])
         if (

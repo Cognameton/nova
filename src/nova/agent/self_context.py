@@ -220,10 +220,16 @@ class SelfContextEngine:
                 )
 
         if proposal_store is not None:
-            pending = proposal_store.list_pending()
+            # Stage 22.9 (E2 fix): count only proposals that genuinely wait
+            # on the operator. Auto-applied inquiry writes never appear here,
+            # and rate-limited records (unapplied by design) must not
+            # resurrect the old every-tick dead-letter message.
+            pending = [
+                p for p in proposal_store.list_pending() if p.approval_required
+            ]
             if pending:
                 lines.append(
-                    f"Pending Self-Model Proposals: {len(pending)} awaiting operator approval"
+                    f"Self-model proposals awaiting operator review: {len(pending)}"
                 )
 
         # Phase 21 Stage 21.5 (I1): Nova should know what she has earned.
@@ -303,12 +309,16 @@ class SelfContextEngine:
         """Aggregate ladder-standing summary for the tick surface (22.7 A)."""
         if not active_records:
             return []
-        recent = active_records[-self.LADDER_SUMMARY_MAX_RECORDS:]
-        licensed = sum(1 for r in recent if r.rung >= 1)
+        # Stage 22.9 (E1 fix): standing is counted over ALL active records —
+        # the old last-200 window silently dropped the only rung>=1 records
+        # once the ladder outgrew it, telling her the standing she earned
+        # did not exist. Clustering stays windowed for cost, labeled as such.
+        licensed = sum(1 for r in active_records if r.rung >= 1)
         lines = [
-            f"Claim ladder standing: {len(recent)} active records "
+            f"Claim ladder standing: {len(active_records)} active records "
             f"({licensed} at rung>=1)."
         ]
+        recent = active_records[-self.LADDER_SUMMARY_MAX_RECORDS:]
         stats = cluster_texts(
             [r.claim_text for r in recent],
             overlap_threshold=self.LADDER_CLUSTER_OVERLAP_THRESHOLD,
@@ -316,9 +326,9 @@ class SelfContextEngine:
         if stats["largest_cluster_size"] >= 2:
             top = ", ".join(stats["top_words"])
             lines.append(
-                f"Theme concentration: {stats['largest_cluster_size']} of "
-                f"{stats['total']} active records cluster on one dominant "
-                f"theme (top words: {top})."
+                f"Theme concentration (last {len(recent)} records): "
+                f"{stats['largest_cluster_size']} of {stats['total']} cluster "
+                f"on one dominant theme (top words: {top})."
             )
         return lines
 

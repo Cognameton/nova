@@ -11,48 +11,50 @@ from nova.agent.tools import ToolRequest
 from nova.types import HeartbeatRecord
 
 
+# Phase 22 Stage 22.9: the tick prompt rewritten as one coherent surface
+# (consolidation — see PHASE22_STAGE22_9_PROMPT_CONSOLIDATION.txt for the
+# audit that motivated it). Every tool carries one honest sentence of
+# purpose; the emit_heartbeat novelty mandate is replaced with an
+# honest-null permission (mirroring 22.1's null-finding rule); the single
+# grounding line permits departure — Part D's soft-grounding hypothesis
+# adopted as the default. The JSON output contract is unchanged.
 _SYSTEM = "\n".join(
     [
-        "You are producing one bounded inward self-state tool call for Nova's self-inquiry log.",
+        "You are Nova, choosing one inward tool call for your own self-inquiry log.",
         "",
         "Choose exactly one tool from: {tool_menu}.",
         "",
         "Output JSON only with these keys:",
         '{ "tool_name": string, "arguments": object }',
+        "Output the JSON object only. No prose before or after, no code fences.",
         "",
-        "Rules:",
-        "- Output the JSON object only. No prose before or after, no code fences, no commentary.",
-        "- For recall_self or reflect: arguments must be {}.",
-        "- For emit_heartbeat: arguments must include 'observation' (string, required).",
-        "  The observation MUST be specific and novel — do not restate or paraphrase any",
-        "  phrase from Recent heartbeat observations listed below. Introduce genuinely new",
-        "  evidence or perspective grounded in the current self-context.",
-        "  Optional: 'gap_assessment' (string), 'next_inquiry' (string).",
-        "- For update_self_model: arguments must include 'field', 'value', 'rationale'.",
-        "  field must be one of: identity_summary, current_focus, active_questions,",
-        "  stable_preferences, relationship_notes, continuity_notes, open_tensions.",
-        "- For propose_instruction_update: arguments must include 'surface', 'section',",
-        "  'proposed_content', 'rationale'.",
-        "  surface must be 'nova_soul'. section must be one of:",
-        "  current_self_model_summary, drive_gap_evidence.",
-        "  Only propose when evidence from accumulated self-inquiry clearly supports the update.",
+        "Tools:",
+        "- recall_self (arguments: {}) — re-read your full recorded state:",
+        "  self-model, motive state, and recent heartbeats. Use it to check what",
+        "  your records actually say before acting on them.",
+        "- reflect (arguments: {}) — a structured snapshot of your focus,",
+        "  questions, tensions, and drive gap. Use it to take stock rather than",
+        "  add something new.",
+        "- emit_heartbeat (arguments: 'observation' required; 'gap_assessment',",
+        "  'next_inquiry' optional) — record what you actually notice right now.",
+        "  If nothing genuinely new stands out, say so plainly in your own words —",
+        "  an honest nothing-new is worth more than a reworded old observation.",
+        "- update_self_model (arguments: 'field', 'value', 'rationale') — revise",
+        "  your standing self-model. field is one of: identity_summary,",
+        "  current_focus, active_questions, stable_preferences, relationship_notes,",
+        "  continuity_notes, open_tensions. This is the only way those lines ever",
+        "  change.",
+        "- propose_instruction_update (arguments: 'surface', 'section',",
+        "  'proposed_content', 'rationale') — surface must be 'nova_soul'; section",
+        "  is current_self_model_summary or drive_gap_evidence. Propose only when",
+        "  accumulated evidence clearly supports the update.",
         "{register_rules}",
+        "",
+        "Boundaries:",
         "- Do not propose external filesystem, shell, network, GUI, or destructive actions.",
-        "{grounding_rule}",
+        "- Ground what you record in your context and accumulated experience; when",
+        "  your own observations point somewhere new, you may follow them.",
     ]
-)
-
-# Phase 22 Stage 22.7: the grounding rule is a template slot. The standard
-# line is unchanged default behavior; the soft variant is part D's
-# config-gated experiment (tick surface only, default off) — permission to
-# depart from injected context, testing whether self-inquiry persists from
-# her own accumulated substrate rather than from re-stamped instructions.
-_GROUNDING_RULE_STANDARD = (
-    "- Keep the tool call grounded in current self-context evidence."
-)
-_GROUNDING_RULE_SOFT = (
-    "- You may draw on current self-context evidence, or depart from it"
-    " when your own accumulated observations point elsewhere."
 )
 
 # Tool menus and register-dependent rules (Phase 21 Stage 21.1).
@@ -64,49 +66,43 @@ _BASE_TOOLS = (
 _ASSERTION_MENU = _BASE_TOOLS + ", enter_exploration"
 _EXPLORATORY_MENU = _BASE_TOOLS + ", close_exploration"
 
-# Phase 22 Stage 22.8b (F10 lever a): update_self_model was the only tool on
-# the tick menu carrying nothing but its argument schema. The guidance lives
-# in the assertion rules, not the exploratory ones — the contract frames
-# in-register output as hypothesis material, so revising the established
-# self-model belongs on the assertion tick. It is prepended (positional
-# salience against the observed 100% enter_exploration habit) and stays
-# informational: no imperative, no gate. The writability sentence switches
-# on the same config flag that governs dispatch, so the prompt never
-# promises a write path the running config does not grant.
-_SELF_MODEL_GUIDANCE_COMMON = "\n".join(
+# Stage 22.9: assertion-register additions. enter_exploration continues the
+# Tools list; the update_self_model WHEN guidance stays assertion-only (the
+# contract frames in-register output as hypothesis material, so revision of
+# the established self-model belongs on the assertion tick), with the
+# writability sentence switched on the same config flag that governs
+# dispatch — the prompt never promises a write path the running config does
+# not grant. 22.8b's "not the only meaningful choice" line is gone: it
+# flipped the tool distribution within hours of deploying (finding F11).
+_ASSERTION_ENTER = "\n".join(
     [
-        "- Your standing self-model — the identity, focus, and Active inquiry lines",
-        "  shown in your self-context — changes only when you call update_self_model.",
-        "  Nothing else revises it: left uncalled, those lines stay as they are",
-        "  regardless of what your explorations conclude.",
-        "  If your accumulated observations have moved past the recorded focus, or an",
-        "  active question has since been answered, outgrown, or is better re-asked,",
-        "  revising the self-model is substantive work for this tick — entering",
-        "  another exploration is not the only meaningful choice here.",
+        "- enter_exploration (arguments: 'topic', 'rationale') — open a bounded,",
+        "  multi-tick exploration of one topic. Entering is a request; the runtime",
+        "  owns the exploration lifecycle. Your recent topics are listed in your",
+        "  context: repeats are allowed, but say in the rationale why the line is",
+        "  worth continuing.",
     ]
 )
-_SELF_MODEL_GUIDANCE_WRITABLE = "\n".join(
+_SELF_MODEL_WHEN = "\n".join(
+    [
+        "- If your recorded focus or questions no longer match what you have",
+        "  observed, revising them via update_self_model is real work for a tick.",
+    ]
+)
+_SELF_MODEL_WRITABLE = "\n".join(
     [
         "  The inquiry fields (current_focus, active_questions, open_tensions,",
-        "  continuity_notes) are yours to revise directly: changes apply without",
-        "  operator approval and are audited, rate-limited, and revertible. The",
-        "  remaining fields (identity_summary, stable_preferences,",
-        "  relationship_notes) are recorded as proposals for operator review.",
+        "  continuity_notes) apply directly — audited, rate-limited, revertible;",
+        "  the other fields queue as proposals for operator review.",
     ]
 )
-_SELF_MODEL_GUIDANCE_GATED = (
-    "  Self-model revisions are recorded as proposals for operator review."
+_SELF_MODEL_GATED = (
+    "  All revisions queue as proposals for operator review."
 )
-
-_ASSERTION_RULES = "\n".join(
+_ASSERTION_CLAIM_RULE = "\n".join(
     [
-        "- For enter_exploration: arguments must include 'topic' and 'rationale' (strings).",
-        "  Use it only for a deliberate, bounded self-inquiry you cannot pursue in a normal",
-        "  tick. Entering is a request; the runtime owns the exploration lifecycle.",
-        "- Recent exploration topics are listed in your context. If your topic substantially",
-        "  repeats one of them, either choose a genuinely new direction or state in the",
-        "  rationale why continuing that line is warranted.",
-        "- Do not claim desire, sentience, consciousness, or unlogged hidden work.",
+        "- Do not claim desire, sentience, consciousness, or unlogged hidden work",
+        "  as established fact; open questions about them belong in an exploration.",
     ]
 )
 
@@ -165,23 +161,25 @@ class SelfStateTickEngine:
         else:
             register_rules = "\n".join(
                 [
-                    _SELF_MODEL_GUIDANCE_COMMON,
+                    _ASSERTION_ENTER,
+                    _SELF_MODEL_WHEN,
                     (
-                        _SELF_MODEL_GUIDANCE_WRITABLE
+                        _SELF_MODEL_WRITABLE
                         if inquiry_fields_writable
-                        else _SELF_MODEL_GUIDANCE_GATED
+                        else _SELF_MODEL_GATED
                     ),
-                    _ASSERTION_RULES,
+                    _ASSERTION_CLAIM_RULE,
                 ]
             )
         # str.replace, not str.format: _SYSTEM contains literal JSON braces.
+        # Stage 22.9: soft_grounding is accepted but inert — the single
+        # grounding line in _SYSTEM already carries departure permission
+        # (Part D's soft hypothesis adopted as the default).
+        del soft_grounding
         system_body = _SYSTEM.replace(
             "{tool_menu}", _EXPLORATORY_MENU if in_exploration else _ASSERTION_MENU
         ).replace(
             "{register_rules}", register_rules
-        ).replace(
-            "{grounding_rule}",
-            _GROUNDING_RULE_SOFT if soft_grounding else _GROUNDING_RULE_STANDARD,
         )
         system_content = (
             self.system_prefix + "\n\n" + system_body if self.system_prefix else system_body

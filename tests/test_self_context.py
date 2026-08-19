@@ -136,8 +136,27 @@ class SelfContextPrefetchTests(unittest.TestCase):
             heartbeat_store=self.heartbeat_store,
             proposal_store=proposal_store,
         )
-        self.assertIn("Pending Self-Model Proposals", block)
-        self.assertIn("1", block)
+        self.assertIn("Self-model proposals awaiting operator review: 1", block)
+
+    def test_pending_line_ignores_auto_apply_records(self):
+        # Stage 22.9 (E2): records that never wait on the operator —
+        # auto-applied inquiry writes and rate-limited records
+        # (approval_required=False) — must not render as "awaiting review".
+        proposal_store = SelfModelProposalStore(self._tmpdir.name)
+        proposal_store.append(SelfModelProposal(
+            proposal_id="p-auto",
+            proposed_field="current_focus",
+            proposed_value="self-inquiry",
+            rationale="test",
+            approval_required=False,
+        ))
+        block = self.engine.prefetch(
+            self_state=_self_state(),
+            motive_state=_motive_state(),
+            heartbeat_store=self.heartbeat_store,
+            proposal_store=proposal_store,
+        )
+        self.assertNotIn("awaiting operator review", block)
 
     def test_no_pending_proposals_message_when_none(self):
         proposal_store = SelfModelProposalStore(self._tmpdir.name)
@@ -149,7 +168,7 @@ class SelfContextPrefetchTests(unittest.TestCase):
             heartbeat_store=self.heartbeat_store,
             proposal_store=proposal_store,
         )
-        self.assertNotIn("Pending Self-Model Proposals", block)
+        self.assertNotIn("awaiting operator review", block)
 
     def test_open_tensions_shown(self):
         ss = _self_state(open_tensions=["tension A", "tension B"])
@@ -635,8 +654,19 @@ class Stage227TickSurfaceTests(unittest.TestCase):
         block = self._prefetch(claim_ladder_store=store, surface="tick")
         self.assertIn("3 active records", block)
         self.assertIn("(2 at rung>=1)", block)
-        self.assertIn("Theme concentration: 3 of 3", block)
+        self.assertIn("Theme concentration (last 3 records): 3 of 3", block)
         self.assertIn("recalibration", block)
+
+    def test_tick_summary_counts_all_actives_beyond_cluster_window(self):
+        # Stage 22.9 (E1): rung>=1 records older than the clustering window
+        # must still be counted — the live ladder outgrew the window and the
+        # prompt reported the earned standing as nonexistent.
+        texts = [f"distinct topic number {i} about pattern {i}" for i in range(205)]
+        rungs = [1, 1, 1] + [0] * 202
+        store = self._ladder_store_with_texts(texts, rungs=rungs)
+        block = self._prefetch(claim_ladder_store=store, surface="tick")
+        self.assertIn("205 active records", block)
+        self.assertIn("(3 at rung>=1)", block)
 
     def test_tick_summary_absent_when_ladder_empty(self):
         from nova.agent.claim_ladder import ClaimLadderStore

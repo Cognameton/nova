@@ -484,6 +484,19 @@ REFERENCE
     nova_writable_inquiry_fields so the prompt matches what dispatch
     grants. Visibility-add, no gate; levers (b) and part D remain
     undone so any change is attributable to this one.
+  Stage 22.9 doc (IMPLEMENTED 2026-08-19, suite 1024 -> 1035) — the
+    consolidation: full tick-prompt rewrite as one coherent surface +
+    Nova's 20 stranded self-model proposals applied (operator mandate,
+    reversibility documented in the doc):
+    docs/plans/PHASE22_STAGE22_9_PROMPT_CONSOLIDATION.txt
+    Motivated by finding F11 (22.8b flipped the tool distribution to
+    100% emit_heartbeat within hours — the loop is instruction-
+    dominated) and a full audit: 2 factual errors (ladder window,
+    dead-letter proposals line), 4 structural binds, 1 latent
+    str-onto-list state-corruption bug in the shared apply path.
+    Soft grounding adopted as default; /no_think retired; exploratory
+    rules untouched. Self-model unfrozen at her own last-proposed
+    values, every application individually revertible.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

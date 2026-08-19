@@ -439,25 +439,39 @@ class Stage227TickPromptTests(unittest.TestCase):
         self.assertNotIn("marker-history", user)
 
     def test_assertion_rules_state_topic_novelty_guidance(self):
+        # Stage 22.9 rewording: repetition stays a visible choice with a
+        # stated reason (the 22.7B principle), without the stacked
+        # discouragements the consolidation removed.
         system = self._messages("assertion")[0]["content"]
         normalized = " ".join(system.split())
-        self.assertIn("Recent exploration topics are listed in your context", normalized)
-        self.assertIn("state in the rationale why continuing that line is warranted", normalized)
+        self.assertIn("Your recent topics are listed in your context", normalized)
+        self.assertIn(
+            "say in the rationale why the line is worth continuing", normalized
+        )
 
     def test_exploratory_rules_do_not_carry_topic_novelty_guidance(self):
         system = self._messages("exploratory")[0]["content"]
         self.assertNotIn("Recent exploration topics", system)
 
-    def test_standard_grounding_rule_is_default(self):
-        system = self._messages("assertion")[0]["content"]
-        self.assertIn("Keep the tool call grounded in current self-context evidence.", system)
-        self.assertNotIn("depart from it", system)
+    def test_grounding_line_permits_departure_by_default(self):
+        # Stage 22.9: Part D's soft-grounding hypothesis is the default —
+        # one grounding line, carrying departure permission, both registers.
+        for register in ("assertion", "exploratory"):
+            normalized = " ".join(self._messages(register)[0]["content"].split())
+            self.assertIn(
+                "when your own observations point somewhere new, you may follow them",
+                normalized,
+            )
+            self.assertNotIn("Keep the tool call grounded", normalized)
 
-    def test_soft_grounding_replaces_standard_rule(self):
-        system = self._messages("assertion", soft_grounding=True)[0]["content"]
-        normalized = " ".join(system.split())
-        self.assertNotIn("Keep the tool call grounded", normalized)
-        self.assertIn("depart from it when your own accumulated observations point elsewhere", normalized)
+    def test_soft_grounding_flag_is_inert(self):
+        # Accepted for config compatibility; the rendered prompt is
+        # identical either way.
+        for register in ("assertion", "exploratory"):
+            self.assertEqual(
+                self._messages(register, soft_grounding=False)[0]["content"],
+                self._messages(register, soft_grounding=True)[0]["content"],
+            )
 
     def test_no_unresolved_grounding_placeholder(self):
         for register in ("assertion", "exploratory"):
@@ -491,56 +505,80 @@ class Stage228bSelfModelGuidanceTests(unittest.TestCase):
                 self._system("assertion", inquiry_fields_writable=writable).split()
             )
             self.assertIn(
-                "changes only when you call update_self_model", normalized
-            )
-            self.assertIn(
-                "entering another exploration is not the only meaningful choice",
+                "revising them via update_self_model is real work for a tick",
                 normalized,
             )
 
     def test_exploratory_register_does_not_carry_guidance(self):
         # The contract frames in-register output as hypothesis material;
         # revision of the established self-model belongs on the assertion
-        # tick, so the exploratory prompt stays byte-identical to pre-22.8b.
+        # tick, so the WHEN guidance never renders in-register.
         for writable in (False, True):
             normalized = " ".join(
                 self._system("exploratory", inquiry_fields_writable=writable).split()
             )
-            self.assertNotIn("changes only when you call update_self_model", normalized)
-            self.assertNotIn("yours to revise directly", normalized)
+            self.assertNotIn("real work for a tick", normalized)
+            self.assertNotIn("apply directly", normalized)
 
     def test_writable_wording_matches_granted_path(self):
         normalized = " ".join(
             self._system("assertion", inquiry_fields_writable=True).split()
         )
-        self.assertIn("yours to revise directly", normalized)
         self.assertIn(
-            "audited, rate-limited, and revertible", normalized
+            "apply directly — audited, rate-limited, revertible", normalized
         )
-        # The approval-gated remainder is named, so the prompt never
+        # The approval-gated remainder is acknowledged, so the prompt never
         # overstates what the flag grants.
         self.assertIn(
-            "identity_summary, stable_preferences, relationship_notes", normalized
+            "the other fields queue as proposals for operator review", normalized
         )
 
     def test_default_wording_promises_only_proposals(self):
         normalized = " ".join(self._system("assertion").split())
-        self.assertNotIn("yours to revise directly", normalized)
+        self.assertNotIn("apply directly", normalized)
         self.assertIn(
-            "Self-model revisions are recorded as proposals for operator review",
-            normalized,
+            "All revisions queue as proposals for operator review", normalized
         )
 
-    def test_guidance_prepends_rather_than_replaces_assertion_rules(self):
-        system = self._system("assertion")
-        normalized = " ".join(system.split())
-        # The pre-existing assertion rules survive intact...
-        self.assertIn("For enter_exploration: arguments must include", normalized)
+    def test_consolidation_removed_f11_and_lockout_lines(self):
+        # Stage 22.9: the line that flipped the tool distribution (F11) and
+        # the enter_exploration "only" restriction are gone in both registers
+        # and both flag states.
+        for register in ("assertion", "exploratory"):
+            for writable in (False, True):
+                normalized = " ".join(
+                    self._system(register, inquiry_fields_writable=writable).split()
+                )
+                self.assertNotIn("not the only meaningful choice", normalized)
+                self.assertNotIn(
+                    "only for a deliberate, bounded self-inquiry", normalized
+                )
+                self.assertNotIn("MUST be specific and novel", normalized)
+
+    def test_every_menu_tool_has_a_purpose_sentence(self):
+        # Consolidation guarantee: no tool is schema-only. recall_self and
+        # reflect had no guidance from Phase 18 until 22.9.
+        normalized = " ".join(self._system("assertion").split())
+        self.assertIn("check what your records actually say", normalized)
+        self.assertIn("take stock rather than add something new", normalized)
+        self.assertIn("record what you actually notice right now", normalized)
+        self.assertIn("This is the only way those lines ever change", normalized)
+
+    def test_heartbeat_honest_null_permission_present(self):
+        # Mirrors 22.1's null-finding rule: never corner her into inventing
+        # novelty about an unchanging context (B1 fix).
+        for register in ("assertion", "exploratory"):
+            normalized = " ".join(self._system(register).split())
+            self.assertIn(
+                "an honest nothing-new is worth more than a reworded old observation",
+                normalized,
+            )
+
+    def test_claim_rule_names_the_exploration_valve(self):
+        normalized = " ".join(self._system("assertion").split())
         self.assertIn("Do not claim desire, sentience", normalized)
-        # ...and the guidance appears before them (positional salience).
-        self.assertLess(
-            normalized.index("changes only when you call update_self_model"),
-            normalized.index("For enter_exploration"),
+        self.assertIn(
+            "open questions about them belong in an exploration", normalized
         )
 
     def test_no_unresolved_register_rules_placeholder(self):
@@ -576,20 +614,50 @@ class Stage227HistoryBlockHelperTests(unittest.TestCase):
                 NovaRuntime.EXPLORATION_HISTORY_NOTE_FRACTION
             )
             exploration_controller = _Controller()
+            session_id = "s-current"
 
         return NovaRuntime._exploration_history_block(_Stub())
 
-    def _record(self, topic, *, close_reason="nova_close", opened_at="2026-07-22T05:00:00+00:00"):
+    def _record(
+        self,
+        topic,
+        *,
+        close_reason="nova_close",
+        opened_at="2026-07-22T05:00:00+00:00",
+        session_id="s1",
+    ):
         from nova.types import ExplorationRecord
 
         return ExplorationRecord(
             exploration_id="x1",
-            session_id="s1",
+            session_id=session_id,
             topic=topic,
             close_reason=close_reason,
             opened_at=opened_at,
             status="closed" if close_reason else "active",
         )
+
+    def test_prior_session_active_record_labeled_stranded(self):
+        # Stage 22.9 (E4): an exploration left open at a session boundary is
+        # not resumable — "(active)" on an assertion tick would be false.
+        block = self._block(
+            [self._record("an orphaned line of inquiry", close_reason=None)]
+        )
+        self.assertIn("(stranded at session end)", block)
+        self.assertNotIn("(active)", block)
+
+    def test_current_session_active_record_still_shows_active(self):
+        block = self._block(
+            [
+                self._record(
+                    "a live line of inquiry",
+                    close_reason=None,
+                    session_id="s-current",
+                )
+            ]
+        )
+        self.assertIn("(active)", block)
+        self.assertNotIn("stranded", block)
 
     def test_empty_store_yields_empty_block(self):
         self.assertEqual(self._block([]), "")

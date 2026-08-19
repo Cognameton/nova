@@ -109,18 +109,31 @@ def apply_proposal_to_self_state(
     if isinstance(prior_value, list):
         prior_value = list(prior_value)
 
+    # Stage 22.9: coerce by TARGET field type. Proposals routinely carry str
+    # values for list[str] fields (every live pre-22.8 record does), and a
+    # bare str set onto active_questions renders per-character in prefetch.
+    # Her exact words are preserved: str -> [str], list -> "; "-joined str.
     value = proposal.proposed_value
     if isinstance(value, list):
-        setattr(self_state, field, list(value))
+        if isinstance(prior_value, str):
+            setattr(self_state, field, "; ".join(str(item) for item in value))
+        else:
+            setattr(self_state, field, list(value))
     elif isinstance(value, str):
-        setattr(self_state, field, str(value))
+        if isinstance(prior_value, list):
+            setattr(self_state, field, [str(value)])
+        else:
+            setattr(self_state, field, str(value))
     elif value is not None:
         setattr(self_state, field, value)
 
+    # Stage 22.9: updated_at is the canonical "has the self-model moved"
+    # indicator (finding F9 hinged on it) — an applied revision must move it.
+    applied_at = datetime.now(timezone.utc).isoformat()
+    self_state.updated_at = applied_at
+
     if self_state_store is not None and hasattr(self_state_store, "save"):
         self_state_store.save(self_state)
-
-    applied_at = datetime.now(timezone.utc).isoformat()
     if proposal_store is None:
         return proposal
     return proposal_store.mark_applied(
