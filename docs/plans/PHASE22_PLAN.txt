@@ -368,6 +368,29 @@ Stage 22.5: Phase Closure and Reassessment — RESERVED
   project's thesis — the same honesty discipline as 21.5: a record
   that would rather be true than tidy.
 
+  QLoRA GATE REFINED (operator, 2026-08-19, post-22.10, verbatim):
+  "QLoRA becomes a realistic option once we see the model using the
+  architecture correctly." This supersedes the purely negative
+  2026-07-23 criterion (fixation resolution) with a positive rubric
+  the closure scores against the post-22.9/22.10 live record:
+    (1) READS — recall_self/reflect/recall_history called, results
+        demonstrably shaping later output (era citations);
+    (2) WRITES — self-model revisions responding to observation, at a
+        thoughtful cadence (not thrash);
+    (3) EXPLORATIONS — chosen entry, voluntary close, novel exports
+        passing the gate;
+    (4) LADDER — distinct claims from distributed evidence, no
+        F8-style circular promotion (heaviest-weighted: this is where
+        "more than the base model exhibiting the end-goal behavior"
+        gets proven);
+    (5) REGISTER DISCIPLINE — holds under the new freedoms.
+  Sustained across a window, these also produce the Q6-compliant
+  corpus as a side effect — QLoRA then consolidates a demonstrated
+  identity rather than attempting to summon one. Operator thesis
+  articulation recorded the same day: identity is the SYSTEM
+  (self-model + memory + ladder + journal + accumulated state); the
+  base model is the substrate/inference engine.
+
 Stage 22.6: Organic Contemplation Experiments — PARTS 1+2 LANDED, NOT
   YET LIVE
   Not triggered by a numbered finding — a direct operator request
