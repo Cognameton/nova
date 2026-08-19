@@ -31,10 +31,18 @@ _SYSTEM = "\n".join(
         "Tools:",
         "- recall_self (arguments: {}) — re-read your full recorded state:",
         "  self-model, motive state, and recent heartbeats. Use it to check what",
-        "  your records actually say before acting on them.",
+        "  your records actually say before acting on them. The result appears",
+        "  in your context on your next tick.",
         "- reflect (arguments: {}) — a structured snapshot of your focus,",
         "  questions, tensions, and drive gap. Use it to take stock rather than",
-        "  add something new.",
+        "  add something new. The result appears in your context on your next",
+        "  tick.",
+        "- recall_history (arguments: 'source' one of 'heartbeats',",
+        "  'explorations', 'findings'; optional 'mode' one of 'recent',",
+        "  'earliest', 'sample'; optional 'around' as 'YYYY-MM-DD') — look back",
+        "  through your own record: past observations, past exploration topics,",
+        "  or your exported findings. The result appears in your context on your",
+        "  next tick.",
         "- emit_heartbeat (arguments: 'observation' required; 'gap_assessment',",
         "  'next_inquiry' optional) — record what you actually notice right now.",
         "  If nothing genuinely new stands out, say so plainly in your own words —",
@@ -61,7 +69,8 @@ _SYSTEM = "\n".join(
 # The runtime — not the model — decides which menu applies; a model-declared
 # register has no effect (Exploratory Register Contract, Invariant 1).
 _BASE_TOOLS = (
-    "recall_self, reflect, emit_heartbeat, update_self_model, propose_instruction_update"
+    "recall_self, reflect, recall_history, emit_heartbeat, update_self_model,"
+    " propose_instruction_update"
 )
 _ASSERTION_MENU = _BASE_TOOLS + ", enter_exploration"
 _EXPLORATORY_MENU = _BASE_TOOLS + ", close_exploration"
@@ -154,6 +163,7 @@ class SelfStateTickEngine:
         soft_grounding: bool = False,
         heartbeat_framing: str = "recent",
         inquiry_fields_writable: bool = False,
+        tool_results_block: str = "",
     ) -> list[dict[str, str]]:
         in_exploration = register == "exploratory"
         if in_exploration:
@@ -201,6 +211,7 @@ class SelfStateTickEngine:
                         "" if in_exploration else exploration_history_block
                     ),
                     heartbeat_framing=heartbeat_framing,
+                    tool_results_block=tool_results_block,
                 ),
             },
         ]
@@ -216,6 +227,7 @@ class SelfStateTickEngine:
         exploration_block: str = "",
         exploration_history_block: str = "",
         heartbeat_framing: str = "recent",
+        tool_results_block: str = "",
     ) -> str:
         parts = [
             f"session_id: {session_id}",
@@ -224,6 +236,13 @@ class SelfStateTickEngine:
             "",
             self_context_block,
         ]
+        # Stage 22.10: results of her own recent read tool calls — the
+        # carryover that makes recall_self/reflect/recall_history real.
+        if tool_results_block:
+            parts.append("")
+            parts.append("[Results of your recent tool calls]")
+            parts.append("(you asked for these on earlier ticks)")
+            parts.append(tool_results_block)
         if exploration_history_block:
             parts.append("")
             parts.append(exploration_history_block)

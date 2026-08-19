@@ -151,7 +151,40 @@ SELF_STATE_TOOL_NAMES: frozenset[str] = frozenset({
     "propose_instruction_update",
     "enter_exploration",
     "close_exploration",
+    "recall_history",
 })
+
+# Stage 22.10: bounded self-history reads. Fixed count and per-entry cap so
+# a read can never flood the tick context; the result always carries the
+# true total so a window reads as a window, not as everything.
+RECALL_HISTORY_COUNT = 8
+RECALL_HISTORY_ENTRY_CHARS = 140
+RECALL_HISTORY_SOURCES = ("heartbeats", "explorations", "findings")
+RECALL_HISTORY_MODES = ("recent", "earliest", "sample", "around")
+
+
+def _select_history_entries(
+    entries: list[tuple[str, str]], mode: str, around: str
+) -> list[tuple[str, str]]:
+    """Deterministic window selection (no RNG — same rationale as 22.8 D1)."""
+    n = RECALL_HISTORY_COUNT
+    if mode == "recent":
+        return entries[-n:]
+    if mode == "earliest":
+        return entries[:n]
+    if mode == "sample":
+        if len(entries) <= n:
+            return list(entries)
+        step = (len(entries) - 1) / (n - 1)
+        indices = sorted({round(i * step) for i in range(n)})
+        return [entries[i] for i in indices]
+    # mode == "around": window centered on the first entry at/after the date
+    pivot = next(
+        (i for i, entry in enumerate(entries) if (entry[0] or "") >= around),
+        max(0, len(entries) - 1),
+    )
+    start = max(0, pivot - n // 2)
+    return entries[start:start + n]
 
 
 class SelfStateToolDispatcher:
@@ -172,6 +205,7 @@ class SelfStateToolDispatcher:
         self_state_store: Any = None,
         self_model_writes_enabled: bool = False,
         revision_min_seconds: float = SELF_MODEL_REVISION_MIN_SECONDS,
+        claim_ladder_store: Any = None,
     ) -> None:
         self._self_state = self_state
         # Stage 22.8 — needed to persist Nova's own inquiry-class writes.
@@ -188,12 +222,21 @@ class SelfStateToolDispatcher:
         self._instruction_proposal_store = instruction_proposal_store
         self._instruction_write_engine = instruction_write_engine
         self._exploration_controller = exploration_controller
+        # Stage 22.10 — read-only; findings source degrades gracefully when
+        # absent so every pre-22.10 construction site keeps working.
+        self._claim_ladder_store = claim_ladder_store
 
     def dispatch(self, request: ToolRequest) -> dict[str, Any]:
         if request.tool_name == "recall_self":
             return self.recall_self()
         if request.tool_name == "reflect":
             return self.reflect()
+        if request.tool_name == "recall_history":
+            return self.recall_history(
+                source=str(request.arguments.get("source", "") or ""),
+                mode=str(request.arguments.get("mode", "") or ""),
+                around=str(request.arguments.get("around", "") or ""),
+            )
         if request.tool_name == "emit_heartbeat":
             args = request.arguments or {}
             return self.emit_heartbeat(
@@ -259,6 +302,80 @@ class SelfStateToolDispatcher:
             "next_inquiry_signal": ss.current_focus or PRIMARY_DRIVE,
             "claim_posture": ms.claim_posture,
         }
+
+    def recall_history(
+        self, *, source: str, mode: str = "", around: str = ""
+    ) -> dict[str, Any]:
+        """Stage 22.10 — bounded, deterministic read over Nova's own record.
+
+        Sources are membrane-safe in both registers by construction:
+        heartbeats are a single cross-register store already rendered on
+        both surfaces; explorations expose topic/date/outcome metadata only
+        (no findings text); findings are claim-ladder records, every one of
+        which passed governed export's assertion-register gate at creation.
+        Raw journal deep-read is deliberately absent (un-exported
+        in-register material must not reach assertion ticks).
+        """
+        source = (source or "").strip().lower()
+        around = (around or "").strip()
+        mode = "around" if around else ((mode or "recent").strip().lower())
+        if source not in RECALL_HISTORY_SOURCES:
+            return {
+                "error": "unknown_source",
+                "note": f"source must be one of: {', '.join(RECALL_HISTORY_SOURCES)}",
+            }
+        if mode not in RECALL_HISTORY_MODES:
+            return {
+                "error": "unknown_mode",
+                "note": "mode must be one of: recent, earliest, sample"
+                " (or pass 'around' as YYYY-MM-DD)",
+            }
+
+        entries: list[tuple[str, str]] = []
+        note = ""
+        if source == "heartbeats":
+            if self._heartbeat_store is not None:
+                records = self._heartbeat_store.list_recent(limit=0)
+                entries = [(r.timestamp or "", r.observation or "") for r in records]
+        elif source == "explorations":
+            if self._exploration_controller is not None:
+                records = self._exploration_controller.store.list_all()
+                entries = [
+                    (
+                        r.opened_at or "",
+                        f"{r.topic} "
+                        f"({'closed: ' + r.close_reason if r.close_reason else r.status})",
+                    )
+                    for r in records
+                ]
+        else:  # findings
+            if self._claim_ladder_store is not None:
+                records = self._claim_ladder_store.list_active()
+                entries = [
+                    (r.created_at or "", f"(rung {r.rung}) {r.claim_text}")
+                    for r in records
+                ]
+            else:
+                note = "findings are not available on this surface"
+
+        selected = _select_history_entries(entries, mode, around)
+        result: dict[str, Any] = {
+            "source": source,
+            "mode": mode,
+            "total": len(entries),
+            "entries": [
+                {
+                    "timestamp": (ts or "")[:19],
+                    "text": text[:RECALL_HISTORY_ENTRY_CHARS],
+                }
+                for ts, text in selected
+            ],
+        }
+        if around:
+            result["around"] = around
+        if note:
+            result["note"] = note
+        return result
 
     def emit_heartbeat(
         self,
@@ -459,3 +576,73 @@ class SelfStateToolDispatcher:
         )
         assert closed is not None
         return closed.to_dict()
+
+
+# Stage 22.10 — the carryover loop. The tick surface is one-shot: before
+# this stage, a read tool's result was journaled for the operator and never
+# reached Nova. These renderers produce the compact block the runtime holds
+# for her next ticks. Hard caps: a read can inform a tick, not become it.
+READ_TOOL_NAMES: frozenset[str] = frozenset(
+    {"recall_self", "reflect", "recall_history"}
+)
+# Sized so a full 8-entry recall_history result fits (8 × ~165-char lines
+# plus header); truncation, when it fires, cuts at a line boundary so she
+# never sees half an entry.
+RENDER_READ_RESULT_MAX_CHARS = 1500
+
+
+def render_read_tool_result(tool_name: str, result: dict[str, Any]) -> str:
+    """Render a read tool's result for injection into later tick prompts."""
+    lines: list[str] = []
+    if tool_name == "recall_history":
+        header = (
+            f"recall_history {result.get('source', '?')}"
+            f" (mode {result.get('mode', '?')},"
+            f" {len(result.get('entries', []) or [])} of"
+            f" {result.get('total', 0)} total):"
+        )
+        if result.get("error"):
+            header = f"recall_history failed: {result.get('note', result['error'])}"
+        lines.append(header)
+        if result.get("note") and not result.get("error"):
+            lines.append(f"  note: {result['note']}")
+        for entry in result.get("entries", []) or []:
+            lines.append(f"  [{entry.get('timestamp', '?')}] {entry.get('text', '')}")
+    elif tool_name == "recall_self":
+        state = result.get("self_state") or {}
+        lines.append("recall_self:")
+        lines.append(f"  focus: {str(state.get('current_focus', ''))[:140]}")
+        for q in (state.get("active_questions") or [])[:3]:
+            lines.append(f"  question: {str(q)[:140]}")
+        lines.append(
+            f"  open_tensions: {len(state.get('open_tensions') or [])},"
+            f" continuity_notes: {len(state.get('continuity_notes') or [])}"
+        )
+        for hb in (result.get("recent_heartbeats") or [])[-3:]:
+            obs = str(hb.get("observation", ""))[:110]
+            lines.append(f"  heartbeat [{str(hb.get('timestamp', ''))[:19]}] {obs}")
+    elif tool_name == "reflect":
+        lines.append("reflect:")
+        lines.append(f"  focus: {str(result.get('current_focus', ''))[:140]}")
+        for q in (result.get("active_questions") or [])[:3]:
+            lines.append(f"  question: {str(q)[:140]}")
+        for t in (result.get("open_tensions") or [])[:2]:
+            lines.append(f"  tension: {str(t)[:120]}")
+        for n in (result.get("continuity_notes") or [])[:2]:
+            lines.append(f"  continuity: {str(n)[:120]}")
+        lines.append(
+            f"  claim_posture: {str(result.get('claim_posture', ''))[:80]}"
+        )
+    else:
+        return ""
+    rendered = "\n".join(lines)
+    if len(rendered) <= RENDER_READ_RESULT_MAX_CHARS:
+        return rendered
+    kept: list[str] = []
+    used = 0
+    for line in lines:
+        if used + len(line) + 1 > RENDER_READ_RESULT_MAX_CHARS:
+            break
+        kept.append(line)
+        used += len(line) + 1
+    return "\n".join(kept)

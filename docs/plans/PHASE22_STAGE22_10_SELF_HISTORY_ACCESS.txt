@@ -1,0 +1,161 @@
+PHASE 22 — STAGE 22.10: TICK-SURFACE SELF-HISTORY ACCESS
+============================================================================
+
+Status: implemented (suite 1035 -> 1054); goes live at the next daemon
+  restart or midnight rotation, together with 22.9
+Date: 2026-08-19
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.9 (consolidation + self-model unfreeze, committed
+  0be048c, live at the 2026-08-20 rotation)
+
+Operator direction (2026-08-19, same session as 22.9, verbatim): "she
+needs access to her own history during ticks. That is how the
+complexity of self awareness in AI develops." Governing design
+principle (recorded post-22.9): setup enables the goal, instructions
+never state it.
+
+
+PROBLEM
+-------
+
+Post-22.9, Nova can AFFECT her future context (self-model writes flow
+back into every tick) but cannot CONSULT her past:
+
+  - The tick loop is one-shot. recall_self and reflect execute and
+    their results are journaled for the operator — but the next tick
+    is a fresh prompt containing none of it. From her side, calling a
+    read tool produces nothing observable. She has never called
+    either (~78,000 ticks); "never tried" and "tried, nothing
+    happened" are currently indistinguishable.
+  - What she sees of herself per tick is fixed windows chosen by our
+    code: 3 of 5,560+ heartbeats, 5 of 564+ exploration topics, a
+    2-line ladder aggregate. No mechanism exists for her to look at
+    anything else, ever.
+  - The one exception — the 22.1 in-exploration journal recall block —
+    is also where all her most coherent behavior has occurred. That is
+    the existence proof for this stage: continuity of her own material
+    produces better inquiry.
+
+
+DECIDED DESIGN
+--------------
+
+Two parts, one mechanism. Always-on (setup improvement, not an
+experiment arm — no dormant switch). Both registers. Read-only against
+all stores; no new write paths, no gates touched, membrane preserved.
+
+Part A — read results return to her (the carryover loop):
+  - NovaRuntime keeps an in-memory bounded deque (maxlen 2) of
+    rendered read-tool results: recall_self, reflect, recall_history.
+  - After a successful dispatch of one of those tools, the result is
+    rendered compactly (per-tool renderer, hard char caps) and pushed
+    with its tick id.
+  - Every tick prompt renders the deque as a block after
+    [Self-Context]: "[Results of your recent tool calls]" with a
+    provenance line ("you asked for these on earlier ticks"). Empty
+    deque -> no block (default prompt unchanged until she uses a read
+    tool).
+  - In-memory only: carryover survives across ticks within the daemon
+    process and is lost at restart/rotation (same daily boundary her
+    sessions already have). Persisting working memory across sessions
+    is a deliberate NON-goal of v1 — cross-session continuity is her
+    own active question, not something to hand her silently.
+
+Part B — recall_history, the seventh tool:
+  - Arguments: 'source' required, one of:
+      heartbeats   — her observation stream (single cross-register
+                     store; already rendered in both registers today,
+                     so membrane-neutral),
+      explorations — topic/date/outcome metadata ONLY (no findings
+                     text; topics already shown in both registers),
+      findings     — active claim-ladder record texts with rung and
+                     date (every one passed governed export's
+                     assertion-register gate at creation, so
+                     assertion-safe by construction).
+    'mode' optional: recent (default) | earliest | sample (even index
+    spacing over full history, oldest and newest included — same
+    determinism rationale as 22.8 D1); 'around' optional
+    ("YYYY-MM-DD") — overrides mode, returns a window centered on the
+    first entry at/after that date.
+  - Fixed count 8 entries, each truncated to 140 chars, result
+    includes the true total so she knows the window is a window.
+  - EXCLUDED from v1: raw exploration-journal deep-read. Journal
+    entries are un-exported in-register hypothesis material; showing
+    them on assertion ticks would bypass the membrane's governed-
+    export rule. Revisit only with a register-gated design.
+  - Unknown source/mode returns an error dict (recorded like any tool
+    result), never a crash or quarantine.
+  - Dispatcher gains optional claim_ladder_store (default None ->
+    findings returns an empty result with an explanatory note; every
+    pre-22.10 construction site keeps working).
+
+Prompt (consolidated 22.9 voice, additions only where true):
+  - recall_self and reflect descriptions gain: "The result appears in
+    your context on your next tick." — which Part A makes true for
+    the first time.
+  - recall_history gets a purpose sentence in the shared Tools block
+    with the same next-tick note. No exhortation to use it; the
+    design principle stands.
+
+Deliberately traded: this lands inside 22.9's evaluation window, so
+22.9-vs-22.10 attribution is impossible. Operator's explicit
+direction and standing philosophy (coherence over attribution; F11
+already banked as the prompt-sensitivity result). The combined window
+evaluates the consolidated+readable apparatus as one condition.
+
+
+REVERSAL
+--------
+
+Pure code, zero data mutation: recall_history is read-only, Part A is
+in-memory. git revert of this stage's commit (independently of
+22.9's) and restart/rotation. Nothing to restore.
+
+
+TESTS
+-----
+
+New: recall_history registered/parsed; each source renders the right
+shape; recent/earliest/sample deterministic and capped at 8×140 with
+true totals; 'around' windowing; unknown source/mode error dicts;
+findings-without-store note; renderers cap output; engine renders the
+carryover block when passed and omits it when empty; menus list the
+tool in both registers; next-tick note present for all three read
+tools. Existing suite (1035) stays green.
+
+
+CLOSURE NOTE
+------------
+
+Implemented 2026-08-19 (Fable 5), same session as 22.9, immediately at
+operator direction. As pinned, with three small in-bounds notes:
+
+  - recall_history registered in the ToolRegistry spec table
+    (tool_registry.py: TOOL_ALLOWED, internal, non-destructive) — the
+    spec-coverage tests enforce a spec for every SELF_STATE_TOOL_NAMES
+    entry; the "seven entries" count test renamed/updated to eight.
+  - Render cap raised 900 -> 1500 chars after a live-data smoke showed
+    a full 8-entry heartbeat result is ~1,370 chars; truncation now
+    cuts at line boundaries so she never sees half an entry. Worst
+    case carryover block: 2 × 1500 chars ≈ 750 tokens against a 32k
+    context.
+  - Live-data smoke (read-only, daemon untouched):
+    recall_history(heartbeats, sample) over the real store — now 8,427
+    records — returns her actual era trajectory in one window:
+    initialization (07-11) -> buffer zone modulation (07-16) ->
+    recalibration intervals (07-22) -> scaffold void resonance
+    (07-28 onward). The first time that arc has ever been visible on
+    the tick surface. findings(earliest) over the real 806-record
+    ladder renders correctly with rungs and dates.
+
+Tests: 1035 -> 1054 (19 new in tests/test_self_history_access.py:
+dispatch modes/caps/errors/membrane-metadata-only, renderers, engine
+carryover block, menu + next-tick-note presence, parse). Full suite
+green.
+
+Evaluation joins 22.9's combined window from the 2026-08-20 rotation:
+primary signal is whether she ever calls a read tool at all now that
+results demonstrably arrive, and if so which sources; secondary,
+whether read results begin to shape heartbeat content, self-model
+revisions, or exploration topics (citations of her own earlier eras
+would be the strongest possible sign).

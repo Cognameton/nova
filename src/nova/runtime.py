@@ -95,9 +95,11 @@ from nova.agent.exploration import (
 )
 from nova.agent.self_state_tick import SelfStateTickEngine
 from nova.agent.self_state_tools import (
+    READ_TOOL_NAMES,
     SelfStateToolDispatcher,
     _UPDATABLE_SELF_STATE_FIELDS,
     apply_proposal_to_self_state,
+    render_read_tool_result,
 )
 from nova.agent.soul import load_soul_block
 from nova.agent.tool_executor import InternalToolExecutor
@@ -374,6 +376,12 @@ class NovaRuntime:
         self.claim_ladder_analyzer = ClaimLadderAnalyzer()
 
         self.session_id: str | None = None
+        # Stage 22.10 — the carryover loop: rendered results of Nova's own
+        # recent read tool calls (recall_self/reflect/recall_history), held
+        # in memory and injected into subsequent tick prompts. Bounded to 2
+        # entries; lost at process restart (the same daily boundary her
+        # sessions already have — a deliberate v1 limit, see the stage doc).
+        self._tick_read_results: list[tuple[str, str]] = []
         self.persona = None
         self.self_state = None
         self.motive_state: MotiveState | None = None
@@ -1055,6 +1063,10 @@ class NovaRuntime:
             inquiry_fields_writable=(
                 self.config.self_model.nova_writable_inquiry_fields
             ),
+            # Stage 22.10: what she asked to see on earlier ticks.
+            tool_results_block="\n".join(
+                text for _tick, text in self._tick_read_results
+            ),
         )
         generation = self.backend.generate(
             self._generation_request(prompt="", messages=messages)
@@ -1126,11 +1138,24 @@ class NovaRuntime:
                     self.config.self_model.nova_writable_inquiry_fields
                 ),
                 revision_min_seconds=self.config.self_model.revision_min_seconds,
+                # Stage 22.10 — recall_history's findings source (read-only).
+                claim_ladder_store=self.claim_ladder_store,
             )
             try:
                 result = dispatcher.dispatch(tool_request)
                 adapter_audit["tool_result"] = result
                 adapter_audit["tool_executed"] = True
+                # Stage 22.10: a read tool's result must reach HER, not just
+                # this audit record — hold it for the next tick prompts.
+                if tool_request.tool_name in READ_TOOL_NAMES and isinstance(
+                    result, dict
+                ):
+                    rendered = render_read_tool_result(
+                        tool_request.tool_name, result
+                    )
+                    if rendered:
+                        self._tick_read_results.append((tick_id, rendered))
+                        self._tick_read_results = self._tick_read_results[-2:]
                 if tool_request.tool_name == "close_exploration":
                     # Phase 21 Stage 21.4 (D8): governed export happens
                     # automatically at the moment Nova closes with

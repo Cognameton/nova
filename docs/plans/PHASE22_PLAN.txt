@@ -497,6 +497,17 @@ REFERENCE
     Soft grounding adopted as default; /no_think retired; exploratory
     rules untouched. Self-model unfrozen at her own last-proposed
     values, every application individually revertible.
+  Stage 22.10 doc (IMPLEMENTED 2026-08-19, suite 1035 -> 1054) — tick-
+    surface self-history access, at operator direction ("she needs
+    access to her own history during ticks"):
+    docs/plans/PHASE22_STAGE22_10_SELF_HISTORY_ACCESS.txt
+    Part A: read-tool results (recall_self/reflect/recall_history) now
+    carry over into her next tick prompts — before this, the tick loop
+    was one-shot and read results reached only the operator's audit
+    trail. Part B: recall_history — bounded deterministic reads over
+    heartbeats / exploration metadata / exported findings, membrane-
+    safe in both registers; raw journal deep-read deliberately
+    excluded. Read-only, in-memory carryover, git-revert reversal.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

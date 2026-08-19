@@ -119,6 +119,23 @@ def default_tool_registry() -> ToolRegistry:
     )
     registry.register_spec(
         ToolSpec(
+            name="recall_history",
+            description=(
+                "Stage 22.10: bounded read-only window over Nova's own record "
+                "(heartbeats, exploration metadata, exported findings)."
+            ),
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={
+                "source": "one of: heartbeats, explorations, findings",
+                "mode": "optional: recent, earliest, sample",
+                "around": "optional: YYYY-MM-DD",
+            },
+        )
+    )
+    registry.register_spec(
+        ToolSpec(
             name="emit_heartbeat",
             description=(
                 "Record a self-observation heartbeat: current state, drive-gap "
