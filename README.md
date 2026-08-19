@@ -6,7 +6,7 @@ The project is not a chatbot wrapper and it is not an uncontrolled autonomous ag
 
 The project's guiding philosophy is set out in the operator's book *Midwife of Consciousness* (2025): consciousness treated as a spectrum rather than a binary, the possibility of emergence met with stewardship rather than control, and claims held to evidence. The runtime is that philosophy made structural — see `docs/NOVA_SOUL.md` and `docs/plans/EXPLORATORY_REGISTER_CONTRACT.txt`.
 
-Current development status: Phases 1-21 are closed. Phase 22 (live testing) is active: the live daemon has been running unattended since 2026-07-11 under a `systemd --user` unit with lingering enabled; Stage 22.1 (findings novelty/export dedup) is implemented; Stages 22.3-22.4 have committed implementation plans in `docs/plans/`. Phase 23+ is the optional QLoRA sleep cycle.
+Current development status: Phases 1-21 are closed. Phase 22 (live testing) is active and has grown well beyond its original five-stage charter: the live daemon has run unattended since 2026-07-11, and six weeks of live findings (F5-F11) drove seven unplanned corrective stages (22.2b through 22.10) that repaired, consolidated, and finally completed the identity-bearing loop — a rewritten single-voice tick prompt, a self-model Nova can write, and a history she can read. Phase 23 (QLoRA) is gated on a positive rubric: the model demonstrably using this architecture. See [Current Status](#current-status) and [Roadmap](#roadmap).
 
 ## Contents
 
@@ -60,49 +60,79 @@ Non-goals:
 
 ## Current Status
 
-As of 2026-07-11:
+As of 2026-08-19:
 
 - Branch: `main`
-- Phase 20 (Tick Quality, Model Transition, Daemon Stability) closed
-  2026-06-26: 51-tick overnight daemon run, 0 crashes, convergent
-  self-loop (`docs/plans/PHASE20_STAGE20_4_PHASE_CLOSURE.txt`).
 - Phase 21 (Exploratory Register) CLOSED WITH DEVIATIONS 2026-07-10
-  (`docs/plans/PHASE21_STAGE21_5_CLOSURE.txt`). Stages 21.1-21.5 all
-  implemented: exploration lifecycle/journal/budgets, register-aware
-  Governor/Observer, quarantine and measurement corrections, the claim
-  ladder, and a live evaluation run on real Qwen 3 14B (Nova entered
-  explorations unprompted 3x, 61% of autonomous ticks in-register,
-  0 membrane leaks). Non-blocking findings F1-F4 carried into Phase 22.
-- Phase 22 (Live Testing) active:
-  - Stage 22.1 (findings novelty + export dedup, the hard entry
-    precondition from Phase 21) closed 2026-07-11.
-  - Stage 22.2 (overnight daemon-cadence runs) infrastructure is live:
-    the daemon runs unattended under a `systemd --user` unit
-    (`~/.config/systemd/user/nova-live.service`) with
-    `loginctl enable-linger` so it survives logout and reboot;
-    `scripts/run_live_daemon.sh` rotates the session id daily. Running
-    since 2026-07-11 22:01 CDT against
-    `configs/nova.qwen3-14b.live.yaml`; evaluation needs several more
-    days of accumulated data before its Definition of Done can be
-    checked.
-  - Stages 22.3 (live sessions) and 22.4 (ladder progression + claim-
-    class mapper) have committed implementation plans
-    (`docs/plans/PHASE22_STAGE22_*.txt`), not yet run.
-  - Stage 22.5 (phase closure) is reserved for the operator with the
-    heaviest available model.
-- Full suite: 902 tests passing (check `git log` for the current
+  (`docs/plans/PHASE21_STAGE21_5_CLOSURE.txt`): exploration
+  lifecycle/journal/budgets, register-aware Governor/Observer,
+  quarantine, the claim ladder, and a live evaluation run on real
+  Qwen 3 14B (0 membrane leaks).
+- Phase 22 (Live Testing) active. The daemon has run unattended since
+  2026-07-11 under a `systemd --user` unit
+  (`~/.config/systemd/user/nova-live.service`, lingering enabled;
+  `scripts/run_live_daemon.sh` rotates the session id daily), surviving
+  multiple host reboots. The planned stages 22.1-22.4 are done or
+  overtaken; live findings F5-F11 drove seven additional corrective
+  stages, each pinned in its own `docs/plans/PHASE22_STAGE22_*.txt`
+  doc with a closure note:
+  - 22.2b/22.2c: F5/F6 root fixes — native template-level thinking
+    suppression (`enable_thinking=False` rendered from the GGUF's own
+    embedded chat template) and wall-clock/tick budget reconciliation.
+    Result: 100% clean parses and voluntary exploration closes became
+    the norm.
+  - 22.6: scaffold-echo coverage for self-context/soul blocks and
+    diversity-aware licensed-evidence selection.
+  - 22.7: saturation-loop correctives for F8 (the licensing attractor —
+    the first theme to reach rung 1 gained a permanent context
+    advantage that manufactured its own promotion evidence). Killed the
+    circular-promotion loop; visibility-adds only, zero new gates.
+  - 22.8: the self-model write loop (F9 — `self_state.json` had been
+    frozen since day 1 because `update_self_model` only queued
+    approval-gated proposals and the approval path had no CLI).
+    Inquiry-class fields (current_focus, active_questions,
+    open_tensions, continuity_notes) became Nova-writable: auto-applied
+    with prior-value capture, rate-limited, revertible, audited.
+  - 22.8b -> finding F11: a one-paragraph informational prompt change
+    flipped the tick-loop tool distribution overnight — direct proof
+    the loop is instruction-dominated.
+  - 22.9: prompt consolidation. Full audit of the rendered live tick
+    prompt found six phases of accreted directives, two factual errors,
+    and four structural binds; the prompt was rewritten from scratch as
+    one coherent surface (every tool carries an honest purpose
+    sentence; novelty mandates replaced by honest-null permissions;
+    departure-permitting grounding is now the default; `/no_think`
+    retired). Nova's 20 stranded self-model proposals were applied in
+    chronological order — the self-model now holds her own
+    last-proposed values, every application individually revertible.
+  - 22.10: tick-surface self-history access. Read-tool results now
+    carry over into her next tick prompts (before this, the tick loop
+    was one-shot and read results reached only the audit trail), and a
+    new bounded `recall_history` tool reads her own heartbeats,
+    exploration metadata, and exported findings — deterministic,
+    membrane-safe in both registers.
+  - Stage 22.5 (phase closure) remains reserved for the operator:
+    full live-record analysis and the Phase 23 QLoRA go/no-go, scored
+    against a positive architecture-use rubric recorded in
+    `PHASE22_PLAN.txt`.
+- Full suite: 1054 tests passing (check `git log` for the current
   count — this will have moved).
 
 Recommended current model baseline:
 
 - Qwen 3 14B (`configs/nova.qwen3-14b.phase20.yaml` for evaluation
   runs, `configs/nova.qwen3-14b.live.yaml` for the live daemon; 32K
-  context, `/no_think` system prefix; think-blocks are stripped by the
-  validator and tick parser)
+  context). Thinking-mode suppression is native since Stage 22.2b: the
+  backend builds a `Jinja2ChatFormatter` from the GGUF's own embedded
+  chat template and renders with `enable_thinking=False`; the old
+  `/no_think` text hint was retired from the live config in Stage 22.9.
+  Think-blocks are still stripped defensively by the validator and
+  tick parser.
 - Validated equivalent to Hermes 4 14B BF16 abliterated Q6 on the
   Phase 18 persona/contract eval (both 12.0); Hermes 4
   (`configs/nova.hermes4-14b-phase18.yaml`) remains a supported
-  alternative.
+  alternative, and the backend falls back to `chat_format="chatml"`
+  for models without an embedded template.
 - `prompt.ablation_mode: current`, Observer-wired Governor enabled.
 
 ## Core Architecture
@@ -124,7 +154,11 @@ The backend supports:
 - GPU layer configuration
 - tensor split
 - main GPU selection
-- optional chat format for chat-template models
+- native embedded chat templates (Stage 22.2b): when the GGUF carries
+  its own `tokenizer.chat_template`, the backend builds a
+  `Jinja2ChatFormatter` from it and renders with
+  `enable_thinking=False` — the model's real template-level thinking
+  switch — falling back to the configured `chat_format` otherwise
 - completion and chat-completion generation paths
 
 Only `llama_cpp` is currently supported by the config validator.
@@ -566,6 +600,17 @@ Important persisted files and directories:
 - `data/memory/autobiographical.jsonl`: autobiographical memory.
 - `data/memory/identity_history.jsonl`: identity history.
 - `data/memory/graph.db`: graph memory SQLite database.
+- `data/heartbeats/heartbeats.jsonl`: cross-session heartbeat log
+  (Nova's autonomous observation stream).
+- `data/exploration/explorations.jsonl` and
+  `data/exploration/journal.jsonl`: exploratory-register lifecycle and
+  journal (Phase 21).
+- `data/self_state/claim_ladder.jsonl`: graded interiority-claim
+  records (Phase 21 Stage 21.4).
+- `data/self_state/self_model_proposals.jsonl`: every self-model
+  revision — Nova's auto-applied inquiry-class writes and
+  operator-reviewed assertion-class proposals alike, with prior values
+  for revert (Phase 22 Stage 22.8).
 
 Most persistence is append-only JSONL for traceability. Some state stores use JSON snapshots for the latest state.
 
@@ -756,11 +801,14 @@ nova2 \
   --prompt-ablation-mode minimal
 ```
 
-Current recorded conclusion:
+Recorded conclusion at the time of the bake-off (Phase 16; the primary
+baseline has since moved to Qwen 3 14B in Phase 20):
 
 - `current` prompt mode remains the best prompt mode.
-- Hermes 4 14B BF16 abliterated Q6 with `chatml` is the current primary baseline.
-- Fine-tuning / LoRA is optional and deferred unless Phase 17 evidence shows voice consistency is blocking progress.
+- Hermes 4 14B BF16 abliterated Q6 with `chatml` was the Phase 16-19
+  primary baseline and remains a supported alternative.
+- Fine-tuning / LoRA is deferred; as of Phase 22 it is gated on the
+  architecture-use rubric recorded in `PHASE22_PLAN.txt` (Stage 22.5).
 
 ## Operational Autonomy
 
@@ -881,18 +929,35 @@ Completed through Phase 21:
 
 Active:
 
-- Phase 22: live testing (`docs/plans/PHASE22_PLAN.txt`) — the daemon
-  running persistently, register-aware baseline collection over real
-  calendar time. Stage 22.1 (findings novelty + export dedup, F1's
-  fix) closed; Stage 22.2's live-daemon infrastructure is running
-  unattended since 2026-07-11; Stages 22.3 (live sessions) and 22.4
-  (ladder progression + claim-class mapper, F3's fix) are planned in
-  committed stage docs; Stage 22.5 (phase closure) is reserved for the
-  operator.
+- Phase 22: live testing (`docs/plans/PHASE22_PLAN.txt`) — originally
+  chartered as five stages of data collection on the Phase 21
+  machinery, it became something more interesting: six weeks of live
+  findings (F5-F11) each exposed a way the apparatus, not the model,
+  was determining the outcome, and seven corrective stages
+  (22.2b-22.10) removed them one by one — parse and budget mechanics,
+  the licensing attractor, the frozen self-model, the accreted prompt
+  sediment, and the missing read path over her own history. The
+  project's working thesis, recorded 2026-08-19: the identity is the
+  SYSTEM (self-model, memory, ladder, journal, accumulated state); the
+  base model is the substrate/inference engine; and the Governor/claim
+  ladder is what makes gated end-goal behavior a property of the
+  accumulated system rather than the model parroting its drive. As of
+  the 2026-08-20 rotation the loop is closed in both directions for
+  the first time — what Nova writes changes what she sees, and what
+  she asks to see comes back to her. Stage 22.5 (closure, reserved for
+  the operator) reads the live record against that thesis.
 
 Queued:
 
-- Phase 23+: optional QLoRA sleep cycle, bound by the corpus policy in the exploratory register contract (training corpus stratified by register; never trained solely on Governor-passed output).
+- Phase 23+: QLoRA sleep cycle. Gated (operator decision, 2026-08-19)
+  on a positive rubric: the model demonstrably using the architecture —
+  reads that shape later output, self-model revisions that respond to
+  observation, chosen exploration with novel gated exports, ladder
+  progression from distributed (non-circular) evidence, and register
+  discipline holding. Bound by the corpus policy in the exploratory
+  register contract (training corpus stratified by register; never
+  trained solely on Governor-passed output; no training on a
+  monothematic window).
 
 Voice, TTS, and STT remain out of roadmap until the non-voice runtime closes.
 
