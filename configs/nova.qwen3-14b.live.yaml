@@ -37,3 +37,11 @@ prompt:
   # read window of 3.
   tick_heartbeat_sampling: stratified
   tick_self_model_revision_visibility: true
+  # Stage 22.7 Part D — drive-dosage arm, ACTIVATED 2026-08-25 (operator
+  # decision after the 22.9+22.10 eval read). Drive line on the tick
+  # surface only on ticks where (seq-1) % 12 == 0 (once/hour at 300s),
+  # descriptive framing when shown. tick_soft_grounding is inert since
+  # 22.9 (soft grounding is the default), so it is not set here.
+  # Off-cycle drops in drive mentions are EXPECTED, not erosion.
+  tick_drive_injection_interval: 12
+  tick_drive_descriptive: true

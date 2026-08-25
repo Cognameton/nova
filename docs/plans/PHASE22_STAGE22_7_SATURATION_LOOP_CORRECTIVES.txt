@@ -537,3 +537,41 @@ withdrawn. It reframes the drive line while the inquiry line stays
 frozen, so run against current state its arm is confounded: dosage
 effects would be indistinguishable from the fixed point. Sequence it
 after 22.8.
+
+
+PART D ACTIVATED — 2026-08-25 (operator decision, Fable 5 session)
+------------------------------------------------------------------
+
+Operator direction, verbatim: "turn on 22.7 Part D". Taken after the
+2026-08-25 read of the 22.9+22.10 window (6 days live): reads and
+exploration entry/exit moved, self-model writes / topic / ladder flat
+— the F9 confound named above (frozen inquiry line) is lifted since
+22.8/22.9, so the arm is no longer confounded with the fixed point.
+
+Config change (configs/nova.qwen3-14b.live.yaml, prompt section):
+  tick_drive_injection_interval: 12    (once/hour at 300s cadence;
+                                        tick 1 of each session always)
+  tick_drive_descriptive: true         ("Standing drive (background
+                                        context, not this tick's task):
+                                        ..." when shown)
+  tick_soft_grounding: NOT SET — inert since 22.9 (soft grounding is
+  the default; the flag is parsed but switches nothing).
+
+Verified before edit: runtime consumes both fields
+(runtime.py model_self_state_tick: include_drive_line =
+(tick_sequence-1) % interval == 0; drive_descriptive passthrough);
+self_context.prefetch renders the descriptive line; config loads via
+the CLI loader with interval=12/descriptive=True; tests.test_config +
+tests.test_self_context green (58). The heartbeat record's
+primary_drive field is runtime-stamped (heartbeat.py), not asked of
+her, so off-cycle ticks carry no drive text on the prompt surface.
+Known residual: reflect / recall_self results include the drive
+string (self_state_tools.py) — her own read, not a stamp; carryover
+will echo it for 2 ticks after such a call. Note for the eval read.
+
+Goes live at the next daemon process start — the 2026-08-26 00:00
+session rotation unless the operator restarts nova-live.service
+earlier. Eval read for this arm: >=3 days after go-live. Off-cycle
+drops in drive mentions are EXPECTED (see observer note above), not
+erosion. Reversal: git revert of this commit, or remove the two lines;
+takes effect at the next rotation.
