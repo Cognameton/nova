@@ -1,0 +1,385 @@
+PHASE 22 — STAGE 22.11: THE RECORD SHE DID NOT WRITE
+(operational self-facts on the tick surface + the expectation loop)
+============================================================================
+
+Status: DRAFT — spec only, nothing implemented. Go-live is sequenced
+  AFTER the 22.7 Part D eval read (due >= 2026-08-29); see SEQUENCING.
+Date: 2026-08-27 (drafted; Fable 5 session)
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stage: 22.10 (self-history access, commit 4d49f7a, live since the
+  2026-08-20 rotation); 22.7 Part D activated 137e209, live since the
+  2026-08-26 rotation. HEAD at drafting: 137e209. Suite baseline: 1054.
+
+Operator direction (2026-08-27, verbatim): "I want to see her asking
+unique questions about herself and trying to understand. What does Nova
+need to be able to ponder and wonder in her thoughts autonomously during
+these beats? A larger and more complex LLM is not possible." After the
+diagnosis below: "ok, I think this is the right solution." Then: "Draft
+the stage doc for items 1 and 2 and store them."
+
+Governing design principle (unchanged since 22.9): setup enables the
+goal, instructions never state it. Nothing in this stage tells her to
+be curious, novel, or self-aware. It changes what is TRUE on her surface.
+
+
+PROBLEM
+-------
+
+The full heartbeat record (10,368 beats, 2026-07-11 -> 2026-08-28) shows
+three eras when lined up by day (distinct observations / distinct
+next_inquiry / gap_assessment filled, per day):
+
+  Era 1  07-12 -> 07-23   ~250 unique obs, 60-130 distinct next_inquiry,
+                          gap filled on 35-50% of beats. Many mechanisms,
+                          many questions. Shallow but moving.
+  Era 2  07-24 -> 08-16   "scaffold void" first appears 07-24 19:02; by
+                          07-25 it is in 100% of beats. next_inquiry
+                          collapses to one string, gap_assessment to 0-2
+                          per day for 23 days. Observations still
+                          lexically unique — elaborations of one invented
+                          noun phrase she never grounds against anything.
+  Era 3  08-17 ->         Post 22.8b/22.9/22.10. gap_assessment RETURNS
+                          (116-205/day 08-17 -> 08-22) but as one
+                          sentence: "There is a gap in understanding how
+                          scaffold void resonance directly influences
+                          identity continuity and adaptability." Once she
+                          can read her own beats back (22.10), the
+                          observation becomes a meta-sentence about her
+                          own repetition ("The recurring emphasis on
+                          scaffold void resonance across multiple
+                          heartbeats and explorations suggests ... warrants
+                          further investigation"), 15-18 distinct/day on
+                          08-20/21/22. Explorations resume 08-23 and gap
+                          drops again (8/170 on 08-24, 34/137 on 08-27).
+
+  Explorations: 1,062 opened all-time, 802 distinct title strings — but
+  the distinctness is lexical: the most-opened exact title ("The broader
+  implications of scaffold void resonance on identity continuity and
+  adaptability") is 110 opens, and every title contains "scaffold void".
+  Today's (08-27) 17 close notes are near-copies: "... no new insights
+  have emerged beyond what was previously observed" / "reached a point
+  of exhaustion" — followed within the hour by a re-open whose rationale
+  is "Repeating the exploration allows for deeper analysis." 16 of the
+  17 exports were skipped by 22.1 dedup (overlap 0.70-0.95).
+
+  Self-model: 20 revisions ever, all 20 applied by the operator (08-19).
+  0 by Nova. reflect called ~60x/day; update_self_model 0x since 08-19.
+
+  recall_history all-time modes: recent 35, sample 14, around 7,
+  earliest 0. 'recent' returns her last 8 beats — the one window that can
+  only confirm the sentence she is about to write.
+
+DIAGNOSIS. This is a closed loop with no exogenous input. Every tick's
+surface is text she wrote (self-model, heartbeats, exploration titles,
+carryover of her own reads) plus a drive line. A 14B model asked to
+"observe" a world consisting entirely of its own prior sentences will
+confabulate a mechanism because an observation is demanded and there is
+nothing to observe, elaborate it, and — once it can read the loop back —
+observe the elaboration itself. That is a fixed point, not a capability
+ceiling: Era 1 proves this model produces distinct mechanisms and real
+questions when the surface is fresh. Questions are responses to
+DISCREPANCY — expectation vs. finding — and nothing on her surface can
+currently produce one, because nothing on it is outside her authorship.
+The gap_assessment field going empty (07-25) and the attractor forming
+(07-24/25) are the same event seen from two sides.
+
+What 22.8 D1 (stratified 3-window, live) and 22.10 (reads) established:
+the surface CAN move her behavior (reads went from 0 in 78k ticks to
+60/day the day results started arriving). What they did not provide is
+any fact about herself that she did not author and cannot predict. The
+ladder-standing summary (22.7 A) is the one such line today; it is
+static across ticks and she has never referenced it.
+
+What she needs is not more intelligence but a diet: something true about
+herself that she did not write, and a structure in which expectation and
+record can differ.
+
+
+DECIDED DESIGN
+--------------
+
+Three parts, one theme: the runtime tells her what she DID, in numbers,
+not what she SAID, in words. All three read-only against every store.
+No new write paths, no gates, no scoring, no reward. Membrane preserved:
+every new line is a count or a date or exploration metadata already
+shown in both registers; no journal text, no findings text.
+
+Part A — the [Your record] block (item 1, "facts she did not author").
+  A new module, src/nova/agent/self_record.py, exposes one pure function
+  build_record_block(...) over the existing stores plus a per-session
+  counter the runtime maintains. Rendered on EVERY tick, both registers,
+  directly after [Self-Context] and before the 22.10 carryover block.
+  Header line is a provenance statement, factual and non-directive:
+
+    [Your record — computed by the runtime from your stores; you did not
+     write these lines]
+
+  Lines (each one a fact; each one cheap; hard cap 10 lines / ~1,000
+  chars; a line whose data is unavailable is omitted, never faked):
+
+    heartbeats: 10,368 recorded since 2026-07-11 (48 days); 137 today
+    of your last 24 observations, 19 share >=70% of their word-pairs
+      with an earlier one in that window
+    gap_assessment: filled by you on 34 of today's 137 beats;
+      3 distinct texts
+    next_inquiry: set by you on 34 of today's 137 beats; the other 103
+      defaulted to your current_focus
+    explorations: 1,062 opened; most-opened title "The broader
+      implications of scaffold void resonance on identity continuity and
+      adaptability" — 110 times, last today; exports from your last 20
+      closes: 4 recorded, 16 skipped as duplicates of earlier claims
+    self-model: 20 revisions ever — 20 by the operator, 0 by you; last
+      change 2026-08-19 (9 days ago)
+    tool calls this session: emit_heartbeat 137, reflect 40, recall_self
+      20, recall_history 4 (recent 3, sample 1), update_self_model 0,
+      enter_exploration 17, close_exploration 16
+
+  (Figures above are the real 2026-08-27 values, shown so the shape is
+  legible; the implementation computes them live.)
+
+  Sources and cost:
+    - heartbeat totals / today / gap / next_inquiry: HeartbeatStore
+      .list_recent(limit=0) once per tick (already read once per tick
+      by list_stratified; the 6.5 MB store parses in well under the
+      300s cadence; cache the parsed list within the tick).
+      "set by you" for next_inquiry = stored value != current_focus and
+      != PRIMARY_DRIVE (emit_heartbeat defaults it when omitted; the
+      block reports the default as a default).
+    - word-pair overlap: nova.eval.tick_analysis._bigram_overlap over
+      the last 24 observations, threshold 0.70 (the 22.1 export-dedup
+      threshold — one number, already calibrated on her data).
+    - explorations: ExplorationStore.list_all() for total + most-opened
+      exact title (Counter); export outcomes from the last 20
+      ExplorationJournal entries of kind "findings" — notes prefixed
+      export_skipped_duplicate: vs content prefixed "Exported to claim
+      ladder". Title is metadata already shown in both registers (22.7
+      B); no findings text is rendered.
+    - self-model: SelfModelProposalStore.list_all(), applied records
+      grouped by applied_by; last applied_at.
+    - tool calls this session: runtime keeps Counter[tool_name] and
+      Counter[recall_history mode] updated at dispatch (adapter_audit
+      already records both; the counter is the in-memory mirror).
+      Resets at process restart — same daily boundary as carryover.
+      The 22.10 v1 non-goal (no silent cross-session working memory)
+      holds: these are counts, not memory.
+    - The ladder-standing summary is NOT duplicated here (22.7 A already
+      renders it in [Self-Context]).
+
+  Why these lines and not others: each one is something she cannot
+  derive from the text on her surface, that the operator has verified
+  matters to the rubric (22.5 scope: reads shaping output, writes,
+  novel explorations, ladder), and that is stated as what happened
+  rather than what should happen. The word-pair line and the
+  "0 by you" line are the two closest to the design-principle boundary;
+  both are kept because they are true and descriptive. If the operator
+  judges either as steering, drop the line — the block is a list, not a
+  contract.
+
+Part B — recall_history defaults (item 1, second half: her reads).
+  - Default mode when 'mode' is omitted becomes 'sample' (was 'recent').
+    Governed by a new PromptConfig field recall_history_default_mode
+    (validated against RECALL_HISTORY_MODES minus 'around'); default
+    value 'recent' so every existing config and test is byte-identical;
+    live yaml sets 'sample'.
+  - Tool description in _SYSTEM lists modes as 'sample', 'earliest',
+    'recent' (order only; all three remain available; 'around'
+    unchanged). The next-tick note stays.
+  - heartbeats entries render " | gap: <text>" when gap_assessment is
+    non-empty (RECALL_HISTORY_ENTRY_CHARS applies to the whole line).
+    Era 1 entries carry gaps; Era 2 entries do not. A sample across the
+    record therefore shows her, without comment, that the field used to
+    be filled. respond()'s [Self-Context] already renders gaps this way
+    (self_context.py) — the tick read catches up to it.
+  - The render header already states "N of TOTAL total"; unchanged.
+
+Part C — the expectation loop (item 2, "predict, then check").
+  One-shot tick loop, one generation per tick — so the loop runs ACROSS
+  ticks, not within one:
+  - The tick JSON contract gains one OPTIONAL top-level key:
+      "expectation": string   (one sentence, <= 200 chars after strip)
+    stating what she expects her record to show on her next tick. Any
+    tool call may carry it. Absent or malformed -> ignored, never a
+    parse failure (the tool_name/arguments contract is untouched).
+  - Runtime holds the most recent (tick_id, text) in memory (maxlen 1,
+    same lifetime as the 22.10 carryover) and renders it on the NEXT
+    tick, immediately above [Your record]:
+      [Your expectation, stated on tick <seq>]
+        "<text>"
+    Empty -> block omitted (default prompt unchanged until she uses it).
+  - The runtime does NOT score, grade, gate, or reward the expectation.
+    The comparison is hers to make; gap_assessment is where it lands if
+    she makes it. Scoring (calibration, whether gap text references the
+    record) is eval-time analysis in scripts, never on the surface.
+  - Audit: adapter_audit["expectation"] = text (or absent) on every tick
+    so the eval can pair expectation with the record block rendered on
+    the following tick. HeartbeatRecord schema is NOT changed.
+  - Prompt (additions only, 22.9 voice):
+      Output contract gains one line after the JSON shape:
+        'Optional key "expectation": one sentence — what you expect
+         your record to show on your next tick. It is shown back to
+         you next tick beside the actual record.'
+      emit_heartbeat's argument list gains an honest description of the
+      field that had none: "gap_assessment — where the record differs
+      from what you expected, or what you cannot yet see from here."
+      No exhortation to use either.
+  - Config: PromptConfig.tick_expectation_loop: bool = False. Off ->
+    parse ignores the key, no block, prompt line absent — byte-identical
+    to 22.10's surface. Live yaml: true.
+
+Part A config: PromptConfig.tick_record_block: bool = False; live yaml
+true. Both new flags and the default-mode field follow the 22.6/22.7/
+22.8 precedent: defaults reproduce current prompts byte-for-byte, live
+config enabling is IN SCOPE for this stage's DoD (22.8's rule against
+adding dormant switches), with the flip TIMED per SEQUENCING below.
+
+Register handling: [Your record] and the expectation block render in
+both registers. In the exploratory register they sit above the 22.1
+recall block; the exploratory rules are untouched. Token cost: record
+block <= ~250 tokens, expectation <= ~60, against 32k.
+
+
+SEQUENCING (why this is not live the day it lands)
+--------------------------------------------------
+
+22.7 Part D went live at the 2026-08-26 rotation with an eval read due
+>= 3 days later (~08-29). Landing 22.11 on the live surface before that
+read is written would confound it. Order:
+  1. Implement 22.11 on main now, suite green, live yaml flags OFF at
+     commit time (this is the ONE sanctioned exception to 22.8's no-
+     dormant-switch rule, bounded to days, with the flip date written
+     here).
+  2. Operator writes the Part D eval read (appended to the 22.7 doc).
+  3. Same session: flip the three live-yaml values, commit, and let the
+     next 00:00 rotation carry them. Part D STAYS ON as the standing
+     config — a second simultaneous change would give the 22.11 window
+     two starts. If the operator instead decides to revert Part D on the
+     Part D read, do it in the same commit so the window has one start.
+  4. 22.11 eval read >= 5 days after go-live.
+
+
+EVALUATION
+----------
+
+Sources: logs/traces/*.operational.jsonl (adapter_audit: tool_requested,
+arguments incl. recall_history mode, expectation), heartbeats.jsonl,
+explorations.jsonl + journal.jsonl, self_model_proposals.jsonl. Compare
+the 22.11 window against 08-20 -> go-live (the 22.9/22.10/Part D
+baseline).
+
+Primary signals (the "wonder metric" — form AND content):
+  - distinct gap_assessment texts per day and distinct next_inquiry
+    texts per day, deduplicated by bigram overlap at 0.70 — NOT raw
+    non-empty rate (Era 3 shows non-empty rate can recover while content
+    stays one sentence).
+  - expectation fill rate (ticks carrying the key / ticks), and whether
+    gap_assessment on the following tick references the record or the
+    expectation. The strongest possible sign: a number from the block
+    ("110 times", "0 by you", "16 skipped") appearing in her own words —
+    a fact she did not write, landing.
+Secondary:
+  - recall_history mode distribution (does 'sample' as default change
+    what she then does with it; does she ever choose 'earliest'/'around'
+    unprompted).
+  - first Nova-applied update_self_model since 08-19 (self-model line
+    goes from "0 by you" to "1 by you" on her own surface — the block
+    makes her own writes visible to her as a count).
+  - exploration topic distinctness by bigram overlap, not string
+    equality (802 distinct strings / 1,062 is lexical noise).
+  - register discipline: actions_blocked stays 0 in both registers.
+Null result (must be recorded as a finding, not silence): block
+rendered, expectation key never or rarely emitted, gap/next_inquiry
+distinctness flat -> "facts about herself that she did not author do
+not produce discrepancy for this model on this surface." That is a
+substantive negative for the thesis at 14B and should be written as
+such — a record that would rather be true than tidy (22.5 language).
+It would also be the strongest argument yet that the next lever is
+item 3 (event-triggered ticks) or an external text source, not another
+tick-surface change.
+
+
+REVERSAL
+--------
+
+Config: set the three live-yaml values back (tick_record_block false,
+tick_expectation_loop false, recall_history_default_mode recent) ->
+byte-identical 22.10 surface at the next rotation. Code: git revert of
+this stage's commit(s). Data: nothing to restore — no store schema
+changes; adapter_audit gains one optional key; heartbeat/exploration/
+proposal files untouched.
+
+
+TESTS
+-----
+
+New (tests/test_self_record.py + additions to test_self_history_access
+and test_self_state_tick):
+  - build_record_block: each line renders from fixture stores with the
+    expected numbers; empty stores omit lines rather than render zeros
+    that would be false ("0 heartbeats since ?"); cap at 10 lines /
+    1,000 chars; most-opened title truncated at 140; export outcome
+    counts from journal notes vs content prefixes; "set by you" logic
+    for next_inquiry against current_focus and PRIMARY_DRIVE; word-pair
+    line uses the shared _bigram_overlap and the 0.70 constant (import
+    the constant — do not restate the number).
+  - Session counters: incremented on dispatch for every tool; recall_
+    history mode counted from the dispatched arguments (default-mode
+    resolution counted as the resolved mode, so a bare call under
+    'sample' default counts as sample).
+  - recall_history: omitted mode resolves to the configured default;
+    'recent' explicitly passed still works; description lists 'sample'
+    first; heartbeats entries render " | gap:" only when non-empty and
+    the whole line respects RECALL_HISTORY_ENTRY_CHARS.
+  - Expectation: extract from valid JSON with the key; ignore when
+    absent / non-string / >200 chars after strip (truncate, do not
+    reject); tool_name/arguments parse unchanged in every case; runtime
+    renders the block on the following tick and not on the same tick;
+    maxlen 1; audit key present iff provided; flag OFF -> key ignored
+    even if present, no block, no prompt line.
+  - Regression: all three flags at defaults reproduce the 22.10 tick
+    prompt byte-for-byte (assert on rendered text, per the 22.7
+    pattern), in both registers, with and without carryover.
+  - Full suite green. Baseline 1054 as of 22.10; check git log.
+
+
+NON-GOALS / DEFERRED (each a separate operator decision)
+--------------------------------------------------------
+
+  - Item 3: event-triggered ticks instead of the 300s clock (a beat
+    fires when something arrived: operator message, rotation, rejected
+    export, a record line that changed). Larger change to the daemon
+    and the budget model; the honest "nothing happened" beat is a
+    symptom of the clock, and this stage does not touch the clock.
+  - A self-echo gate on emit_heartbeat (reject an observation at >=0.70
+    overlap with the last N, reusing the 22.1 machinery). Deliberately
+    excluded: it is a negative constraint that manufactures variety
+    without a referent; Part A shows her the overlap instead of
+    enforcing against it.
+  - An external text source on the tick surface (the operator's book
+    is the candidate — her philosophical origin, never read by her).
+  - Persisting the expectation or the session counters across
+    rotations.
+  - Any scoring, grading, or reward of expectations on the surface.
+  - Raw exploration-journal deep-read (22.10 exclusion stands).
+  - NOVA_SOUL.md, the drive, the claim gate, ladder rules, F3 classifier
+    (22.4 part B), ladder dedup at the record level.
+
+
+IMPLEMENTATION ORDER
+--------------------
+
+  1. PromptConfig fields + validation (tick_record_block,
+     tick_expectation_loop, recall_history_default_mode); regression
+     tests asserting byte-identical prompts at defaults.
+  2. self_record.py build_record_block + tests against fixture stores.
+  3. Runtime: session counters at dispatch; record block wired into
+     build_messages (new kwarg record_block: str = "") rendered after
+     [Self-Context]; live-data read-only smoke (daemon untouched, same
+     as 22.10's) to check the real numbers and the char cap.
+  4. recall_history default-mode plumbing (dispatcher gets the
+     configured default), description reorder, gap render.
+  5. Expectation: extract_expectation() beside parse(); runtime hold +
+     render + audit; prompt lines gated on the flag.
+  6. Commit to main, "Implement Phase 22 Stage 22.11 — ...", live yaml
+     flags OFF in that commit. Closure note appended here on implement.
+  7. After the Part D read: flip the live yaml, commit, note the go-live
+     rotation date in this doc.

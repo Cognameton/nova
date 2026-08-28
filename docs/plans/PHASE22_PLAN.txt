@@ -531,6 +531,20 @@ REFERENCE
     heartbeats / exploration metadata / exported findings, membrane-
     safe in both registers; raw journal deep-read deliberately
     excluded. Read-only, in-memory carryover, git-revert reversal.
+  Stage 22.11 doc (DRAFT 2026-08-27, not implemented; go-live sequenced
+    after the 22.7 Part D eval read) — the record she did not write:
+    docs/plans/PHASE22_STAGE22_11_RECORD_AND_EXPECTATION.txt
+    Diagnosis from the full heartbeat record (three eras; the fixed
+    point is a closed loop with no exogenous input, not a capability
+    ceiling). Part A: a runtime-computed [Your record] block of facts
+    about what she DID (counts, dates, overlap, export outcomes,
+    "0 self-model revisions by you") on every tick. Part B:
+    recall_history default mode 'sample', gap text rendered in
+    heartbeat entries. Part C: optional "expectation" key on the tick
+    JSON, shown back beside the record on the next tick — predict, then
+    check; never scored on the surface. All config-gated, defaults
+    byte-identical; item 3 (event-triggered ticks), self-echo gate, and
+    an external text source deliberately deferred.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/
