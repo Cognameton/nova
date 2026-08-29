@@ -8,3 +8,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+
+# Review prompts may quote private self-state; keep them local.
+docs/reviews/*handoff*

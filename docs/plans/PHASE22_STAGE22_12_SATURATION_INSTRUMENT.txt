@@ -16,6 +16,14 @@ window, no arm is readable — which is exactly how the collapse below ran
 unnoticed for six days.
 
 
+Findings recorded by this stage: F12 (total exploration-topic lock, three
+eras) and F13 (all-time averaging hid it from the instrument). Both are
+registered with full evidence in docs/RESEARCH_LOG.md, which from 2026-08-29
+is this project's findings index and timeline. Reproduce the numbers with
+scripts/analyze_saturation.py. Independent review of both findings and of
+this stage's code: docs/reviews/2026-08-29-codex-review.md.
+
+
 WHY (the finding this stage exists to prevent recurring)
 --------------------------------------------------------
 
