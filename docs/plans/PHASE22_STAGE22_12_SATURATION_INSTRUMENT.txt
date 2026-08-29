@@ -83,8 +83,10 @@ Design decisions worth keeping:
   2. topic_repeat_streak is computed over the WHOLE record, not the window,
      so a lock longer than 7 days reports its true length (125, not 7).
   3. Records with an unparseable opened_at are excluded from the window but
-     still counted by the streak, which is order-based. Bad timestamps must
-     not silently shrink the alarm.
+     still counted by the streak, which walks the store in file order and
+     never sorts. Bad timestamps must not silently shrink the alarm, so the
+     count of such records is reported as topics_undated.
+     (As first written this was WRONG — see CORRECTIONS below, item 0.)
 
 
 VERIFICATION
@@ -141,3 +143,95 @@ Prompt-framing as a lever is spent: Part D (22.7 part D, activated 08-25,
 eval read 08-29) was a clean null — no erosion, no benefit — and 22.7's own
 "30 of your last 30 explorations pursued closely similar topics" warning has
 never moved it either.
+
+
+============================================================================
+CORRECTIONS — independent review, 2026-08-29
+============================================================================
+
+An independent read-only review (Codex; handoff at
+~/Dev/ai-lab/CODEX_REVIEW_HANDOFF_2026-08-29.md) checked both this stage and
+the diagnosis that motivated it. It changed nothing; repo hashes verified
+unchanged before and after. Its corrections, recorded here because several
+of them contradict statements made above and in the memory record.
+
+0. DEFECT IN THIS STAGE, NOW FIXED. topic_repeat_streak was documented as
+   "order-based" but was in fact timestamp-sorted, with unparseable stamps
+   sorting LAST — so a single malformed record at the tail could decide
+   newest_topic and silently truncate a real lock to 1. Now genuinely
+   order-based: it walks the store in file order and never sorts. That is
+   also the runtime's own notion of recency (ExplorationStore.list_recent is
+   _read_all()[-limit:], and no code path removes records). Added
+   topics_undated so excluded records are never silent. Two regression tests;
+   suite 1063 -> 1065. Live numbers unchanged (streak 125, undated 0) — the
+   defect was latent on valid data, not active.
+
+1. PROMPT PATH: VERIFIED, BUT THE REGISTER WAS NAMED WRONG. The recent-topic
+   history block IS in the real topic-selection prompt — but that is the
+   ASSERTION-register prompt, the one whose menu contains enter_exploration
+   (runtime.py:1028 -> _exploration_history_block at runtime.py:893;
+   register chosen at runtime.py:982). self_state_tick.py:207 explicitly
+   SUPPRESSES the block once already in the exploratory register. Earlier
+   text calling it "the exploratory-register tick prompt" is wrong.
+
+2. NO BYTE-IDENTICAL PROMPT STRING. Topics render as record.topic[:90]
+   (runtime.py:924); the locked topic is 91 chars and appears truncated.
+   Semantic priming survives; any byte-identical claim does not.
+
+3. THE BLOCK CANNOT EXPLAIN THE FIRST LOCKED TOPIC. Before 2026-08-23 the
+   five displayed records were varied Aug-17 phrasings. The block becomes a
+   plausible PERSISTENCE mechanism only after the fifth repeat. What sustains
+   the lock and what started it were conflated.
+
+4. CAUSAL ATTRIBUTION TO 22.9/22.10 IS UNSUPPORTED. The topic-history
+   mechanism itself landed 2026-07-23 (2b767a7), immediately before the
+   Jul-24 semantic-lock era. 22.9 changed three things at once: prompt
+   wording, removal of /no_think, and application of 20 accumulated
+   self-model proposals (current focus, active question) which reach every
+   tick via SelfContextEngine.prefetch (runtime.py:1003); 22.9's own plan
+   says 22.9-vs-22.10 attribution is impossible. The first exact topic was
+   selected at assertion tick 100 immediately after a recall_self at tick 99
+   whose result carried the newly applied focus plus five repetitive
+   heartbeats (logs/traces/nova-live-20260823.operational.jsonl:99-100).
+   The Aug-23 discontinuity is real; its cause is NOT identified.
+
+5. "PART D WAS A CLEAN NULL" IS OVERSTATED. It is a short, uncontrolled null
+   on the outcomes measured. "No drive erosion" is especially weak: the
+   metric counts equality of a fixed motive_priority field
+   (tick_analysis.py:103), not substantive persistence.
+
+6. PROTOCOL. A 3-day single-arm read is a legitimate OPERATIONAL SCREEN —
+   highly autocorrelated ticks make a total lock obvious fast — but it is not
+   evidence of mechanism: no control, no randomization, no washout, and
+   persistent state crosses day boundaries. Stronger: pre-register a
+   prevention outcome separately from a mechanism outcome; randomize or
+   counterbalance prompt variants BY DAILY SESSION, recording assignment,
+   rather than comparing one chronological block against an earlier era;
+   ABAB reversal only for reversible low-risk prompt arms; and evaluate the
+   novelty gate as a safety/control property ("duplicates refused") rather
+   than waiting three days on a behavioral read.
+
+7. THE SYNTHIA PARALLEL IS OVER-READ AT n=4. The structure is real
+   (synthia/heartbeat.py:240,262 inject the prior three thoughts) but the
+   same prompt also injects self-state, skills, recent conversation and
+   active wants (heartbeat.py:232), so the thought tail is not an isolated
+   explanation. Cold start, sparse conversation context and idle-only
+   prompting are adequate alternatives. Hypothesis-generating, not
+   corroboration, and not a cross-architecture law.
+
+8. REVISED ARM FRAMING. Arms 1 and 2 remain worth running but must be judged
+   as "does this break PERSISTENCE?", not "does this establish root cause."
+   If the goal is simply to stop duplicate work, Arm 3 (deterministic
+   novelty gate) is the only assured control and arguably goes first.
+
+STILL OPEN after this correction pass (not done):
+  - exploration_staleness_days / wall-clock-anchored newest-exploration
+    timestamp, plus a "no explorations in N days" alarm. Newest-record
+    anchoring is right for reproducible history and wrong as the sole
+    live-health signal: a fully stopped stream still reports its last active
+    window as though current (the F11 dark-days case).
+  - A SEMANTIC concentration companion to exact-string diversity, which
+    catches era 3 but would have missed era 2 entirely. Reuse the existing
+    cluster_texts helper (agent/self_context.py:10), built precisely to group
+    reworded exploration topics; keep exact-string as the companion, not the
+    replacement.

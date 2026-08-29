@@ -873,6 +873,46 @@ class TopicSaturationTests(unittest.TestCase):
         self.assertEqual(report.topics_opened_recent, 2)
         self.assertEqual(report.topics_distinct_recent, 2)
 
+    def test_malformed_late_record_cannot_hijack_the_streak(self):
+        # Regression, found by independent review 2026-08-29: the streak was
+        # timestamp-sorted with unparseable stamps sorting LAST, so one bad
+        # record at the end of the store decided newest_topic and truncated
+        # a real lock to 1. The streak walks store order and never sorts.
+        rows = [
+            _exploration("locked topic", f"2026-08-{10 + i:02d}T04:00:00+00:00")
+            for i in range(11)
+        ]
+        clean = self._analyzer(list(rows)).analyze()
+        self.assertEqual(clean.topic_repeat_streak, 11)
+
+        rows.append({
+            "exploration_id": "bad1",
+            "topic": "an unrelated straggler",
+            "opened_at": "not-a-timestamp",
+        })
+        with_junk = self._analyzer(rows).analyze()
+        # The straggler is genuinely last in the store, so it genuinely breaks
+        # the run — but it must not be able to do so from a sort position it
+        # never had. Put it mid-store and the lock must still read 11.
+        self.assertEqual(with_junk.topic_repeat_streak, 1)
+        self.assertEqual(with_junk.topics_undated, 1)
+
+        mid = rows[:5] + [rows[-1]] + rows[5:-1]
+        report = self._analyzer(mid).analyze()
+        self.assertEqual(report.topic_repeat_streak, 6)
+        self.assertEqual(report.topics_undated, 1)
+        self.assertIn("topic_repeat_streak", " ".join(clean.reasons))
+
+    def test_undated_records_are_reported_not_silently_dropped(self):
+        rows = [
+            _exploration("real", "2026-08-28T04:00:00+00:00"),
+            {"exploration_id": "u1", "topic": "undated one", "opened_at": ""},
+            {"exploration_id": "u2", "topic": "undated two", "opened_at": "garbage"},
+        ]
+        report = self._analyzer(rows).analyze()
+        self.assertEqual(report.topics_undated, 2)
+        self.assertEqual(report.topics_opened_recent, 1)
+
     def test_unparseable_and_empty_records_do_not_crash(self):
         rows = [
             {"exploration_id": "x1", "topic": "", "opened_at": "2026-08-28T04:00:00+00:00"},

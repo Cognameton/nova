@@ -237,6 +237,7 @@ class TickAnalysisReport:
     topic_diversity_recent: float = 0.0     # distinct/opened; 1.0 healthy, ->0 collapsed
     topic_top_share_recent: float = 0.0     # share of the single commonest topic; 1.0 = total lock
     topic_repeat_streak: int = 0            # trailing run of identical consecutive topics
+    topics_undated: int = 0                 # records with an unusable opened_at (excluded from the window)
     observation_echo_rate_recent: float = 0.0
 
     # Session coverage
@@ -515,7 +516,9 @@ class TickHistoryAnalyzer:
         The window is anchored on the newest opened_at rather than on
         wall-clock time: the same data must produce the same report whenever
         it is run. Records with an unparseable opened_at are ignored for the
-        window but still counted by the streak, which is order-based.
+        window but still counted by the streak, which walks the store in file
+        order and never sorts. ``undated`` reports how many such records
+        exist so their exclusion from the window is never silent.
         """
         topics: list[tuple[datetime | None, str]] = []
         for record in explorations:
@@ -525,24 +528,34 @@ class TickHistoryAnalyzer:
 
         result: dict[str, Any] = {
             "opened": 0, "distinct": 0, "diversity": 0.0,
-            "top_share": 0.0, "streak": 0,
+            "top_share": 0.0, "streak": 0, "undated": 0,
         }
+        result["undated"] = sum(1 for ts, _ in topics if ts is None)
         if not topics:
             return result
 
-        # Trailing streak: how many of the most recent explorations, in
-        # timestamp order, share one topic. This is the headline number —
-        # it read 125 on the day the collapse was diagnosed.
-        ordered = sorted(topics, key=lambda item: (item[0] is None, item[0] or datetime.min.replace(tzinfo=timezone.utc)))
-        newest_topic = ordered[-1][1]
+        # Trailing streak: how many of the most recent explorations share one
+        # topic. This is the headline number — it read 125 on the day the
+        # collapse was diagnosed.
+        #
+        # Deliberately computed in STORE ORDER, not by sorting on opened_at.
+        # The exploration store is append/rewrite-in-place JSONL from which no
+        # code path removes records, and the runtime itself treats file order
+        # as recency (ExplorationStore.list_recent is _read_all()[-limit:]).
+        # Sorting here previously placed records with an unparseable opened_at
+        # last, which let one malformed record decide newest_topic and silently
+        # truncate the streak. Order-based is both what the docs claimed and
+        # what is actually robust. (Found by independent review, 2026-08-29.)
+        newest_topic = topics[-1][1]
         streak = 0
-        for _, topic in reversed(ordered):
+        for _, topic in reversed(topics):
             if topic != newest_topic:
                 break
             streak += 1
         result["streak"] = streak
 
-        stamped = [(ts, topic) for ts, topic in ordered if ts is not None]
+        stamped = [(ts, topic) for ts, topic in topics if ts is not None]
+        stamped.sort(key=lambda item: item[0])
         if not stamped:
             return result
         anchor = stamped[-1][0]
@@ -712,6 +725,7 @@ class TickHistoryAnalyzer:
         report.topic_diversity_recent = saturation["diversity"]
         report.topic_top_share_recent = saturation["top_share"]
         report.topic_repeat_streak = saturation["streak"]
+        report.topics_undated = saturation["undated"]
         report.observation_echo_rate_recent = self.compute_recent_echo_rate(heartbeats)
 
         # -- Quality flags --
