@@ -11,13 +11,23 @@ a TickAnalysisReport. Key signals:
 Echo rate is the primary early-warning signal for the inward loop getting
 stuck in a phrase rut rather than deepening inquiry. A rate above 0.7
 means consecutive heartbeats share 70%+ of their bigram sequences.
+
+Saturation metrics (2026-08-29) are WINDOWED on purpose. The all-time
+averages above hid a total topic collapse for six days: exploration_
+novelty_rate read 0.645 while the current era was running 125 consecutive
+explorations under one byte-identical topic, because the healthy July era
+dominated the mean. Any metric meant to catch a collapse must be scoped to
+a recent window and must include a worst-case statistic (top-topic share,
+repeat streak) alongside the average.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +38,10 @@ from nova.types import SCHEMA_VERSION
 # ---------------------------------------------------------------------------
 # Bigram helpers (consistent with observer.py approach)
 # ---------------------------------------------------------------------------
+
+# Saturation window. Seven days matches the live daemon's daily session
+# rotation and the 3-day arm-read cadence with room to spare.
+SATURATION_WINDOW_DAYS = 7
 
 _STOPWORDS: frozenset[str] = frozenset({
     "a", "an", "the", "is", "it", "in", "on", "at", "to", "of", "and",
@@ -135,6 +149,20 @@ class TickSummary:
         return asdict(self)
 
 
+def _parse_ts(value: Any) -> datetime | None:
+    """Parse an ISO timestamp defensively; None when unusable."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def _tick_summary_from_record(record: dict) -> TickSummary:
     tick = record.get("tick", {}) if "tick" in record else record
     audit = tick.get("adapter_audit") or {}
@@ -199,6 +227,17 @@ class TickAnalysisReport:
     exploration_thread_coherence: float = 0.0    # avg overlap with topic
     explorations_closed_by_budget: int = 0
     explorations_closed_by_nova: int = 0
+
+    # Saturation (2026-08-29) — windowed, so a collapse cannot be averaged
+    # away by a healthy earlier era. Anchored on the newest record rather
+    # than wall-clock so historical data reads reproducibly.
+    saturation_window_days: int = SATURATION_WINDOW_DAYS
+    topics_opened_recent: int = 0
+    topics_distinct_recent: int = 0
+    topic_diversity_recent: float = 0.0     # distinct/opened; 1.0 healthy, ->0 collapsed
+    topic_top_share_recent: float = 0.0     # share of the single commonest topic; 1.0 = total lock
+    topic_repeat_streak: int = 0            # trailing run of identical consecutive topics
+    observation_echo_rate_recent: float = 0.0
 
     # Session coverage
     sessions_with_ticks: list[str] = field(default_factory=list)
@@ -461,6 +500,84 @@ class TickHistoryAnalyzer:
         ]
         return round(1.0 - (sum(overlaps) / len(overlaps)), 3)
 
+    def compute_topic_saturation(
+        self,
+        explorations: list[dict],
+        window_days: int = SATURATION_WINDOW_DAYS,
+    ) -> dict[str, Any]:
+        """Windowed topic-diversity metrics for the exploration stream.
+
+        Returns opened/distinct/diversity/top-share over the last
+        ``window_days``, plus the trailing repeat streak (which is computed
+        over the whole record, not the window, so a lock longer than the
+        window still reports its true length).
+
+        The window is anchored on the newest opened_at rather than on
+        wall-clock time: the same data must produce the same report whenever
+        it is run. Records with an unparseable opened_at are ignored for the
+        window but still counted by the streak, which is order-based.
+        """
+        topics: list[tuple[datetime | None, str]] = []
+        for record in explorations:
+            topic = str(record.get("topic", "")).strip()
+            if topic:
+                topics.append((_parse_ts(record.get("opened_at")), topic))
+
+        result: dict[str, Any] = {
+            "opened": 0, "distinct": 0, "diversity": 0.0,
+            "top_share": 0.0, "streak": 0,
+        }
+        if not topics:
+            return result
+
+        # Trailing streak: how many of the most recent explorations, in
+        # timestamp order, share one topic. This is the headline number —
+        # it read 125 on the day the collapse was diagnosed.
+        ordered = sorted(topics, key=lambda item: (item[0] is None, item[0] or datetime.min.replace(tzinfo=timezone.utc)))
+        newest_topic = ordered[-1][1]
+        streak = 0
+        for _, topic in reversed(ordered):
+            if topic != newest_topic:
+                break
+            streak += 1
+        result["streak"] = streak
+
+        stamped = [(ts, topic) for ts, topic in ordered if ts is not None]
+        if not stamped:
+            return result
+        anchor = stamped[-1][0]
+        cutoff = anchor - timedelta(days=max(1, int(window_days)))
+        recent = [topic for ts, topic in stamped if ts >= cutoff]
+        if not recent:
+            return result
+
+        counts = Counter(recent)
+        result["opened"] = len(recent)
+        result["distinct"] = len(counts)
+        result["diversity"] = round(len(counts) / len(recent), 3)
+        result["top_share"] = round(counts.most_common(1)[0][1] / len(recent), 3)
+        return result
+
+    def compute_recent_echo_rate(
+        self,
+        heartbeats: list[dict],
+        window_days: int = SATURATION_WINDOW_DAYS,
+    ) -> float:
+        """compute_echo_rate restricted to the last ``window_days``.
+
+        Same anchoring rule as compute_topic_saturation.
+        """
+        stamped = [
+            (_parse_ts(hb.get("timestamp")), hb)
+            for hb in heartbeats
+        ]
+        stamped = [(ts, hb) for ts, hb in stamped if ts is not None]
+        if not stamped:
+            return 0.0
+        stamped.sort(key=lambda item: item[0])
+        cutoff = stamped[-1][0] - timedelta(days=max(1, int(window_days)))
+        return self.compute_echo_rate([hb for ts, hb in stamped if ts >= cutoff])
+
     def compute_exploration_thread_coherence(
         self,
         journal_entries: list[dict],
@@ -588,6 +705,15 @@ class TickHistoryAnalyzer:
             1 for r in explorations if r.get("close_reason") == "nova_close"
         )
 
+        # -- Saturation (2026-08-29) --
+        saturation = self.compute_topic_saturation(explorations)
+        report.topics_opened_recent = saturation["opened"]
+        report.topics_distinct_recent = saturation["distinct"]
+        report.topic_diversity_recent = saturation["diversity"]
+        report.topic_top_share_recent = saturation["top_share"]
+        report.topic_repeat_streak = saturation["streak"]
+        report.observation_echo_rate_recent = self.compute_recent_echo_rate(heartbeats)
+
         # -- Quality flags --
         reasons: list[str] = []
         if report.total_ticks == 0:
@@ -607,6 +733,29 @@ class TickHistoryAnalyzer:
             reasons.append(
                 f"low_gap_assessment_rate={report.gap_assessment_rate:.3f} "
                 "(gap_assessment empty in majority of heartbeats)"
+            )
+        # Saturation flags. These are deliberately loud: the all-time
+        # averages above stayed in their normal range through a total
+        # collapse, so the windowed statistics are the ones that must shout.
+        if report.topics_opened_recent >= 5 and report.topic_diversity_recent <= 0.34:
+            reasons.append(
+                f"topic_collapse=diversity {report.topic_diversity_recent:.3f} "
+                f"over {report.topics_opened_recent} explorations in "
+                f"{report.saturation_window_days}d "
+                f"(top topic holds {report.topic_top_share_recent:.0%})"
+            )
+        if report.topic_repeat_streak >= 10:
+            reasons.append(
+                f"topic_repeat_streak={report.topic_repeat_streak} "
+                "consecutive explorations on one identical topic"
+            )
+        if (
+            report.observation_echo_rate_recent >= 0.7
+            and report.observation_echo_rate < 0.7
+        ):
+            reasons.append(
+                f"recent_echo_rate={report.observation_echo_rate_recent:.3f} "
+                f"(all-time {report.observation_echo_rate:.3f} is masking it)"
             )
         tool_count = len(dist)
         if report.completed_ticks >= 5 and tool_count < 2:

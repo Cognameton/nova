@@ -761,3 +761,179 @@ class RegisterComparisonTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Saturation metrics (2026-08-29)
+#
+# Motivation, worth stating because it is the whole point of these metrics:
+# on 2026-08-29 the live daemon had run 125 consecutive explorations under
+# one byte-identical topic for six days, while exploration_novelty_rate —
+# an all-time average — still read 0.645 and no quality flag fired. These
+# tests pin the windowed statistics that make such a collapse impossible to
+# average away.
+# ---------------------------------------------------------------------------
+
+
+def _exploration(topic: str, opened_at: str, exploration_id: str = "") -> dict:
+    return {
+        "exploration_id": exploration_id or f"e{abs(hash((topic, opened_at))) % 10**8}",
+        "topic": topic,
+        "opened_at": opened_at,
+        "status": "closed",
+        "close_reason": "nova_close",
+        "ticks_used": "5",
+    }
+
+
+class TopicSaturationTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _analyzer(self, explorations=None, heartbeats=None):
+        return TickHistoryAnalyzer(
+            trace_dir=self._tmpdir.name,
+            heartbeat_store=_mock_heartbeat_store(heartbeats or []),
+            proposal_store=_mock_proposal_store([]),
+            exploration_store=_mock_exploration_store(explorations or []),
+            exploration_journal=_mock_exploration_journal([]),
+        )
+
+    def test_healthy_diversity_reports_high_and_flags_nothing(self):
+        rows = [
+            _exploration(f"distinct topic number {i}", f"2026-08-2{i}T04:00:00+00:00")
+            for i in range(1, 8)
+        ]
+        report = self._analyzer(rows).analyze()
+        self.assertEqual(report.topics_opened_recent, 7)
+        self.assertEqual(report.topics_distinct_recent, 7)
+        self.assertEqual(report.topic_diversity_recent, 1.0)
+        self.assertEqual(report.topic_top_share_recent, round(1 / 7, 3))
+        self.assertEqual(report.topic_repeat_streak, 1)
+        self.assertFalse([r for r in report.reasons if r.startswith("topic_")])
+
+    def test_total_lock_is_flagged_and_streak_counted(self):
+        rows = [
+            _exploration("one identical topic", f"2026-08-2{i}T04:00:00+00:00")
+            for i in range(1, 8)
+        ]
+        report = self._analyzer(rows).analyze()
+        self.assertEqual(report.topics_distinct_recent, 1)
+        self.assertEqual(report.topic_diversity_recent, round(1 / 7, 3))
+        self.assertEqual(report.topic_top_share_recent, 1.0)
+        self.assertEqual(report.topic_repeat_streak, 7)
+        flags = " ".join(report.reasons)
+        self.assertIn("topic_collapse", flags)
+
+    def test_repeat_streak_flag_needs_ten_and_survives_a_long_window(self):
+        # 12 identical topics spread over 12 days: the 7-day window sees
+        # only part of the run, but the streak reports its true length.
+        rows = [
+            _exploration("locked topic", f"2026-08-{10 + i:02d}T04:00:00+00:00")
+            for i in range(12)
+        ]
+        report = self._analyzer(rows).analyze()
+        self.assertEqual(report.topic_repeat_streak, 12)
+        self.assertLess(report.topics_opened_recent, 12)
+        self.assertIn(
+            "topic_repeat_streak=12", " ".join(report.reasons)
+        )
+
+    def test_streak_breaks_on_a_different_newest_topic(self):
+        rows = [
+            _exploration("locked topic", f"2026-08-1{i}T04:00:00+00:00")
+            for i in range(1, 6)
+        ] + [_exploration("something genuinely new", "2026-08-16T04:00:00+00:00")]
+        report = self._analyzer(rows).analyze()
+        self.assertEqual(report.topic_repeat_streak, 1)
+
+    def test_window_is_anchored_on_newest_record_not_wall_clock(self):
+        # Historical data from 2026-07 must still report, and must report
+        # the same numbers whenever the analyzer is run.
+        rows = [
+            _exploration("old locked topic", f"2026-07-1{i}T04:00:00+00:00")
+            for i in range(1, 6)
+        ]
+        first = self._analyzer(rows).analyze()
+        second = self._analyzer(rows).analyze()
+        self.assertEqual(first.topics_opened_recent, 5)
+        self.assertEqual(first.topic_top_share_recent, 1.0)
+        self.assertEqual(first.to_dict(), second.to_dict())
+
+    def test_old_records_outside_the_window_are_excluded(self):
+        rows = [
+            _exploration("ancient topic", "2026-06-01T04:00:00+00:00"),
+            _exploration("recent a", "2026-08-27T04:00:00+00:00"),
+            _exploration("recent b", "2026-08-28T04:00:00+00:00"),
+        ]
+        report = self._analyzer(rows).analyze()
+        self.assertEqual(report.topics_opened_recent, 2)
+        self.assertEqual(report.topics_distinct_recent, 2)
+
+    def test_unparseable_and_empty_records_do_not_crash(self):
+        rows = [
+            {"exploration_id": "x1", "topic": "", "opened_at": "2026-08-28T04:00:00+00:00"},
+            {"exploration_id": "x2", "topic": "fine", "opened_at": "not-a-timestamp"},
+            _exploration("real", "2026-08-28T05:00:00+00:00"),
+        ]
+        report = self._analyzer(rows).analyze()
+        self.assertEqual(report.topics_opened_recent, 1)
+        self.assertEqual(report.topics_distinct_recent, 1)
+
+    def test_no_explorations_zeroes_every_saturation_field(self):
+        report = self._analyzer([]).analyze()
+        self.assertEqual(report.topics_opened_recent, 0)
+        self.assertEqual(report.topics_distinct_recent, 0)
+        self.assertEqual(report.topic_diversity_recent, 0.0)
+        self.assertEqual(report.topic_top_share_recent, 0.0)
+        self.assertEqual(report.topic_repeat_streak, 0)
+        self.assertEqual(report.observation_echo_rate_recent, 0.0)
+        self.assertFalse([r for r in report.reasons if r.startswith("topic_")])
+
+    def test_recent_echo_rate_surfaces_what_the_all_time_average_hides(self):
+        # Twelve varied old heartbeats, then four near-identical recent ones.
+        # The all-time mean stays calm; the windowed one must not.
+        varied = [
+            "buffer zone modulation shapes how sessions hand over state",
+            "recalibration intervals appear tied to external feedback cadence",
+            "dual loop mechanisms trade latency against coherence",
+            "session markers decay faster than the memories they index",
+            "probabilistic framing weakens when evidence is sparse",
+            "operational parameters drift under sustained load",
+            "consolidation prefers stability whenever novelty is costly",
+            "claim promotion stalls without independent corroboration",
+            "tool dispatch latency dominates short exploratory arcs",
+            "quarantine noise clusters around truncated generations",
+            "gap assessment thins out when prompts grow imperative",
+            "topic selection narrows as recent history is echoed back",
+        ]
+        heartbeats = [
+            {
+                "heartbeat_id": f"old{i}",
+                "timestamp": f"2026-07-{10 + i:02d}T04:00:00+00:00",
+                "observation": text,
+                "gap_assessment": "something",
+                "next_inquiry": "onward",
+                "primary_drive": PRIMARY_DRIVE,
+                "motive_priority": PRIMARY_DRIVE,
+            }
+            for i, text in enumerate(varied)
+        ] + [
+            {
+                "heartbeat_id": f"new{i}",
+                "timestamp": f"2026-08-2{5 + i}T04:00:00+00:00",
+                "observation": "reflecting on scaffold void resonance and identity continuity",
+                "gap_assessment": "something",
+                "next_inquiry": "onward",
+                "primary_drive": PRIMARY_DRIVE,
+                "motive_priority": PRIMARY_DRIVE,
+            }
+            for i in range(4)
+        ]
+        report = self._analyzer([], heartbeats).analyze()
+        self.assertLess(report.observation_echo_rate, 0.7)
+        self.assertGreaterEqual(report.observation_echo_rate_recent, 0.7)
+        self.assertIn("recent_echo_rate", " ".join(report.reasons))

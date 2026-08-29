@@ -1,0 +1,143 @@
+PHASE 22 — STAGE 22.12: SATURATION INSTRUMENT (windowed topic + echo metrics)
+============================================================================
+
+Status: implemented 2026-08-29 (suite 1054 -> 1063)
+Date: 2026-08-29
+Phase plan: docs/plans/PHASE22_PLAN.txt
+Prior stages: 22.9 prompt consolidation, 22.10 self-history access
+Next: 22.11 (record block + expectation loop) — drafted, NOT implemented
+
+ORDERING NOTE
+-------------
+
+This stage lands BEFORE 22.11 on purpose. 22.11 and every arm after it is
+judged on whether topic diversity recovers. Until that is measurable in a
+window, no arm is readable — which is exactly how the collapse below ran
+unnoticed for six days.
+
+
+WHY (the finding this stage exists to prevent recurring)
+--------------------------------------------------------
+
+On 2026-08-29 an audit of the exploration record (1,077 explorations,
+2026-07-12 -> 2026-08-29) found three eras:
+
+  Era 1  Jul 12-23   healthy      10-19/day, distinct == opened (100% unique)
+  Era 2  Jul 24-Aug 17  semantic lock   ~35/day, 24-37 distinct — surface
+                                   rewordings of one theme ("scaffold void
+                                   resonance", entering Jul 24)
+  Era 3  Aug 23-now  TOTAL lock   distinct == 1 EVERY day; 125 consecutive
+                                   explorations on one byte-identical topic,
+                                   zero escapes, first seen 2026-08-23T13:25:53
+
+Throughout era 3, --tick-analysis reported exploration_novelty_rate 0.645
+and raised no flag, because that metric is an ALL-TIME average and the
+healthy July era dominated the mean. observation_echo_rate likewise read
+0.333 all-time while the recent window was running 0.83 — above the 0.7
+threshold this file has described as "the primary early-warning signal"
+since Phase 20. The instrument had the right idea and the wrong scope.
+
+The 6 dark days (Aug 18-22) are already explained by finding F11 in the
+22.9 doc: 22.8b went live Aug 17 and Nova stopped entering explorations
+entirely. She resumed on Aug 23 already fully collapsed.
+
+Lesson, generalised: a metric meant to catch a COLLAPSE must be scoped to
+a recent window and must carry a worst-case statistic beside the average.
+An average over a system's whole life cannot detect that the system has
+stopped.
+
+
+WHAT LANDED
+-----------
+
+src/nova/eval/tick_analysis.py, deterministic and stdlib-only like the
+rest of the module (no embedder, no model, no GPU — this must be runnable
+while the GPUs are busy, which is when it is most needed):
+
+  SATURATION_WINDOW_DAYS = 7   (daily rotation cadence, 3-day arm reads)
+
+  TickAnalysisReport gains:
+    saturation_window_days       int
+    topics_opened_recent         int    explorations opened in the window
+    topics_distinct_recent       int    distinct topic strings among them
+    topic_diversity_recent       float  distinct/opened; 1.0 healthy, ->0 collapsed
+    topic_top_share_recent       float  share held by the commonest topic; 1.0 = total lock
+    topic_repeat_streak          int    trailing run of identical consecutive topics
+    observation_echo_rate_recent float  compute_echo_rate over the window only
+
+  TickHistoryAnalyzer gains:
+    compute_topic_saturation(explorations, window_days=7)
+    compute_recent_echo_rate(heartbeats, window_days=7)
+
+  Three new quality flags in report.reasons:
+    topic_collapse=...        diversity <= 0.34 over >= 5 explorations
+    topic_repeat_streak=N     N >= 10
+    recent_echo_rate=...      windowed >= 0.7 while all-time < 0.7
+                              (states explicitly that the average is masking it)
+
+Design decisions worth keeping:
+
+  1. The window is anchored on the NEWEST record, not wall-clock. The same
+     data must produce the same report whenever it is run, and historical
+     data dirs must still report rather than reading empty.
+  2. topic_repeat_streak is computed over the WHOLE record, not the window,
+     so a lock longer than 7 days reports its true length (125, not 7).
+  3. Records with an unparseable opened_at are excluded from the window but
+     still counted by the streak, which is order-based. Bad timestamps must
+     not silently shrink the alarm.
+
+
+VERIFICATION
+------------
+
+  .venv/bin/python -m pytest -q            -> 1063 passed (baseline 1054)
+  9 new tests in tests/test_tick_analysis.py::TopicSaturationTests covering
+  healthy diversity, total lock, streak >= 10 across a longer-than-window
+  run, streak breaking, wall-clock independence, out-of-window exclusion,
+  malformed records, the all-zero case, and the masked-echo case.
+
+Run against the live data dir the day it was written:
+
+    topics_opened_recent          125
+    topics_distinct_recent        1
+    topic_diversity_recent        0.008
+    topic_top_share_recent        1.0
+    topic_repeat_streak           125
+    observation_echo_rate         0.333   <- all-time, calm
+    observation_echo_rate_recent  0.830   <- windowed, alarming
+    exploration_novelty_rate      0.645   <- all-time, still misleading
+
+    reasons:
+      topic_collapse=diversity 0.008 over 125 explorations in 7d (top topic holds 100%)
+      topic_repeat_streak=125 consecutive explorations on one identical topic
+      recent_echo_rate=0.830 (all-time 0.333 is masking it)
+
+Note the second channel: the echo finding is independent confirmation from
+the heartbeat stream, not just the exploration stream. Both are saturated.
+
+
+NOT IN THIS STAGE
+-----------------
+
+No behavior change of any kind. This stage only measures. The arms it
+exists to make readable, in the order they should run (one at a time,
+pre-registered metric = topic_diversity_recent + topic_repeat_streak,
+3-day read, the cadence Part D established):
+
+  Arm 1  recall_history default mode: recent -> sample. Cuts the within-day
+         amplifier (22.10 Part A carryover feeds her own last 8 observations
+         back into her next 2 tick prompts; she calls it 14/16x on
+         heartbeats/recent).
+  Arm 2  Stop rendering recent topic STRINGS in the topic-selection prompt;
+         render only the constraint. Tests the priming hypothesis — F11
+         established the tick loop is instruction-dominated, so showing an
+         instruction-dominated loop the string it must avoid may be what
+         pins it.
+  Arm 3  Deterministic novelty gate: refuse in code to open an exploration
+         whose topic is within threshold of the last N. Do not ask the model
+         to be novel; refuse the duplicate. The embedder already exists.
+
+Prompt-framing as a lever is spent: Part D (22.7 part D, activated 08-25,
+eval read 08-29) was a clean null — no erosion, no benefit — and 22.7's own
+"30 of your last 30 explorations pursued closely similar topics" warning has
+never moved it either.
