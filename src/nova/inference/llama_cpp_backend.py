@@ -119,6 +119,7 @@ class LlamaCppBackend:
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_p=request.top_p,
+                repeat_penalty=request.repeat_penalty,
                 stop=stop,
             )
             mode = "native_template_completion"
@@ -128,6 +129,7 @@ class LlamaCppBackend:
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_p=request.top_p,
+                repeat_penalty=request.repeat_penalty,
                 stop=request.stop,
             )
             mode = "chat_completion"
@@ -137,6 +139,7 @@ class LlamaCppBackend:
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_p=request.top_p,
+                repeat_penalty=request.repeat_penalty,
                 stop=request.stop,
             )
             mode = "completion"

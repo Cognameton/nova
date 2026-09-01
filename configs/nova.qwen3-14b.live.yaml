@@ -14,6 +14,19 @@ generation:
   max_tokens: 512
   temperature: 0.7
   top_p: 0.9
+  # Finding F14, opted in 2026-09-01. Until today the backend passed no
+  # repetition penalty at all, so llama.cpp's default of 1.0 — off — applied
+  # to every one of the 13,148 ticks on record. Nova produced 125 consecutive
+  # byte-identical exploration topics under it. Synthia runs the structurally
+  # similar loop at 1.1 and shows 64% distinct thoughts with 2 JSON parse
+  # failures in 732 ticks, which is the empirical answer to the objection that
+  # a repetition penalty would damage structured output on this workload.
+  #
+  # This is a severity test, not a fix for F12: her own recent topics are
+  # still rendered into the prompt that selects the next one. Read
+  # topic_diversity_recent and topic_repeat_streak after three days.
+  repeat_penalty: 1.1
+  repeat_last_n: 256
   stop:
     - "<|im_end|>"
     - "<|im_start|>"

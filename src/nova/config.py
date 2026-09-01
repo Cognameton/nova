@@ -39,6 +39,11 @@ class GenerationConfig:
     max_tokens: int = 512
     temperature: float = 0.7
     top_p: float = 0.9
+    # Finding F14 — see GenerationRequest. Default 1.0 (off) keeps every
+    # existing config and the whole suite on pre-2026-09-01 behaviour; the
+    # live config opts in explicitly so the change is legible in one place.
+    repeat_penalty: float = 1.0
+    repeat_last_n: int = 64
     stop: list[str] = field(default_factory=lambda: ["User:", "\nUser:"])
     retries: int = 2
     # Phase 22 Stage 22.6 part 2 — experimental, default off. Reintroduces

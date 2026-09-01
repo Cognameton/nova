@@ -1012,6 +1012,14 @@ class GenerationRequest:
     retries_allowed: int = 0
     messages: list[dict[str, str]] | None = None
     enable_thinking: bool = False
+    # Finding F14 (2026-09-01): until this field existed the backend passed
+    # only max_tokens/temperature/top_p/stop, so llama.cpp's default of 1.0 —
+    # repetition penalty OFF — applied to all 13,148 ticks Nova had run. She
+    # produced 125 consecutive byte-identical exploration topics. Synthia,
+    # which passes 1.1, showed 64% distinct thoughts over the same kind of
+    # loop. 1.0 preserves the historical default; configs opt in.
+    repeat_penalty: float = 1.0
+    repeat_last_n: int = 64
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -4373,6 +4373,8 @@ class NovaRuntime:
             ),
             temperature=self.config.generation.temperature,
             top_p=self.config.generation.top_p,
+            repeat_penalty=self.config.generation.repeat_penalty,
+            repeat_last_n=self.config.generation.repeat_last_n,
             stop=list(self.config.generation.stop),
             seed=None,
             retries_allowed=self.config.generation.retries,

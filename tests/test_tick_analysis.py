@@ -977,3 +977,55 @@ class TopicSaturationTests(unittest.TestCase):
         self.assertLess(report.observation_echo_rate, 0.7)
         self.assertGreaterEqual(report.observation_echo_rate_recent, 0.7)
         self.assertIn("recent_echo_rate", " ".join(report.reasons))
+
+
+class SamplerPassthroughTests(unittest.TestCase):
+    """Finding F14 — the sampler surface must actually reach llama.cpp.
+
+    The failure this guards against left no trace at any layer we looked at:
+    the config had no field, the request had no field, and the backend simply
+    never mentioned it, so llama.cpp applied its own default of 1.0 (off) in
+    silence for 13,148 ticks.
+    """
+
+    def test_generation_request_carries_repetition_settings(self):
+        from nova.types import GenerationRequest
+
+        req = GenerationRequest(
+            model_id="m", prompt="p", max_tokens=8, temperature=0.7, top_p=0.9
+        )
+        # Historical default preserved: existing configs must not change.
+        self.assertEqual(req.repeat_penalty, 1.0)
+        self.assertEqual(req.repeat_last_n, 64)
+        self.assertIn("repeat_penalty", req.to_dict())
+
+    def test_config_default_is_off_so_the_suite_is_unchanged(self):
+        from nova.config import GenerationConfig
+
+        self.assertEqual(GenerationConfig().repeat_penalty, 1.0)
+
+    def test_live_config_opts_in(self):
+        import re
+        from pathlib import Path
+
+        text = (
+            Path(__file__).resolve().parent.parent
+            / "configs" / "nova.qwen3-14b.live.yaml"
+        ).read_text()
+        m = re.search(r"^\s*repeat_penalty:\s*([\d.]+)", text, re.MULTILINE)
+        self.assertIsNotNone(m, "live config must opt in to F14")
+        self.assertGreater(float(m.group(1)), 1.0)
+
+    def test_backend_forwards_repeat_penalty_on_every_call_path(self):
+        # Three generate() paths exist; a penalty that reaches only one of
+        # them is the same silent failure in a smaller costume.
+        from pathlib import Path
+
+        src = (
+            Path(__file__).resolve().parent.parent
+            / "src" / "nova" / "inference" / "llama_cpp_backend.py"
+        ).read_text()
+        body = src[src.index("def generate("):]
+        self.assertEqual(
+            body.count("repeat_penalty=request.repeat_penalty"), 3, body[:400]
+        )
