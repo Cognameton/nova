@@ -40,6 +40,7 @@ Nova 2.0 equivalent, named for its role rather than a paper.
 | F11 | the tick loop is instruction-dominated | `PHASE22_STAGE22_9` | recorded |
 | **F12** | **total exploration-topic lock (three-era collapse)** | **this file + `PHASE22_STAGE22_12`** | **OBSERVED; cause NOT identified** |
 | **F13** | **all-time averaging hid the collapse from the instrument** | **this file + `PHASE22_STAGE22_12`** | **CONFIRMED and FIXED** |
+| **F14** | **Nova has run her entire life with no repetition penalty** | **this file** | **CONFIRMED, untested as a cause** |
 
 ---
 
@@ -128,6 +129,51 @@ exact-string diversity, which catches era 3 but would have missed era 2
 entirely; reuse `cluster_texts` (`agent/self_context.py:10`).
 
 ---
+
+## F14 — No repetition penalty has ever been applied
+
+**Confirmed 2026-09-01, by reading the code rather than the behaviour.**
+
+`llama_cpp_backend.generate()` passes exactly four sampler parameters to
+llama.cpp: `max_tokens`, `temperature`, `top_p`, `stop`. `GenerationRequest`
+has no field for anything else. Under llama-cpp-python 0.3.20 the omitted
+default is:
+
+```
+repeat_penalty = 1.0        # 1.0 means OFF
+presence_penalty = 0.0
+frequency_penalty = 0.0
+```
+
+So every tick Nova has ever run — 13,148 of them — was sampled with
+repetition penalty disabled.
+
+Synthia, by contrast, passes `repeat_penalty=1.1, repeat_last_n=256`
+(`model_runner.py:756`). The two systems' saturation severities differ
+accordingly:
+
+| | repetition penalty | outcome |
+|---|---|---|
+| Nova | **none (1.0)** | 125 consecutive **byte-identical** topics; diversity 0.008 |
+| Synthia | 1.1 / last 256 | 467 of 732 distinct (64%); narrowing, not locked |
+
+**This does not replace the F12 mechanism** — her own recent topics are still
+rendered into the prompt that selects the next one, and that is still the
+loop. But byte-identical repetition is the precise thing a repetition penalty
+exists to prevent, and we have been treating severity as evidence about
+architecture while a standard sampler control sat switched off. F14 is a
+candidate contributing cause to the *severity* difference, not to the lock's
+existence, and it has never been tested.
+
+Empirical reassurance on the obvious objection — that repetition penalty
+damages structured JSON output: Synthia emits JSON every tick at penalty 1.1
+and logged 2 parse failures in 732 ticks. On this workload 1.1 is safe.
+
+**Test:** set it, restart, read `topic_diversity_recent` and
+`topic_repeat_streak` after three days. One config value; no architecture
+touched. If diversity moves, severity was partly a sampler artefact. If it
+does not, F12's mechanism carries the whole weight and that is worth knowing
+before spending anything larger.
 
 ## Timeline
 
