@@ -159,7 +159,7 @@ SELF_STATE_TOOL_NAMES: frozenset[str] = frozenset({
 # true total so a window reads as a window, not as everything.
 RECALL_HISTORY_COUNT = 8
 RECALL_HISTORY_ENTRY_CHARS = 140
-RECALL_HISTORY_SOURCES = ("heartbeats", "explorations", "findings")
+RECALL_HISTORY_SOURCES = ("heartbeats", "explorations", "findings", "outcomes")
 RECALL_HISTORY_MODES = ("recent", "earliest", "sample", "around")
 
 
@@ -315,6 +315,22 @@ class SelfStateToolDispatcher:
         which passed governed export's assertion-register gate at creation.
         Raw journal deep-read is deliberately absent (un-exported
         in-register material must not reach assertion ticks).
+
+        `outcomes` (2026-09-01) is different in kind from the other three,
+        and that is the point. Heartbeats, explorations and findings are all
+        Nova's own generated text handed back to her; a self-report derived
+        from them could have been inferred from her prior outputs, which is
+        exactly the case Lindsey (2026) excludes from introspective
+        awareness under the internality criterion, and exactly the loop that
+        produced the topic lock of finding F12. `outcomes` reports what
+        *happened* to her proposals — applied, or held with a reason — which
+        is a fact about the world rather than a rewording of her own prose.
+        It is the only recall source she can be surprised by.
+
+        Membrane-safe by the same construction as the rest: proposals are
+        her own update_self_model calls plus the deterministic disposition
+        of each, with the proposed value rendered through the same per-entry
+        character cap. No operator commentary, no un-exported material.
         """
         source = (source or "").strip().lower()
         around = (around or "").strip()
@@ -348,6 +364,22 @@ class SelfStateToolDispatcher:
                     )
                     for r in records
                 ]
+        elif source == "outcomes":
+            if self._proposal_store is not None:
+                records = self._proposal_store.list_all()
+                entries = [
+                    (
+                        r.timestamp or "",
+                        f"{'APPLIED' if r.applied else 'HELD'} "
+                        f"{r.proposed_field}"
+                        f"{' by ' + r.applied_by if r.applied and r.applied_by else ''}"
+                        f"{' — ' + r.note if r.note else ''}"
+                        f" :: {r.proposed_value}",
+                    )
+                    for r in records
+                ]
+            else:
+                note = "outcomes are not available on this surface"
         else:  # findings
             if self._claim_ladder_store is not None:
                 records = self._claim_ladder_store.list_active()

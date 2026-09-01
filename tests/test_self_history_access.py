@@ -298,3 +298,115 @@ class TickPromptCarryoverTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# 2026-09-01 — the `outcomes` source.
+#
+# The other three recall sources return Nova's own generated text back to her.
+# A self-report derived from them could have been inferred from her prior
+# outputs, which is the case Lindsey (2026) excludes from introspective
+# awareness under the internality criterion, and the loop that produced the
+# topic lock of finding F12. `outcomes` reports the disposition of her
+# proposals — a fact about what happened, not a rewording of what she said.
+# ---------------------------------------------------------------------------
+
+
+def _proposal_store(tmp: Path, specs):
+    """specs: list of (field, value, applied, note)."""
+    from nova.agent.heartbeat import SelfModelProposalStore
+    from nova.types import SelfModelProposal
+
+    store = SelfModelProposalStore(tmp)
+    for i, (field, value, applied, note) in enumerate(specs):
+        store.append(
+            SelfModelProposal(
+                proposal_id=f"p{i}",
+                timestamp=f"2026-08-{(i % 28) + 1:02d}T00:00:00+00:00",
+                session_id="s1",
+                proposed_field=field,
+                proposed_value=value,
+                rationale="because",
+                applied=applied,
+                applied_by="nova" if applied else "",
+                note=note,
+            )
+        )
+    return store
+
+
+class RecallHistoryOutcomesTests(unittest.TestCase):
+    def test_outcomes_is_an_accepted_source(self):
+        with TemporaryDirectory() as tmp:
+            store = _proposal_store(Path(tmp), [("current_focus", "a", True, "")])
+            d = _dispatcher(Path(tmp), proposal_store=store)
+            result = d.recall_history(source="outcomes")
+            self.assertNotIn("error", result)
+            self.assertEqual(result["source"], "outcomes")
+            self.assertEqual(result["total"], 1)
+
+    def test_applied_and_held_are_distinguishable(self):
+        with TemporaryDirectory() as tmp:
+            store = _proposal_store(Path(tmp), [
+                ("current_focus", "landed", True, ""),
+                ("identity_claim", "waiting", False, "rate_limited"),
+            ])
+            d = _dispatcher(Path(tmp), proposal_store=store)
+            texts = [e["text"] for e in d.recall_history(source="outcomes")["entries"]]
+            joined = " | ".join(texts)
+            self.assertIn("APPLIED", joined)
+            self.assertIn("HELD", joined)
+            # the reason a proposal was held must survive into the window —
+            # being told "held" without why is not information she can use
+            self.assertIn("rate_limited", joined)
+
+    def test_outcomes_respects_the_same_window_and_char_caps(self):
+        with TemporaryDirectory() as tmp:
+            store = _proposal_store(
+                Path(tmp),
+                [("current_focus", "x" * 400, i % 2 == 0, "") for i in range(20)],
+            )
+            d = _dispatcher(Path(tmp), proposal_store=store)
+            result = d.recall_history(source="outcomes")
+            self.assertEqual(result["total"], 20)
+            self.assertEqual(len(result["entries"]), RECALL_HISTORY_COUNT)
+            for entry in result["entries"]:
+                self.assertLessEqual(len(entry["text"]), RECALL_HISTORY_ENTRY_CHARS)
+
+    def test_modes_apply_to_outcomes_like_any_other_source(self):
+        with TemporaryDirectory() as tmp:
+            store = _proposal_store(
+                Path(tmp), [(f"field_{i}", i, True, "") for i in range(20)]
+            )
+            d = _dispatcher(Path(tmp), proposal_store=store)
+            recent = d.recall_history(source="outcomes", mode="recent")["entries"]
+            earliest = d.recall_history(source="outcomes", mode="earliest")["entries"]
+            self.assertNotEqual(recent, earliest)
+            self.assertIn("field_19", recent[-1]["text"])
+            self.assertIn("field_0", earliest[0]["text"])
+
+    def test_absent_store_degrades_gracefully_like_findings(self):
+        with TemporaryDirectory() as tmp:
+            d = _dispatcher(Path(tmp))
+            result = d.recall_history(source="outcomes")
+            self.assertNotIn("error", result)
+            self.assertEqual(result["total"], 0)
+            self.assertEqual(result["entries"], [])
+
+    def test_outcomes_is_a_read_tool_and_carries_over(self):
+        # It must reach her next tick like the other reads, or it is invisible.
+        self.assertIn("recall_history", READ_TOOL_NAMES)
+        rendered = render_read_tool_result(
+            "recall_history",
+            {
+                "source": "outcomes",
+                "mode": "recent",
+                "total": 2,
+                "entries": [
+                    {"timestamp": "2026-08-01T00:00:00", "text": "APPLIED current_focus :: a"},
+                    {"timestamp": "2026-08-02T00:00:00", "text": "HELD identity_claim — rate_limited :: b"},
+                ],
+            },
+        )
+        self.assertIn("outcomes", rendered)
+        self.assertLessEqual(len(rendered), RENDER_READ_RESULT_MAX_CHARS)

@@ -122,13 +122,16 @@ def default_tool_registry() -> ToolRegistry:
             name="recall_history",
             description=(
                 "Stage 22.10: bounded read-only window over Nova's own record "
-                "(heartbeats, exploration metadata, exported findings)."
+                "(heartbeats, exploration metadata, exported findings) and, "
+                "since 2026-09-01, 'outcomes' — the disposition of her own "
+                "self-model proposals, which is the one source that is not her "
+                "own text handed back to her."
             ),
             permission=TOOL_ALLOWED,
             destructive=False,
             internal=True,
             input_schema={
-                "source": "one of: heartbeats, explorations, findings",
+                "source": "one of: heartbeats, explorations, findings, outcomes",
                 "mode": "optional: recent, earliest, sample",
                 "around": "optional: YYYY-MM-DD",
             },
