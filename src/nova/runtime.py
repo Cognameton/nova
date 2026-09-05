@@ -1068,6 +1068,16 @@ class NovaRuntime:
                 text for _tick, text in self._tick_read_results
             ),
         )
+        # 2026-09-05: measure the tick prompt before generating it. n_ctx has
+        # been 32768 since Phase 22 while the rendered surface is roughly an
+        # order of magnitude smaller, and nothing recorded the difference —
+        # budget_snapshot.tokens_used has always been 0. The unused window is
+        # not free: KV cache and llama.cpp's compute buffers both scale with
+        # n_ctx, and at 32768 they measured 6.25 GiB of a 24 GiB budget. Set
+        # n_ctx against this number, never against an estimate; an n_ctx below
+        # the true ceiling truncates prompts and looks exactly like a model
+        # regression.
+        prompt_tokens = self._measure_prompt_tokens(messages)
         generation = self.backend.generate(
             self._generation_request(prompt="", messages=messages)
         )
@@ -1095,6 +1105,9 @@ class NovaRuntime:
         adapter_audit: dict = {
             "tool_requested": tool_request.tool_name if tool_request else None,
             "raw_output_length": len(generation.raw_text or ""),
+            "prompt_tokens": prompt_tokens,
+            "prompt_chars": sum(len(m.get("content", "")) for m in messages),
+            "n_ctx": int(getattr(self.config.model, "n_ctx", 0) or 0),
             "parse_ok": tool_request is not None,
             "tool_executed": False,
             "register": register,
@@ -4352,6 +4365,21 @@ class NovaRuntime:
             self.session_id = self.session_store.start_session()
         if self.presence_state is None or self.presence_state.session_id != self.session_id:
             self.presence_state = self.presence_store.load(session_id=self.session_id)
+
+    def _measure_prompt_tokens(self, messages: list[dict[str, str]]) -> int:
+        """Token count of the rendered tick prompt, or 0 if unavailable.
+
+        Best-effort and never fatal: a counter that can break a tick is worse
+        than no counter. Backends are only required to provide tokenize() as
+        an estimate, so treat the result as one.
+        """
+        try:
+            text = "\n".join(str(m.get("content", "")) for m in messages)
+            return int(self.backend.tokenize(text))
+        except Exception:
+            # runtime.py has no module logger; a silent 0 is the right
+            # failure here — the analyzer treats 0 as "not measured".
+            return 0
 
     def _generation_request(
         self,

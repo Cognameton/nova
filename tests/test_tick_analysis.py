@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from nova.agent.motive import PRIMARY_DRIVE
@@ -1115,3 +1116,49 @@ class TopicSemanticsTests(unittest.TestCase):
         joined = " ".join(report.reasons)
         self.assertIn("topic_collapse", joined)
         self.assertIn("semantic_collapse", joined)
+
+
+class PromptTokenMeasurementTests(unittest.TestCase):
+    """2026-09-05 — the tick prompt must be measured, not estimated.
+
+    n_ctx has been 32768 since Phase 22 while nothing recorded how much of it
+    was used; budget_snapshot.tokens_used was always 0. The unused window is
+    not free — KV cache and compute buffers both scale with n_ctx, and at
+    32768 they measured 6.25 GiB of a 24 GiB budget.
+    """
+
+    def _runtime_stub(self, tokenize):
+        from nova.runtime import NovaRuntime
+
+        stub = NovaRuntime.__new__(NovaRuntime)
+        stub.backend = SimpleNamespace(tokenize=tokenize)
+        return stub
+
+    def test_counts_tokens_across_all_messages(self):
+        seen = {}
+
+        def tokenize(text):
+            seen["text"] = text
+            return len(text.split())
+
+        stub = self._runtime_stub(tokenize)
+        n = stub._measure_prompt_tokens(
+            [{"role": "system", "content": "a b c"}, {"role": "user", "content": "d e"}]
+        )
+        self.assertEqual(n, 5)
+        self.assertIn("a b c", seen["text"])
+        self.assertIn("d e", seen["text"])
+
+    def test_a_broken_tokenizer_never_breaks_a_tick(self):
+        # A measurement that can kill a tick is worse than no measurement.
+        def boom(_text):
+            raise RuntimeError("backend has no tokenizer")
+
+        stub = self._runtime_stub(boom)
+        self.assertEqual(stub._measure_prompt_tokens([{"content": "x"}]), 0)
+
+    def test_handles_missing_and_non_string_content(self):
+        stub = self._runtime_stub(lambda t: len(t))
+        self.assertIsInstance(
+            stub._measure_prompt_tokens([{"role": "user"}, {"content": None}]), int
+        )
