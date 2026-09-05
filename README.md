@@ -60,7 +60,7 @@ Non-goals:
 
 ## Current Status
 
-As of 2026-08-19:
+As of 2026-09-05:
 
 - Branch: `main`
 - Phase 21 (Exploratory Register) CLOSED WITH DEVIATIONS 2026-07-10
@@ -115,7 +115,7 @@ As of 2026-08-19:
     full live-record analysis and the Phase 23 QLoRA go/no-go, scored
     against a positive architecture-use rubric recorded in
     `PHASE22_PLAN.txt`.
-- Full suite: 1054 tests passing (check `git log` for the current
+- Full suite: 1083 tests passing (check `git log` for the current
   count — this will have moved).
 
 Recommended current model baseline:
