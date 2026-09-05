@@ -238,6 +238,13 @@ class TickAnalysisReport:
     topic_top_share_recent: float = 0.0     # share of the single commonest topic; 1.0 = total lock
     topic_repeat_streak: int = 0            # trailing run of identical consecutive topics
     topics_undated: int = 0                 # records with an unusable opened_at (excluded from the window)
+    # Semantic companion to the exact-string measures above (finding F15,
+    # 2026-09-05). Those moved 5x while the phenomenon barely moved: a
+    # repetition penalty broke byte-identical repetition, so diversity read
+    # 0.008 -> 0.042 while every topic remained the same subject. Exact
+    # strings cannot see era 2 (lexical variation over one theme). These can.
+    topic_dominant_cluster_share_recent: float = 0.0   # 1.0 = every topic one theme
+    topic_cluster_top_words_recent: list[str] = field(default_factory=list)
     observation_echo_rate_recent: float = 0.0
 
     # Session coverage
@@ -571,6 +578,50 @@ class TickHistoryAnalyzer:
         result["top_share"] = round(counts.most_common(1)[0][1] / len(recent), 3)
         return result
 
+    def compute_topic_semantics(
+        self,
+        explorations: list[dict],
+        window_days: int = SATURATION_WINDOW_DAYS,
+    ) -> dict[str, Any]:
+        """Theme concentration over the window, not string identity.
+
+        Reuses cluster_texts (agent/self_context.py), the single-link
+        content-word clustering built in Stage 22.7 precisely because
+        exploration topics are short and reworded. Its threshold was
+        calibrated against real live topics, so this measure inherits that
+        calibration rather than inventing a second one.
+
+        dominant_share is the headline: the fraction of the window's topics
+        falling in the largest cluster. It reads ~1.0 for both era 2
+        (many strings, one subject) and era 3 (one string), which is the
+        whole point — the exact-string metrics distinguish those two, and
+        this one refuses to, because behaviourally they are the same failure.
+        """
+        from nova.agent.self_context import cluster_texts
+
+        stamped: list[tuple[datetime, str]] = []
+        for record in explorations:
+            topic = str(record.get("topic", "")).strip()
+            ts = _parse_ts(record.get("opened_at"))
+            if topic and ts is not None:
+                stamped.append((ts, topic))
+        # NB cluster_texts returns "total" = len(texts), NOT a cluster count.
+        # Exposing it as a cluster count would have been quietly wrong, so
+        # only the two measures it genuinely provides are reported.
+        result: dict[str, Any] = {"dominant_share": 0.0, "top_words": []}
+        if not stamped:
+            return result
+        stamped.sort(key=lambda item: item[0])
+        cutoff = stamped[-1][0] - timedelta(days=max(1, int(window_days)))
+        topics = [t for ts, t in stamped if ts >= cutoff]
+        if not topics:
+            return result
+        clustered = cluster_texts(topics)
+        largest = int(clustered.get("largest_cluster_size", 0) or 0)
+        result["dominant_share"] = round(largest / len(topics), 3)
+        result["top_words"] = list(clustered.get("top_words", []) or [])
+        return result
+
     def compute_recent_echo_rate(
         self,
         heartbeats: list[dict],
@@ -726,6 +777,9 @@ class TickHistoryAnalyzer:
         report.topic_top_share_recent = saturation["top_share"]
         report.topic_repeat_streak = saturation["streak"]
         report.topics_undated = saturation["undated"]
+        semantics = self.compute_topic_semantics(explorations)
+        report.topic_dominant_cluster_share_recent = semantics["dominant_share"]
+        report.topic_cluster_top_words_recent = semantics["top_words"]
         report.observation_echo_rate_recent = self.compute_recent_echo_rate(heartbeats)
 
         # -- Quality flags --
@@ -757,6 +811,22 @@ class TickHistoryAnalyzer:
                 f"over {report.topics_opened_recent} explorations in "
                 f"{report.saturation_window_days}d "
                 f"(top topic holds {report.topic_top_share_recent:.0%})"
+            )
+        # Calibrated on this project's own three eras: healthy July reads
+        # 0.833, while the semantic lock of era 2, the byte lock of era 3 and
+        # the post-F14 window all read 1.000. 0.95 separates them; a lower
+        # threshold would flag the healthy era too, because single-link
+        # clustering on short reworded topics chains readily by design.
+        if (
+            report.topics_opened_recent >= 5
+            and report.topic_dominant_cluster_share_recent >= 0.95
+        ):
+            reasons.append(
+                f"semantic_collapse=dominant cluster holds "
+                f"{report.topic_dominant_cluster_share_recent:.0%} of "
+                f"{report.topics_opened_recent} explorations"
+                + (f" (theme: {', '.join(report.topic_cluster_top_words_recent)})"
+                   if report.topic_cluster_top_words_recent else "")
             )
         if report.topic_repeat_streak >= 10:
             reasons.append(

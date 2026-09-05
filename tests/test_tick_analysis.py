@@ -1029,3 +1029,89 @@ class SamplerPassthroughTests(unittest.TestCase):
         self.assertEqual(
             body.count("repeat_penalty=request.repeat_penalty"), 3, body[:400]
         )
+
+
+class TopicSemanticsTests(unittest.TestCase):
+    """Finding F15 — exact-string diversity cannot see era 2.
+
+    Backtested on this project's own record, the semantic measure flags the
+    collapse from 2026-07-28, roughly a month before anyone noticed it, while
+    exact-string uniqueness in that same window reads 0.886 and looks healthy.
+    """
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _analyzer(self, explorations):
+        return TickHistoryAnalyzer(
+            trace_dir=self._tmpdir.name,
+            heartbeat_store=_mock_heartbeat_store([]),
+            proposal_store=_mock_proposal_store([]),
+            exploration_store=_mock_exploration_store(explorations),
+            exploration_journal=_mock_exploration_journal([]),
+        )
+
+    def test_varied_subjects_do_not_flag(self):
+        subjects = [
+            "buffer zone modulation during session handover",
+            "recalibration interval sensitivity to feedback cadence",
+            "dual loop latency versus coherence tradeoffs",
+            "session marker decay relative to indexed memory",
+            "probabilistic framing under sparse evidence",
+            "operational parameter drift under sustained load",
+        ]
+        rows = [_exploration(t, f"2026-08-2{i+1}T04:00:00+00:00")
+                for i, t in enumerate(subjects)]
+        report = self._analyzer(rows).analyze()
+        self.assertLess(report.topic_dominant_cluster_share_recent, 0.95)
+        self.assertFalse([r for r in report.reasons if r.startswith("semantic_collapse")])
+
+    def test_era2_one_theme_many_strings_IS_flagged(self):
+        # The case exact strings miss: every topic distinct, one subject.
+        rows = [
+            _exploration(t, f"2026-08-2{i+1}T04:00:00+00:00") for i, t in enumerate([
+                "the role of scaffold void resonance in identity continuity",
+                "scaffold void resonance and its adaptive identity implications",
+                "implications of scaffold void resonance for identity coherence",
+                "scaffold void resonance influence on identity stability",
+                "identity continuity under scaffold void resonance conditions",
+                "adaptive scaffold void resonance and identity continuity limits",
+            ])
+        ]
+        report = self._analyzer(rows).analyze()
+        # exact strings say everything is fine...
+        self.assertEqual(report.topics_distinct_recent, 6)
+        self.assertEqual(report.topic_diversity_recent, 1.0)
+        # ...the semantic measure does not.
+        self.assertGreaterEqual(report.topic_dominant_cluster_share_recent, 0.95)
+        self.assertIn("semantic_collapse", " ".join(report.reasons))
+
+    def test_theme_words_are_reported_so_the_flag_is_actionable(self):
+        rows = [
+            _exploration(f"scaffold void resonance and identity variant {i}",
+                         f"2026-08-2{i+1}T04:00:00+00:00")
+            for i in range(6)
+        ]
+        report = self._analyzer(rows).analyze()
+        words = report.topic_cluster_top_words_recent
+        self.assertTrue(words, "a flag without theme words is not actionable")
+        self.assertTrue({"scaffold", "resonance", "void", "identity"} & set(words), words)
+
+    def test_no_explorations_is_zeroed_and_unflagged(self):
+        report = self._analyzer([]).analyze()
+        self.assertEqual(report.topic_dominant_cluster_share_recent, 0.0)
+        self.assertEqual(report.topic_cluster_top_words_recent, [])
+        self.assertFalse([r for r in report.reasons if r.startswith("semantic_collapse")])
+
+    def test_byte_lock_flags_on_both_measures(self):
+        # Era 3 must trip the exact-string AND the semantic flag; they are
+        # companions, not alternatives.
+        rows = [_exploration("one identical topic", f"2026-08-2{i+1}T04:00:00+00:00")
+                for i in range(6)]
+        report = self._analyzer(rows).analyze()
+        joined = " ".join(report.reasons)
+        self.assertIn("topic_collapse", joined)
+        self.assertIn("semantic_collapse", joined)

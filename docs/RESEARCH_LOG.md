@@ -125,9 +125,7 @@ same lesson twice: **the measuring instrument needs its own adversarial pass.**
 **Still open (O2):** `exploration_staleness_days` and a wall-clock "no
 explorations in N days" alarm — newest-record anchoring still reports a fully
 stopped stream's last active window as though current, which is exactly the
-F11 dark-days case. **(O3):** a semantic concentration companion to
-exact-string diversity, which catches era 3 but would have missed era 2
-entirely; reuse `cluster_texts` (`agent/self_context.py:10`).
+F11 dark-days case. ~~**(O3):** a semantic concentration companion~~ **DONE 2026-09-05** — see below.
 
 ---
 
@@ -230,6 +228,47 @@ all on `open_tensions`, 26 applied / 5 pending all-time. Nothing in the F14
 change touches the write path, and she has not read `outcomes`. A repetition
 penalty pushing her off a saturated `emit_heartbeat` rut and into other tools is
 plausible but unproven. **Open question O4.**
+
+## O3 closed — semantic concentration, and what the backtest showed
+
+**Implemented 2026-09-05.** `topic_dominant_cluster_share_recent` and
+`topic_cluster_top_words_recent`, computed over the same window as the
+exact-string measures, reusing `cluster_texts` (`agent/self_context.py`) so the
+threshold calibration from Stage 22.7 is inherited rather than reinvented.
+Flag: dominant share ≥ 0.95 over ≥ 5 explorations.
+
+**The backtest is the finding.** Rolling 7-day windows across the whole record:
+
+| window ending | n | exact-uniq | **dominant** | flag |
+|---|---|---|---|---|
+| 2026-07-12 | 15 | 1.000 | 0.267 | ok |
+| 2026-07-20 | 107 | 0.981 | 0.766 | ok |
+| 2026-07-24 | 140 | 0.979 | 0.607 | ok |
+| **2026-07-28** | 175 | **0.886** | **0.966** | **FLAG** |
+| 2026-08-05 | 255 | 0.761 | 1.000 | FLAG |
+| 2026-08-17 | 263 | 0.814 | 0.992 | FLAG |
+| 2026-08-26 | 85 | 0.012 | 1.000 | FLAG |
+| 2026-09-05 | 99 | 0.040 | 1.000 | FLAG |
+
+**It would have fired on 2026-07-28 — about four weeks before anyone noticed —
+while exact-string uniqueness read 0.886 and looked healthy.** Through all of
+era 2 exact-uniqueness sat between 0.76 and 0.88, a range indistinguishable
+from a normal working week; the dominant-cluster share was pinned at ~1.0 the
+whole time.
+
+Threshold 0.95 separates with margin: the healthy era peaks at 0.766, the first
+collapsed window reads 0.966. A lower threshold would flag healthy weeks,
+because single-link clustering on short reworded topics chains readily by
+design — that is a property of the calibrated tool, not a defect.
+
+Live read the day it landed: **dominant share 1.000, theme `identity, scaffold,
+void`**, against exact-string diversity of 0.042. Both flags now fire; before
+today only the exact-string one did, and after F14 it had begun to soften.
+
+One correction made while building it: `cluster_texts` returns `total =
+len(texts)`, not a cluster count. Exposing it as `topic_clusters_recent` would
+have been quietly wrong, so only the two measures it genuinely provides are
+reported.
 
 ## Timeline
 
