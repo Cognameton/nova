@@ -1,0 +1,85 @@
+# Nova 2.0 live config — Qwen3.6-27B (qwen35 arch), from 2026-09-05.
+#
+# Supersedes nova.qwen3-14b.live.yaml. The data_dir is deliberately UNCHANGED:
+# her heartbeats, explorations, claim ladder and self-state are one continuous
+# record and a model swap must not fork it. The directory keeps its old name
+# for that reason; it is a path, not a claim about the model.
+#
+# CONFOUND, stated up front: every longitudinal metric (F12 eras, F15 arm read,
+# the saturation instrument) now spans two different models. Split any analysis
+# at 2026-09-05, and do not read a change across that boundary as an effect of
+# anything but the swap until it is separately established.
+app:
+  data_dir: ./data/live/qwen3-14b
+  log_dir: ./data/live/qwen3-14b/logs
+
+model:
+  model_path: /home/head-node/Dev/ai-lab/models/Qwen_Qwen3.6-27B-Q4_K_M-vendor-sampling.gguf
+  # 8192, not 32768. Measured 2026-09-05 with the new prompt counter: real
+  # tick prompts run 1,815-2,051 tokens, a peak of 6.26% of the old window.
+  # The unused window was not free — at 32768 the KV cache and llama.cpp's
+  # compute buffers together measured 6.25 GiB of a 24 GiB budget, which is
+  # the only reason a 27B looked like it would not fit. 8192 leaves ~4x
+  # headroom over the measured peak and ~2x over a worst case that fills
+  # both carryover slots. adapter_audit records prompt_tokens and n_ctx every
+  # tick, so if prompts ever grow toward the ceiling it is visible rather
+  # than silently truncated.
+  n_ctx: 8192
+  chat_format: chatml
+  # Stage 22.9: the "/no_think" text hint is retired — Stage 22.2b's native
+  # template-level enable_thinking=False is the real suppression mechanism.
+  system_prefix: ""
+
+generation:
+  # Qwen ships its recommended sampling in this GGUF's header
+  # (general.sampling.*): temp 0.7, top_p 0.80, top_k 20, min_p 0.0,
+  # penalty_present 1.5. temp matches; top_p is set to the vendor value here.
+  # top_k/min_p/presence are not yet plumbed through the backend — see F14
+  # for what happens when a sampler setting is left to an unexamined default.
+  max_tokens: 512
+  temperature: 0.7
+  top_p: 0.8
+  # Finding F14, opted in 2026-09-01. Until today the backend passed no
+  # repetition penalty at all, so llama.cpp's default of 1.0 — off — applied
+  # to every one of the 13,148 ticks on record. Nova produced 125 consecutive
+  # byte-identical exploration topics under it. Synthia runs the structurally
+  # similar loop at 1.1 and shows 64% distinct thoughts with 2 JSON parse
+  # failures in 732 ticks, which is the empirical answer to the objection that
+  # a repetition penalty would damage structured output on this workload.
+  #
+  # This is a severity test, not a fix for F12: her own recent topics are
+  # still rendered into the prompt that selects the next one. Read
+  # topic_diversity_recent and topic_repeat_streak after three days.
+  repeat_penalty: 1.1
+  repeat_last_n: 256
+  stop:
+    - "<|im_end|>"
+    - "<|im_start|>"
+
+# Phase 22 Stage 22.8 — closing the self-model write loop. Enabled here and
+# only here; the defaults in config.py stay off, so every other config and
+# the whole test suite keep the pre-22.8 behavior.
+#
+# Live evidence this responds to: self_state.json went unwritten from
+# 2026-07-11 to 2026-08-06 while active_questions[0] was injected verbatim
+# into every tick prompt, and 20 of Nova's own update_self_model proposals
+# sat unapplied because the approval path had no operator surface.
+self_model:
+  nova_writable_inquiry_fields: true
+  # 12 ticks at the 300s daemon cadence. Pacing on her own writes, not a
+  # gate — rate-limited proposals are still recorded.
+  revision_min_seconds: 3600
+
+prompt:
+  # Read-back proportional to write: 5,560 heartbeats accumulated against a
+  # read window of 3.
+  tick_heartbeat_sampling: stratified
+  tick_self_model_revision_visibility: true
+  # Stage 22.7 Part D — drive-dosage arm, ACTIVATED 2026-08-25 (operator
+  # decision after the 22.9+22.10 eval read). Drive line on the tick
+  # surface only on ticks where (seq-1) % 12 == 0 (once/hour at 300s),
+  # descriptive framing when shown. tick_soft_grounding is inert since
+  # 22.9 (soft grounding is the default), so it is not set here.
+  # Off-cycle drops in drive mentions are EXPECTED, not erosion.
+  tick_drive_injection_interval: 12
+  tick_drive_descriptive: true
