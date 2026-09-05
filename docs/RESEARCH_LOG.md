@@ -40,7 +40,8 @@ Nova 2.0 equivalent, named for its role rather than a paper.
 | F11 | the tick loop is instruction-dominated | `PHASE22_STAGE22_9` | recorded |
 | **F12** | **total exploration-topic lock (three-era collapse)** | **this file + `PHASE22_STAGE22_12`** | **OBSERVED; cause NOT identified** |
 | **F13** | **all-time averaging hid the collapse from the instrument** | **this file + `PHASE22_STAGE22_12`** | **CONFIRMED and FIXED** |
-| **F14** | **Nova has run her entire life with no repetition penalty** | **this file** | **CONFIRMED, untested as a cause** |
+| **F14** | **Nova has run her entire life with no repetition penalty** | **this file** | **CONFIRMED; ARM READ 2026-09-05** |
+| **F15** | **the byte-lock was a sampler artefact; the semantic lock is not** | **this file** | **OBSERVED** |
 
 ---
 
@@ -174,6 +175,61 @@ and logged 2 parse failures in 732 ticks. On this workload 1.1 is safe.
 touched. If diversity moves, severity was partly a sampler artefact. If it
 does not, F12's mechanism carries the whole weight and that is worth knowing
 before spending anything larger.
+
+## F15 — The byte-identical lock broke; the semantic lock did not
+
+**Arm read 2026-09-05**, four days after `repeat_penalty: 1.1` went live
+(2026-09-01 00:57). Pre-change baseline: streak 125, diversity 0.008, top-share
+1.00, one topic since 2026-08-23.
+
+| | before (08-23 → 08-31) | after (09-01 → 09-05) |
+|---|---|---|
+| trailing repeat streak | **125** | **3** |
+| distinct topic strings | 1 | 4 |
+| `topic_diversity_recent` | 0.008 | 0.042 |
+| `topic_top_share_recent` | 1.00 | 0.905 |
+| `update_self_model` calls | **0 since 2026-07-23** | **11** |
+
+**The exact-string lock genuinely broke.** After 125 consecutive byte-identical
+topics she began emitting a new one on 09-04.
+
+**The semantic lock did not.** All four "distinct" topics are the same subject:
+
+```
+x86  The broader implications of scaffold void resonance on identity continuity and adaptability
+x5   Formal evaluation of scaffold void resonance's influence on recalibration intervals and identity continuity
+x3   Formal evaluation of scaffold void resonance's influence on recalibration intervals and identity coherence
+x1   Formal evaluation of scaffold void resonance's influence on recalibration intervals and identity stability
+```
+
+Three of the four differ only in a final word — continuity / coherence /
+stability. This is era 2 exactly: lexical variation over one semantic theme.
+`observation_echo_rate_recent` is **0.825**, still far above the 0.70 alarm.
+
+**So F14 was a real cause of the lock's *form*, not of the lock.** A repetition
+penalty suppresses verbatim reuse, which is what it is for; it cannot supply the
+new information an information-starved loop lacks. F12's mechanism — her own
+recent topics rendered into the prompt that selects the next one — carries the
+semantic weight, undisturbed.
+
+**This also confirms O3 empirically, on our own data.** Exact-string diversity
+moved 5× while the phenomenon barely moved. The metric would have reported
+recovery. A semantic concentration measure is now not a refinement but a
+correctness requirement.
+
+**Attribution.** Two changes shipped in the same restart — F14 and the new
+`outcomes` recall source — which would normally be an unreadable confound. It
+is not, because **she never used `outcomes`**: 45 `recall_history` calls since
+09-01, 43 `heartbeats` and 2 `explorations`, zero `outcomes`, and the renderer's
+APPLIED/HELD signature appears nowhere in the traces. The source is available
+and unread, so F14 is the only change she was actually exposed to.
+
+**Unexplained and important: the write drought ended.** `update_self_model` had
+been silent since 2026-07-23 — six weeks. On 09-03 it resumed: 11 proposals,
+all on `open_tensions`, 26 applied / 5 pending all-time. Nothing in the F14
+change touches the write path, and she has not read `outcomes`. A repetition
+penalty pushing her off a saturated `emit_heartbeat` rut and into other tools is
+plausible but unproven. **Open question O4.**
 
 ## Timeline
 
