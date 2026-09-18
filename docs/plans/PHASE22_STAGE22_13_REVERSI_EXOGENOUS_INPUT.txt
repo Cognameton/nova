@@ -1,0 +1,86 @@
+PHASE 22 — STAGE 22.13: REVERSI — THE FIRST EXOGENOUS INPUT ON THE TICK SURFACE
+==============================================================================
+Status: IMPLEMENTED 2026-09-18. Live config opted in the same day; arm
+starts at the first daemon session after landing (daemon was stopped
+2026-09-18 09:53 CDT to free the GPUs for unrelated work; operator
+restarts it). Defaults byte-identical to 22.12.
+
+WHY
+---
+The research log's diagnosis of the three-era collapse (F12/F13, O3): a
+closed loop with no exogenous input — a fixed point, not a capability
+ceiling. Every tool on the tick surface returns Nova's own text
+(recall_self, reflect, heartbeats, explorations, findings) or the
+operator's disposition of it (recall_history 'outcomes'). The 22.11 draft
+deferred "an external text source". A game is smaller and stricter than a
+text source: the board is the same for anyone who looks at it, a move is
+legal or it is not, and the score is arithmetic. It is the first thing in
+her context she did not write.
+
+Operator framing (2026-09-18): "maybe we need to give her something to
+do." No mandate is placed on the surface — take-up is itself the first
+measurement.
+
+WHAT
+----
+src/nova/agent/reversi.py (new)
+  Rules: 8x8, standard opening (d4/e5 = O, e4/d5 = X). Nova is X and
+  moves first. Pure functions: new_board, legal_moves, flips_for,
+  apply_move, score, render_board ('*' marks her legal squares).
+  Opponent: 'greedy' (most flips, seeded tie-break) or 'random'. The
+  RNG is seeded from (game seed, move count) so a game replays exactly
+  from its record.
+  ReversiStore: data_dir/games/reversi_current.json (one active game),
+  reversi_games.jsonl (finished games, full move list, comments,
+  tick_ref per Nova move, illegal_attempts, final_score, result).
+  ReversiController.play(move, comment): 'new' starts; a square with
+  no game open starts and plays; 'resign' ends as a loss; illegal or
+  malformed squares are counted, not applied, and the board is
+  unchanged. The opponent replies inside the same call; forced passes
+  are resolved by the runtime — whenever she sees the board, she has a
+  legal move. Game end -> finished record, current cleared.
+  prompt_block(): the [Reversi] block (record, score, board, legal
+  moves, last two moves), or "No game in progress" with the record.
+  render_play_result(): compact carryover text.
+
+Wiring
+  config.py: GameConfig {reversi_enabled=False, reversi_opponent=
+    'greedy', reversi_seed=None}; validated.
+  tool_registry.py: play_reversi ToolSpec (allowed, non-destructive,
+    internal).
+  self_state_tools.py: 'play_reversi' in SELF_STATE_TOOL_NAMES (always
+    parseable; dispatch answers reversi_unavailable when disabled);
+    dispatcher takes reversi_controller; CARRYOVER_TOOL_NAMES =
+    READ_TOOL_NAMES | {play_reversi}; render_read_tool_result handles it.
+  self_state_tick.py: '{game_tool}' slot in _SYSTEM; menu suffix and
+    tool sentence in BOTH registers when enabled; [Reversi] block in
+    the user context after the tool-results block. When disabled the
+    rendered prompt is byte-identical to 22.12 (tested).
+  runtime.py: controller built in __init__ from config.game; block
+    passed on every tick; controller passed to the dispatcher;
+    carryover uses CARRYOVER_TOOL_NAMES.
+
+Tests: tests/test_reversi.py (24) — rules, playouts terminate, seed
+replay, store persistence, illegal handling, prompt surfaces,
+byte-identity when off, end-to-end daemon tick (board in prompt,
+dispatch, carryover, trace). Suite 1083 -> 1107.
+
+MEASUREMENT (pre-registered, uncontrolled single arm)
+-----------------------------------------------------
+Prevention outcome (cheap, from existing traces):
+  take-up   = play_reversi share of ticks per day (adapter_audit.tool_requested)
+  legality  = illegal_attempts / Nova moves (reversi_games.jsonl + current)
+  games     = finished per day, results, moves per game
+Mechanism outcome (the one that matters):
+  topic_diversity_recent / dominant-cluster share (22.12/O3) over the
+  arm vs the 09-06..09-17 baseline; whether heartbeat observation /
+  exploration topics start citing the board (grep 'reversi|board|move|
+  opponent' in heartbeats.jsonl and explorations.jsonl).
+Caveats carried over from the 22.7 Part D review: no control, no
+randomisation, no washout; confounded with a daemon restart. Read at
+>= 3 complete days; do not read a mechanism claim off it.
+
+REVERSAL
+--------
+game.reversi_enabled: false in the live yaml (next rotation), or git
+revert. Data under data_dir/games/ is left in place.

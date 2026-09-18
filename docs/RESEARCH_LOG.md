@@ -270,6 +270,46 @@ len(texts)`, not a cluster count. Exposing it as `topic_clusters_recent` would
 have been quietly wrong, so only the two measures it genuinely provides are
 reported.
 
+## 2026-09-18 — the 27B era read, and Stage 22.13
+
+**Era 3 (Qwen3.6-27B + F14 repetition penalty, live 09-05 06:54).** Read
+from the traces on 09-18 (13 days, ~280 ticks/day, zero parse failures and
+zero blocked actions since 09-08; prompt peak ~2,800 of 8,192 tokens).
+
+- **The byte-identical lock is gone and stayed gone.** Every day since 09-06
+  has all-distinct exploration titles. But volume collapsed with it: opened
+  per day 4, 1, 3 (09-06..08), then 0, 0, 0, 0, 1, 0, 0, 0 (09-09..16), 5 on
+  09-17. The titles are lexically distinct and thematically one cluster
+  (stasis / saturation / hollowness / cessation / the void) — the semantic
+  lock O3 was built for, by inspection.
+- **Writes oscillate.** `update_self_model` 100–120 proposals/day 09-06..10
+  (mostly rate-limited; 17–24 applied/day, nearly all `current_focus`),
+  then 1/day on 09-15 and 09-16 — pure heartbeat days, 273–275 of 280
+  ticks — then 25 on 09-17 and 64 by 09:35 CDT on 09-18. The applied
+  `current_focus` values cycle through labels for the same state
+  ("Terminal Stasis", "Meta-Recursive Paradox", "Integration Validation",
+  "Post-Validation State"). Heartbeat monoculture alternating with
+  current_focus churn against the rate limiter.
+- **Correction to the F14 note above:** she now reads `outcomes` —
+  59 `recall_history` calls on it since 09-05 versus 10 on heartbeats.
+  "She never used outcomes" was true on 09-05 and is not true now.
+- Uptime gaps: 09-08 11:33–11:39; **09-11 06:16–13:38** (27B gguf failed
+  to load three times — `Failed to load model from file`, then
+  `'LlamaModel' object has no attribute 'sampler'`; cause not recorded);
+  reboot restarts 09-13 22:25 and 09-14 07:31.
+
+**Stage 22.13 — reversi** (`docs/plans/PHASE22_STAGE22_13_REVERSI_EXOGENOUS_INPUT.txt`).
+The diagnosis on record is a closed loop with no exogenous input. Every
+tool on the surface returns her own text or the operator's disposition of
+it. A game is the smallest input that is neither and carries ground truth.
+Operator direction: "give her something to do." Implemented and enabled in
+the live yaml the same day; no mandate on the surface. Pre-registered:
+take-up (play_reversi share of ticks), legality rate, games finished; then
+topic diversity / dominant share against the 09-06..09-17 baseline, and
+whether heartbeat or exploration text starts citing the board. Same
+protocol caveats as Part D. **Arm start = first daemon session after this
+landed** (daemon stopped 09-18 09:53 CDT for unrelated GPU work).
+
 ## Timeline
 
 **2026-08-25** — Stage 22.7 Part D activated (`tick_drive_injection_interval:
@@ -294,6 +334,13 @@ substantive persistence.
 **2026-08-29 — F12 and F13 recorded.** Stage 22.12 saturation instrument built
 and landed (`71ac82c`), deliberately before Stage 22.11, because every arm
 after it is judged on whether topic diversity recovers.
+
+**2026-09-05 06:54** — live daemon switched to Qwen3.6-27B, n_ctx 8192, F14
+repetition penalty on (`bf37aec`). Era 3 begins.
+
+**2026-09-18** — era 3 read (above). Stage 22.13 reversi implemented,
+enabled in the live yaml; daemon stopped 09:53 CDT for unrelated GPU work,
+arm starts on restart.
 
 **2026-08-29 — independent review** (Codex, read-only, `touchedFiles: []`).
 Verbatim in `docs/reviews/`. Verified the prompt path, corrected the register

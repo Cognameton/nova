@@ -139,6 +139,26 @@ def default_tool_registry() -> ToolRegistry:
     )
     registry.register_spec(
         ToolSpec(
+            name="play_reversi",
+            description=(
+                "Phase 22 Stage 22.13: play one move in a game of reversi "
+                "against a fixed in-process opponent. The first input on the "
+                "tick surface that is not Nova's own text: the board is the "
+                "same for anyone who looks at it and a move is legal or it is "
+                "not. Config-gated (game.reversi_enabled); off the menu when "
+                "disabled."
+            ),
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={
+                "move": "a square like 'd3'; 'new' starts a game; 'resign' ends one",
+                "comment": "optional: anything you want to note about the position or your choice",
+            },
+        )
+    )
+    registry.register_spec(
+        ToolSpec(
             name="emit_heartbeat",
             description=(
                 "Record a self-observation heartbeat: current state, drive-gap "

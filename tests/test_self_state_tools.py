@@ -88,10 +88,10 @@ class SelfStateToolSpecTests(unittest.TestCase):
             spec = self.registry.get_spec(name)
             self.assertFalse(spec.destructive, msg=f"{name} should not be destructive")
 
-    def test_self_state_tool_names_constant_has_eight_entries(self):
+    def test_self_state_tool_names_constant_has_nine_entries(self):
         # Five Phase 18/19 inward tools + two Phase 21 exploration tools
-        # + recall_history (Phase 22 Stage 22.10).
-        self.assertEqual(len(SELF_STATE_TOOL_NAMES), 8)
+        # + recall_history (Phase 22 Stage 22.10) + play_reversi (Stage 22.13).
+        self.assertEqual(len(SELF_STATE_TOOL_NAMES), 9)
 
 
 # ---------------------------------------------------------------------------

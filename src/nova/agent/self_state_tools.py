@@ -152,6 +152,9 @@ SELF_STATE_TOOL_NAMES: frozenset[str] = frozenset({
     "enter_exploration",
     "close_exploration",
     "recall_history",
+    # Stage 22.13 — always parseable; dispatch answers reversi_unavailable
+    # when the running config has not enabled the game.
+    "play_reversi",
 })
 
 # Stage 22.10: bounded self-history reads. Fixed count and per-entry cap so
@@ -206,8 +209,11 @@ class SelfStateToolDispatcher:
         self_model_writes_enabled: bool = False,
         revision_min_seconds: float = SELF_MODEL_REVISION_MIN_SECONDS,
         claim_ladder_store: Any = None,
+        reversi_controller: Any = None,
     ) -> None:
         self._self_state = self_state
+        # Stage 22.13 — None everywhere the game is not enabled.
+        self._reversi_controller = reversi_controller
         # Stage 22.8 — needed to persist Nova's own inquiry-class writes.
         # Defaults keep every pre-22.8 construction site (and the whole test
         # suite) on the queue-only behavior.
@@ -270,7 +276,30 @@ class SelfStateToolDispatcher:
             return self.close_exploration(
                 findings_summary=str(args.get("findings_summary", "")),
             )
+        if request.tool_name == "play_reversi":
+            args = request.arguments or {}
+            return self.play_reversi(
+                move=str(args.get("move", "") or ""),
+                comment=str(args.get("comment", "") or ""),
+                tick_ref=request.reason,
+            )
         raise ValueError(f"Unknown self-state tool: {request.tool_name!r}")
+
+    def play_reversi(self, *, move: str, comment: str = "", tick_ref: str = "") -> dict[str, Any]:
+        """Stage 22.13 — one move against the in-process opponent."""
+        if self._reversi_controller is None:
+            return {
+                "ok": False,
+                "tool": "play_reversi",
+                "error": "reversi_unavailable",
+                "note": "The reversi game is not enabled in this configuration.",
+            }
+        return self._reversi_controller.play(
+            move=move,
+            comment=comment,
+            session_id=self._session_id,
+            tick_ref=tick_ref,
+        )
 
     def recall_self(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -617,6 +646,9 @@ class SelfStateToolDispatcher:
 READ_TOOL_NAMES: frozenset[str] = frozenset(
     {"recall_self", "reflect", "recall_history"}
 )
+# Stage 22.13: a move's outcome must reach her the same way a read does —
+# the board block shows the position, the carryover says what happened.
+CARRYOVER_TOOL_NAMES: frozenset[str] = READ_TOOL_NAMES | {"play_reversi"}
 # Sized so a full 8-entry recall_history result fits (8 × ~165-char lines
 # plus header); truncation, when it fires, cuts at a line boundary so she
 # never sees half an entry.
@@ -665,6 +697,10 @@ def render_read_tool_result(tool_name: str, result: dict[str, Any]) -> str:
         lines.append(
             f"  claim_posture: {str(result.get('claim_posture', ''))[:80]}"
         )
+    elif tool_name == "play_reversi":
+        from nova.agent.reversi import render_play_result
+
+        lines.extend(render_play_result(result).splitlines())
     else:
         return ""
     rendered = "\n".join(lines)

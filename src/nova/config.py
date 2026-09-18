@@ -13,6 +13,7 @@ DEFAULT_CONFIG_PATH = Path("configs/nova.default.yaml")
 VALID_BACKENDS = {"llama_cpp"}
 VALID_PROMPT_ABLATION_MODES = {"current", "minimal", "state_summary", "action_boundary"}
 VALID_TICK_HEARTBEAT_SAMPLING = {"recent", "stratified"}
+VALID_REVERSI_OPPONENTS = {"random", "greedy"}
 
 
 @dataclass(slots=True)
@@ -92,6 +93,22 @@ class SelfModelConfig:
 
 
 @dataclass(slots=True)
+class GameConfig:
+    """Phase 22 Stage 22.13 — reversi as exogenous input on the tick surface.
+
+    Default OFF: every existing config and the full suite keep the pre-22.13
+    tick surface byte-identical. The live config opts in explicitly. When
+    enabled, play_reversi joins the tool menu in both registers and a
+    [Reversi] block is rendered on every tick.
+    """
+
+    reversi_enabled: bool = False
+    reversi_opponent: str = "greedy"
+    # None = a fresh seed per game (recorded on the game); set for replay.
+    reversi_seed: int | None = None
+
+
+@dataclass(slots=True)
 class PersonaConfig:
     name: str = "Nova"
     tone: str = "grounded, calm, intelligent, attentive"
@@ -148,6 +165,7 @@ class NovaConfig:
     eval: EvalConfig = field(default_factory=EvalConfig)
     cognition: CognitionConfig = field(default_factory=CognitionConfig)
     self_model: SelfModelConfig = field(default_factory=SelfModelConfig)
+    game: GameConfig = field(default_factory=GameConfig)
 
     def validate(self) -> None:
         if self.model.backend not in VALID_BACKENDS:
@@ -176,6 +194,11 @@ class NovaConfig:
             )
         if self.self_model.revision_min_seconds < 0:
             raise ValueError("self_model.revision_min_seconds must be non-negative")
+        if self.game.reversi_opponent not in VALID_REVERSI_OPPONENTS:
+            raise ValueError(
+                "game.reversi_opponent must be one of "
+                f"{sorted(VALID_REVERSI_OPPONENTS)}"
+            )
         if not self.app.data_dir:
             raise ValueError("app.data_dir is required")
         if not self.app.log_dir:
@@ -255,6 +278,7 @@ def load_config(
         eval=_section(EvalConfig, payload.get("eval")),
         cognition=_section(CognitionConfig, payload.get("cognition")),
         self_model=_section(SelfModelConfig, payload.get("self_model")),
+        game=_section(GameConfig, payload.get("game")),
     )
     config.validate()
     return config

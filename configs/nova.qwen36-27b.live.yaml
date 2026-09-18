@@ -83,3 +83,20 @@ prompt:
   # Off-cycle drops in drive mentions are EXPECTED, not erosion.
   tick_drive_injection_interval: 12
   tick_drive_descriptive: true
+
+# Phase 22 Stage 22.13 — reversi, ENABLED 2026-09-18 (operator decision:
+# "give her something to do"). The research log's diagnosis of the
+# three-era collapse is a closed loop with no exogenous input; every tool
+# on the tick surface hands her own text back. A game is the smallest
+# input that is neither hers nor the operator's and carries ground truth:
+# a move is legal or it is not, the score is arithmetic. play_reversi
+# joins the tool menu in both registers, a [Reversi] block renders on
+# every tick, and the move outcome carries over like a read result. No
+# mandate on the surface — take-up is the first measurement. Defaults in
+# config.py stay off. Games persist under data_dir/games/. Opponent is
+# greedy (most flips, seeded tie-break; a game replays from its recorded
+# seed). Arm start = the first daemon session after this landed; record
+# it in the research log when the daemon is next started.
+game:
+  reversi_enabled: true
+  reversi_opponent: greedy

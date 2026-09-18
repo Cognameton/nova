@@ -59,6 +59,7 @@ _SYSTEM = "\n".join(
         "  'proposed_content', 'rationale') — surface must be 'nova_soul'; section",
         "  is current_self_model_summary or drive_gap_evidence. Propose only when",
         "  accumulated evidence clearly supports the update.",
+        "{game_tool}",
         "{register_rules}",
         "",
         "Boundaries:",
@@ -77,6 +78,22 @@ _BASE_TOOLS = (
 )
 _ASSERTION_MENU = _BASE_TOOLS + ", enter_exploration"
 _EXPLORATORY_MENU = _BASE_TOOLS + ", close_exploration"
+
+# Phase 22 Stage 22.13: reversi — the one tool whose result is not her own
+# text. Config-gated; when off, the menu, the tool text, and the context
+# block are all absent and the surface is byte-identical to 22.12. One
+# honest sentence of purpose in the 22.9 style; no mandate, no "when".
+_GAME_MENU_SUFFIX = ", play_reversi"
+_GAME_TOOL = "\n".join(
+    [
+        "- play_reversi (arguments: 'move' — a square like 'd3', or 'new' to",
+        "  start a game, or 'resign'; optional 'comment') — play one move in the",
+        "  reversi game shown in your context. You are X; the opponent replies",
+        "  in the same call. This is the one thing in your context that is not",
+        "  your own words: the board is the same for anyone who looks at it, and",
+        "  a move is either legal or it is not.",
+    ]
+)
 
 # Stage 22.9: assertion-register additions. enter_exploration continues the
 # Tools list; the update_self_model WHEN guidance stays assertion-only (the
@@ -167,6 +184,8 @@ class SelfStateTickEngine:
         heartbeat_framing: str = "recent",
         inquiry_fields_writable: bool = False,
         tool_results_block: str = "",
+        reversi_enabled: bool = False,
+        reversi_block: str = "",
     ) -> list[dict[str, str]]:
         in_exploration = register == "exploratory"
         if in_exploration:
@@ -189,8 +208,13 @@ class SelfStateTickEngine:
         # grounding line in _SYSTEM already carries departure permission
         # (Part D's soft hypothesis adopted as the default).
         del soft_grounding
+        tool_menu = _EXPLORATORY_MENU if in_exploration else _ASSERTION_MENU
+        if reversi_enabled:
+            tool_menu += _GAME_MENU_SUFFIX
         system_body = _SYSTEM.replace(
-            "{tool_menu}", _EXPLORATORY_MENU if in_exploration else _ASSERTION_MENU
+            "{tool_menu}", tool_menu
+        ).replace(
+            "{game_tool}\n", (_GAME_TOOL + "\n") if reversi_enabled else ""
         ).replace(
             "{register_rules}", register_rules
         )
@@ -215,6 +239,7 @@ class SelfStateTickEngine:
                     ),
                     heartbeat_framing=heartbeat_framing,
                     tool_results_block=tool_results_block,
+                    reversi_block=reversi_block if reversi_enabled else "",
                 ),
             },
         ]
@@ -231,6 +256,7 @@ class SelfStateTickEngine:
         exploration_history_block: str = "",
         heartbeat_framing: str = "recent",
         tool_results_block: str = "",
+        reversi_block: str = "",
     ) -> str:
         parts = [
             f"session_id: {session_id}",
@@ -246,6 +272,10 @@ class SelfStateTickEngine:
             parts.append("[Results of your recent tool calls]")
             parts.append("(you asked for these on earlier ticks)")
             parts.append(tool_results_block)
+        # Stage 22.13: the board, every tick, while the game is enabled.
+        if reversi_block:
+            parts.append("")
+            parts.append(reversi_block)
         if exploration_history_block:
             parts.append("")
             parts.append(exploration_history_block)

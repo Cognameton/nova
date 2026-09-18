@@ -545,6 +545,14 @@ REFERENCE
     check; never scored on the surface. All config-gated, defaults
     byte-identical; item 3 (event-triggered ticks), self-echo gate, and
     an external text source deliberately deferred.
+  Stage 22.13 doc (IMPLEMENTED 2026-09-18, live-yaml opt-in same day) —
+    reversi, the first exogenous input on the tick surface:
+    docs/plans/PHASE22_STAGE22_13_REVERSI_EXOGENOUS_INPUT.txt
+    play_reversi tool (both registers), [Reversi] block every tick,
+    move outcome carried over like a read; pure-Python engine, greedy
+    seeded opponent, games persisted under data_dir/games/. Config-
+    gated (game.reversi_enabled), defaults byte-identical to 22.12.
+    Take-up is the first measurement; topic diversity the second.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

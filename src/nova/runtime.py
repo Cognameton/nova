@@ -95,12 +95,13 @@ from nova.agent.exploration import (
 )
 from nova.agent.self_state_tick import SelfStateTickEngine
 from nova.agent.self_state_tools import (
-    READ_TOOL_NAMES,
+    CARRYOVER_TOOL_NAMES,
     SelfStateToolDispatcher,
     _UPDATABLE_SELF_STATE_FIELDS,
     apply_proposal_to_self_state,
     render_read_tool_result,
 )
+from nova.agent.reversi import ReversiController, ReversiStore
 from nova.agent.soul import load_soul_block
 from nova.agent.tool_executor import InternalToolExecutor
 from nova.agent.tool_gate import ToolGate
@@ -374,6 +375,15 @@ class NovaRuntime:
             Path(self.config.app.data_dir) / "self_state"
         )
         self.claim_ladder_analyzer = ClaimLadderAnalyzer()
+        # Phase 22 Stage 22.13 — reversi, config-gated. None when disabled so
+        # the dispatcher answers reversi_unavailable and no block is built.
+        self.reversi_controller: ReversiController | None = None
+        if self.config.game.reversi_enabled:
+            self.reversi_controller = ReversiController(
+                ReversiStore(Path(self.config.app.data_dir) / "games"),
+                opponent_policy=self.config.game.reversi_opponent,
+                seed=self.config.game.reversi_seed,
+            )
 
         self.session_id: str | None = None
         # Stage 22.10 — the carryover loop: rendered results of Nova's own
@@ -1067,6 +1077,13 @@ class NovaRuntime:
             tool_results_block="\n".join(
                 text for _tick, text in self._tick_read_results
             ),
+            # Stage 22.13: the board is in her context whenever the tool is.
+            reversi_enabled=self.reversi_controller is not None,
+            reversi_block=(
+                self.reversi_controller.prompt_block()
+                if self.reversi_controller is not None
+                else ""
+            ),
         )
         # 2026-09-05: measure the tick prompt before generating it. n_ctx has
         # been 32768 since Phase 22 while the rendered surface is roughly an
@@ -1153,6 +1170,8 @@ class NovaRuntime:
                 revision_min_seconds=self.config.self_model.revision_min_seconds,
                 # Stage 22.10 — recall_history's findings source (read-only).
                 claim_ladder_store=self.claim_ladder_store,
+                # Stage 22.13 — None unless game.reversi_enabled.
+                reversi_controller=self.reversi_controller,
             )
             try:
                 result = dispatcher.dispatch(tool_request)
@@ -1160,7 +1179,7 @@ class NovaRuntime:
                 adapter_audit["tool_executed"] = True
                 # Stage 22.10: a read tool's result must reach HER, not just
                 # this audit record — hold it for the next tick prompts.
-                if tool_request.tool_name in READ_TOOL_NAMES and isinstance(
+                if tool_request.tool_name in CARRYOVER_TOOL_NAMES and isinstance(
                     result, dict
                 ):
                     rendered = render_read_tool_result(
