@@ -553,6 +553,13 @@ REFERENCE
     seeded opponent, games persisted under data_dir/games/. Config-
     gated (game.reversi_enabled), defaults byte-identical to 22.12.
     Take-up is the first measurement; topic diversity the second.
+  Stage 22.14 doc (IMPLEMENTED 2026-09-18, live at the evening restart)
+    — the improvement loop around the board:
+    docs/plans/PHASE22_STAGE22_14_REVERSI_IMPROVEMENT_LOOP.txt
+    Purpose sentence on the surface; a versioned strategy note she
+    writes to herself; a runtime-computed scoreboard per note version;
+    a win/loss/draw prediction scored at game end; recall_history
+    source 'games'. Same flag as 22.13; defaults byte-identical.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

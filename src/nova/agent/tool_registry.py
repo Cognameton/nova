@@ -131,7 +131,7 @@ def default_tool_registry() -> ToolRegistry:
             destructive=False,
             internal=True,
             input_schema={
-                "source": "one of: heartbeats, explorations, findings, outcomes",
+                "source": "one of: heartbeats, explorations, findings, outcomes, games (games: 22.14, only when the reversi game is enabled)",
                 "mode": "optional: recent, earliest, sample",
                 "around": "optional: YYYY-MM-DD",
             },
@@ -153,6 +153,8 @@ def default_tool_registry() -> ToolRegistry:
             internal=True,
             input_schema={
                 "move": "a square like 'd3'; 'new' starts a game; 'resign' ends one",
+                "strategy": "optional: a standing note to yourself, versioned on each change and scored per version (22.14)",
+                "expect": "optional: win, loss or draw — a prediction checked when the game ends (22.14)",
                 "comment": "optional: anything you want to note about the position or your choice",
             },
         )

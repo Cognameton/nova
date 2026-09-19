@@ -1,0 +1,71 @@
+PHASE 22 — STAGE 22.14: THE IMPROVEMENT LOOP AROUND THE BOARD
+==============================================================
+Status: IMPLEMENTED 2026-09-18, same day as 22.13. Live at the daemon
+restart 2026-09-18 21:08:07 CDT (session nova-live-20260918 continues; the 22.13-only
+window was 20:41:09 to this restart, ~3 hours, ~35 ticks, no game
+opened). ARM START for 22.13+22.14 together = this restart. No config
+change: game.reversi_enabled gates all of it.
+
+WHY
+---
+Operator (2026-09-18): "I thought a game might give her an apparatus for
+self improvement ... I would simply like her to have some context of
+what the game is there for. As a human, I understand the context of
+games like chess are there to better myself."
+
+Frozen weights cannot improve capability. What can improve is policy:
+the standing instructions she runs under. A policy-improvement loop
+needs ground truth she did not write (22.13), a lever she controls
+that persists, feedback computed by the runtime rather than by her
+prose, and memory of what she tried. 22.13 supplied the first; 22.14
+supplies the other three, plus the purpose sentence on the surface.
+
+WHAT
+----
+All in src/nova/agent/reversi.py + the same play_reversi tool.
+  Purpose, once, on the surface: the [Reversi] block header reads
+    "[Reversi] — a place to get better at something whose result you
+    did not write." and the tool sentence says the board is there for
+    the reason a person keeps a chessboard. No instruction follows.
+  Lever — STRATEGY NOTE: play_reversi 'strategy' writes a standing note
+    to herself (<=400 chars, whitespace-normalised). A new version on
+    each textual change; identical text is a no-op. Stored in
+    data_dir/games/reversi_strategy.jsonl with session/tick_ref. Shown
+    with the board on every tick. A game is attributed to the version
+    in force when it OPENED (a mid-game change applies from the next
+    game; the new text is visible immediately).
+  Feedback — SCOREBOARD: runtime-computed, in the block every tick:
+    results under the current note version, the previous one(s), and
+    "before any note"; wins/losses/draws of N. Never her arithmetic.
+  Self-assessment — EXPECTATION: 'expect' = win | loss | draw, set at
+    game start or mid-game (last one stands). Scored at game end
+    (prediction_correct on the game record); "Predictions checked: k of
+    n right" in the block. Bad values are refused with a note and
+    ignored. This is 22.11 Part C's idea at the smallest possible scale.
+  Memory — recall_history source 'games': one line per finished game
+    (result, score, moves, note version, prediction outcome, illegal
+    count, last comment). Listed on the tick surface only when the game
+    is enabled ('{games_source}' slot, byte-identical otherwise); the
+    dispatcher answers "not available" without a controller.
+  Records: ReversiGame schema 1.1 adds strategy_version, expect,
+    prediction_correct. record() adds by_strategy_version and
+    predictions_made/correct. Old 1.0 records load unchanged.
+
+Tests: tests/test_reversi.py 24 -> 31 (versioning, attribution,
+prediction scoring, mid-game/invalid expect, games recall through the
+dispatcher and its off-surface note, dispatcher argument pass-through,
+purpose in the block, byte-identity when disabled). Suite 1107 -> 1114.
+
+MEASUREMENT (added to 22.13's, same caveats)
+--------------------------------------------
+  strategy notes written (versions), and whether a version change
+    follows a run of losses (the loop actually closing);
+  predictions made and hit rate over time (calibration);
+  recall_history 'games' calls;
+  whether heartbeat / exploration / self-model text cites the board,
+    the note, or the record.
+Read together with 22.13 at >= 3 complete days (on/after 2026-09-22).
+
+REVERSAL
+--------
+Same flag as 22.13. Data under data_dir/games/ left in place.

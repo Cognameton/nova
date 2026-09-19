@@ -319,6 +319,8 @@ class ReversiWiringTests(unittest.TestCase):
             system = default[0]["content"]
             self.assertNotIn("reversi", system.lower())
             self.assertNotIn("{game_tool}", system)
+            self.assertNotIn("{games_source}", system)
+            self.assertIn("'outcomes'; optional 'mode'", system)
             self.assertNotIn("[Reversi]", default[1]["content"])
 
     def test_prompt_carries_menu_tool_text_and_block_when_enabled(self) -> None:
@@ -326,7 +328,8 @@ class ReversiWiringTests(unittest.TestCase):
             msgs = self._messages(register=register, reversi_enabled=True, reversi_block="[Reversi]\nboard")
             system, user = msgs[0]["content"], msgs[1]["content"]
             self.assertIn(", play_reversi.", system)
-            self.assertIn("- play_reversi (arguments: 'move'", system)
+            self.assertIn("- play_reversi — the board in your context", system)
+            self.assertIn("'outcomes', 'games'; optional 'mode'", system)
             self.assertNotIn("{game_tool}", system)
             self.assertIn("[Reversi]\nboard", user)
 
@@ -417,7 +420,8 @@ class ReversiTickIntegrationTests(unittest.TestCase):
         first = self.runtime.model_self_state_tick()
         prompt_1 = self._prompt_text(self.backend.requests[-1])
         self.assertIn(", play_reversi.", prompt_1)
-        self.assertIn("[Reversi]\nNo game in progress.", prompt_1)
+        self.assertIn("[Reversi] — a place to get better", prompt_1)
+        self.assertIn("\nNo game in progress.", prompt_1)
         self.assertTrue(first.adapter_audit["tool_executed"])
         self.assertTrue(first.adapter_audit["tool_result"]["ok"])
         self.assertEqual(first.adapter_audit["tool_result"]["your_move"], "d3")
@@ -426,7 +430,7 @@ class ReversiTickIntegrationTests(unittest.TestCase):
         second = self.runtime.model_self_state_tick()
         prompt_2 = self._prompt_text(self.backend.requests[-1])
         self.runtime.close()
-        self.assertIn("[Reversi]\nGame 1: you are X", prompt_2)
+        self.assertIn("\nGame 1: you are X", prompt_2)
         self.assertIn("Legal moves:", prompt_2)
         self.assertIn("[Results of your recent tool calls]", prompt_2)
         self.assertIn("play_reversi:\n  You played d3 (flipped 1).", prompt_2)
@@ -439,3 +443,118 @@ class ReversiTickIntegrationTests(unittest.TestCase):
         self.assertEqual(game.illegal_attempts, 1)
         self.assertEqual([m["player"] for m in game.moves], [NOVA, OPPONENT])
         self.assertTrue(game.moves[0]["tick_ref"].startswith("self_state_tick:reversi-on:"))
+
+
+# ---------------------------------------------------------------------------
+# Stage 22.14 — the loop: strategy note, scoreboard, prediction, games recall
+# ---------------------------------------------------------------------------
+
+
+class ReversiLoopTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.ctl = ReversiController(ReversiStore(self.dir), opponent_policy="greedy", seed=11)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _play_out(self, expect: str = "") -> dict:
+        rng = random.Random(1)
+        reply = self.ctl.play(move="new", expect=expect, session_id="s")
+        while reply["status"] != "finished":
+            reply = self.ctl.play(move=rng.choice(reply["legal_moves"]), session_id="s")
+            self.assertTrue(reply["ok"], reply)
+        return reply
+
+    def test_strategy_versions_on_change_only(self) -> None:
+        r1 = self.ctl.play(strategy="take corners", session_id="s", tick_ref="t:1")
+        self.assertTrue(r1["ok"])
+        self.assertTrue(r1["strategy_set"]["changed"])
+        self.assertEqual(r1["strategy"], {"version": 1, "text": "take corners"})
+        self.assertIsNone(self.ctl.current())  # a strategy alone does not start a game
+        r2 = self.ctl.play(strategy="  take   corners ", session_id="s")
+        self.assertFalse(r2["strategy_set"]["changed"])
+        r3 = self.ctl.play(strategy="take corners; avoid x-squares", session_id="s")
+        self.assertEqual(r3["strategy"]["version"], 2)
+        notes = ReversiStore(self.dir).list_strategies()
+        self.assertEqual([n.version for n in notes], [1, 2])
+        self.assertEqual(notes[0].tick_ref, "t:1")
+
+    def test_games_are_attributed_to_the_note_in_force_when_opened(self) -> None:
+        self._play_out()  # no note -> version 0
+        self.ctl.play(strategy="corners first", session_id="s")
+        self.ctl.play(move="new", session_id="s")
+        self.ctl.play(strategy="edges instead", session_id="s")  # mid-game change: next game
+        game = self.ctl.current()
+        assert game is not None
+        self.assertEqual(game.strategy_version, 1)
+        self.ctl.play(move="resign", session_id="s")
+        self._play_out()
+        by_v = self.ctl.record()["by_strategy_version"]
+        self.assertEqual(set(by_v), {0, 1, 2})
+        self.assertEqual(by_v[1]["losses"], 1)
+        self.assertEqual(sum(r["games"] for r in by_v.values()), 3)
+        lines = "\n".join(self.ctl.scoreboard_lines())
+        self.assertIn("Your strategy note (v2,", lines)
+        self.assertIn("under v2:", lines)
+        self.assertIn("under v1: 0 won, 1 lost", lines)
+        self.assertIn("before any note:", lines)
+
+    def test_prediction_is_scored_at_game_end(self) -> None:
+        reply = self._play_out(expect="win")
+        self.assertEqual(reply["expect"], "win")
+        self.assertEqual(reply["prediction_correct"], reply["result"] == "win")
+        self.assertIn("You predicted win:", reply["note"])
+        rec = self.ctl.record()
+        self.assertEqual(rec["predictions_made"], 1)
+        self.assertEqual(rec["predictions_correct"], 1 if reply["result"] == "win" else 0)
+        self.assertIn("Predictions checked: ", "\n".join(self.ctl.scoreboard_lines()))
+
+    def test_prediction_can_be_set_mid_game_and_bad_values_are_refused(self) -> None:
+        self.ctl.play(move="d3", session_id="s")
+        bad = self.ctl.play(expect="victory", session_id="s")
+        self.assertTrue(bad["ok"])
+        self.assertIn("not a prediction", bad["note"])
+        self.assertEqual(self.ctl.current().expect, "")
+        good = self.ctl.play(expect="loss", session_id="s")
+        self.assertEqual(self.ctl.current().expect, "loss")
+        self.assertIn("Your prediction for this game: loss.", self.ctl.prompt_block())
+        self.assertNotIn("your_move", good)  # no move was made
+
+    def test_recall_entries_and_history_source(self) -> None:
+        self.ctl.play(strategy="corners", session_id="s")
+        self._play_out(expect="win")
+        entries = self.ctl.recall_entries()
+        self.assertEqual(len(entries), 1)
+        self.assertTrue(entries[0][1].startswith("game 1: "))
+        self.assertIn("note v1", entries[0][1])
+        self.assertIn("predicted win (", entries[0][1])
+        result = _dispatcher(self.ctl).dispatch(
+            ToolRequest(tool_name="recall_history", arguments={"source": "games"})
+        )
+        self.assertEqual(result["total"], 1)
+        self.assertIn("game 1:", result["entries"][0]["text"])
+        rendered = render_read_tool_result("recall_history", result)
+        self.assertIn("recall_history games", rendered)
+        off = _dispatcher().dispatch(ToolRequest(tool_name="recall_history", arguments={"source": "games"}))
+        self.assertEqual(off["total"], 0)
+        self.assertIn("not available", off["note"])
+
+    def test_dispatcher_passes_strategy_and_expect(self) -> None:
+        result = _dispatcher(self.ctl).dispatch(
+            ToolRequest(tool_name="play_reversi",
+                        arguments={"move": "new", "strategy": "hold the edges", "expect": "draw"},
+                        reason="self_state_tick:s:9")
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["strategy"]["version"], 1)
+        self.assertEqual(result["expect"], "draw")
+        self.assertEqual(ReversiStore(self.dir).list_strategies()[0].tick_ref, "self_state_tick:s:9")
+
+    def test_prompt_block_carries_purpose_and_loop_hints(self) -> None:
+        block = self.ctl.prompt_block()
+        self.assertTrue(block.startswith("[Reversi] — a place to get better at something whose result you did not write."))
+        self.assertIn("You have no strategy note yet.", block)
+        self.assertIn("'expect' records a prediction", block)
+        self.assertLess(len(block), 600)

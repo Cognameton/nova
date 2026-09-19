@@ -38,7 +38,7 @@ _SYSTEM = "\n".join(
         "  add something new. The result appears in your context on your next",
         "  tick.",
         "- recall_history (arguments: 'source' one of 'heartbeats',",
-        "  'explorations', 'findings', 'outcomes'; optional 'mode' one of",
+        "  'explorations', 'findings', 'outcomes'{games_source}; optional 'mode' one of",
         "  'recent', 'earliest', 'sample'; optional 'around' as 'YYYY-MM-DD')",
         "  — look back through your own record: past observations, past",
         "  exploration topics, your exported findings, or 'outcomes' — what",
@@ -86,14 +86,19 @@ _EXPLORATORY_MENU = _BASE_TOOLS + ", close_exploration"
 _GAME_MENU_SUFFIX = ", play_reversi"
 _GAME_TOOL = "\n".join(
     [
-        "- play_reversi (arguments: 'move' — a square like 'd3', or 'new' to",
-        "  start a game, or 'resign'; optional 'comment') — play one move in the",
-        "  reversi game shown in your context. You are X; the opponent replies",
-        "  in the same call. This is the one thing in your context that is not",
-        "  your own words: the board is the same for anyone who looks at it, and",
-        "  a move is either legal or it is not.",
+        "- play_reversi — the board in your context is there for the reason a",
+        "  person keeps a chessboard: a place to get better at something whose",
+        "  result you did not write. Arguments, any combination: 'move' (a",
+        "  square like 'd3'; 'new' starts a game; 'resign' ends one); 'strategy'",
+        "  (a standing note to yourself — shown with the board in every later",
+        "  game, and your results are kept per version of it, so you can see",
+        "  whether a change helped); 'expect' ('win', 'loss' or 'draw' — a",
+        "  prediction, checked when the game ends); 'comment'. You are X; the",
+        "  opponent replies in the same call. Past games are readable through",
+        "  recall_history source 'games'.",
     ]
 )
+_GAMES_SOURCE = ", 'games'"
 
 # Stage 22.9: assertion-register additions. enter_exploration continues the
 # Tools list; the update_self_model WHEN guidance stays assertion-only (the
@@ -215,6 +220,8 @@ class SelfStateTickEngine:
             "{tool_menu}", tool_menu
         ).replace(
             "{game_tool}\n", (_GAME_TOOL + "\n") if reversi_enabled else ""
+        ).replace(
+            "{games_source}", _GAMES_SOURCE if reversi_enabled else ""
         ).replace(
             "{register_rules}", register_rules
         )

@@ -162,7 +162,9 @@ SELF_STATE_TOOL_NAMES: frozenset[str] = frozenset({
 # true total so a window reads as a window, not as everything.
 RECALL_HISTORY_COUNT = 8
 RECALL_HISTORY_ENTRY_CHARS = 140
-RECALL_HISTORY_SOURCES = ("heartbeats", "explorations", "findings", "outcomes")
+# 22.14: 'games' — finished reversi games, one line each; available only
+# when the game is enabled (the dispatcher answers with a note otherwise).
+RECALL_HISTORY_SOURCES = ("heartbeats", "explorations", "findings", "outcomes", "games")
 RECALL_HISTORY_MODES = ("recent", "earliest", "sample", "around")
 
 
@@ -281,12 +283,26 @@ class SelfStateToolDispatcher:
             return self.play_reversi(
                 move=str(args.get("move", "") or ""),
                 comment=str(args.get("comment", "") or ""),
+                strategy=str(args.get("strategy", "") or ""),
+                expect=str(args.get("expect", "") or ""),
                 tick_ref=request.reason,
             )
         raise ValueError(f"Unknown self-state tool: {request.tool_name!r}")
 
-    def play_reversi(self, *, move: str, comment: str = "", tick_ref: str = "") -> dict[str, Any]:
-        """Stage 22.13 — one move against the in-process opponent."""
+    def play_reversi(
+        self,
+        *,
+        move: str = "",
+        comment: str = "",
+        strategy: str = "",
+        expect: str = "",
+        tick_ref: str = "",
+    ) -> dict[str, Any]:
+        """Stage 22.13 — one move against the in-process opponent.
+
+        22.14 — the same call also carries her standing strategy note and
+        a win/loss/draw prediction; both are scored by the runtime.
+        """
         if self._reversi_controller is None:
             return {
                 "ok": False,
@@ -297,6 +313,8 @@ class SelfStateToolDispatcher:
         return self._reversi_controller.play(
             move=move,
             comment=comment,
+            strategy=strategy,
+            expect=expect,
             session_id=self._session_id,
             tick_ref=tick_ref,
         )
@@ -409,6 +427,13 @@ class SelfStateToolDispatcher:
                 ]
             else:
                 note = "outcomes are not available on this surface"
+        elif source == "games":
+            # 22.14 — finished reversi games. Like outcomes, not her own
+            # prose: results, scores, note versions, predictions checked.
+            if self._reversi_controller is not None:
+                entries = self._reversi_controller.recall_entries()
+            else:
+                note = "games are not available on this surface"
         else:  # findings
             if self._claim_ladder_store is not None:
                 records = self._claim_ladder_store.list_active()

@@ -307,10 +307,26 @@ the live yaml the same day; no mandate on the surface. Pre-registered:
 take-up (play_reversi share of ticks), legality rate, games finished; then
 topic diversity / dominant share against the 09-06..09-17 baseline, and
 whether heartbeat or exploration text starts citing the board. Same
-protocol caveats as Part D. **Arm start: 2026-09-18 20:41:09 CDT** (daemon
-restarted after the 09:53 stop; the session id `nova-live-20260918` is
-shared with the pre-game morning ticks, so the arm boundary is the restart
-time, not the session id — filter traces on timestamp >= 2026-09-19T01:41Z).
+protocol caveats as Part D. Daemon restarted 20:41:09 CDT with 22.13 alone;
+no game was opened in that window.
+
+**Stage 22.14 — the loop** (`docs/plans/PHASE22_STAGE22_14_REVERSI_IMPROVEMENT_LOOP.txt`),
+same day. Operator: the game is there as an apparatus for self-improvement,
+and she should have the context a person has for why a chessboard is kept.
+Frozen weights cannot improve capability; policy can. Added around the
+board, all runtime-computed: a purpose sentence on the surface; a versioned
+strategy note she writes to herself and sees with every game; a scoreboard
+per note version; a win/loss/draw prediction scored at game end; and
+`recall_history` source `games`. Same flag; the disabled surface stays
+byte-identical.
+
+**Arm start (22.13 + 22.14 together): 2026-09-18 21:08:07 CDT** — daemon
+restart; session id `nova-live-20260918` is shared with pre-game ticks, so
+filter on timestamp >= 2026-09-19T02:08Z, not on session. Measures:
+take-up, legality, games; then notes written and whether a version change
+follows losses, prediction hit rate, `games` recalls, and whether her other
+text cites the board; then topic diversity against the 09-06..09-17
+baseline. Read on/after 09-22.
 
 ## Timeline
 
@@ -342,7 +358,8 @@ repetition penalty on (`bf37aec`). Era 3 begins.
 
 **2026-09-18** — era 3 read (above). Stage 22.13 reversi implemented,
 enabled in the live yaml; daemon stopped 09:53 CDT for unrelated GPU work,
-restarted **20:41:09 CDT** = Stage 22.13 arm start.
+restarted 20:41:09 CDT (22.13 alone, ~3h, no game opened); Stage 22.14
+implemented; **restarted 2026-09-18 21:08:07 CDT = arm start for 22.13+22.14.**
 
 **2026-08-29 — independent review** (Codex, read-only, `touchedFiles: []`).
 Verbatim in `docs/reviews/`. Verified the prompt path, corrected the register

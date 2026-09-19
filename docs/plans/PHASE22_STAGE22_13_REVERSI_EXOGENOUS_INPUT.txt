@@ -1,9 +1,10 @@
 PHASE 22 — STAGE 22.13: REVERSI — THE FIRST EXOGENOUS INPUT ON THE TICK SURFACE
 ==============================================================================
 Status: IMPLEMENTED 2026-09-18. Live config opted in the same day.
-ARM START 2026-09-18 20:41:09 CDT (daemon restart; session id
+ARM START 2026-09-18 21:08:07 CDT together with 22.14 (22.13 alone ran
+20:41:09 to that restart, no game opened; daemon restart; session id
 nova-live-20260918 is shared with pre-game ticks — filter on timestamp
->= 2026-09-19T01:41Z). Defaults byte-identical to 22.12.
+>= 2026-09-19T02:08Z). Defaults byte-identical to 22.12.
 
 WHY
 ---
