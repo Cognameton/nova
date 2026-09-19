@@ -307,8 +307,10 @@ the live yaml the same day; no mandate on the surface. Pre-registered:
 take-up (play_reversi share of ticks), legality rate, games finished; then
 topic diversity / dominant share against the 09-06..09-17 baseline, and
 whether heartbeat or exploration text starts citing the board. Same
-protocol caveats as Part D. **Arm start = first daemon session after this
-landed** (daemon stopped 09-18 09:53 CDT for unrelated GPU work).
+protocol caveats as Part D. **Arm start: 2026-09-18 20:41:09 CDT** (daemon
+restarted after the 09:53 stop; the session id `nova-live-20260918` is
+shared with the pre-game morning ticks, so the arm boundary is the restart
+time, not the session id — filter traces on timestamp >= 2026-09-19T01:41Z).
 
 ## Timeline
 
@@ -340,7 +342,7 @@ repetition penalty on (`bf37aec`). Era 3 begins.
 
 **2026-09-18** — era 3 read (above). Stage 22.13 reversi implemented,
 enabled in the live yaml; daemon stopped 09:53 CDT for unrelated GPU work,
-arm starts on restart.
+restarted **20:41:09 CDT** = Stage 22.13 arm start.
 
 **2026-08-29 — independent review** (Codex, read-only, `touchedFiles: []`).
 Verbatim in `docs/reviews/`. Verified the prompt path, corrected the register
