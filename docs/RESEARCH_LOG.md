@@ -389,7 +389,17 @@ with ground truth was taken up immediately and completely, the note was
 revised in response to losses in her own words, and self-model writes now
 reference facts she did not write.
 
-**Next-stage candidates (not built):** normalise note labels; a cap or
+**Stage 22.15 built the same day** (`docs/plans/PHASE22_STAGE22_15_REVERSI_REST_AND_STORIES.txt`):
+operator direction "she rests between games and reads her previous games."
+Rest is enforced (30 min after a result; the note stays editable), reading
+is nudged from the rest-time block, and each game entry now carries the
+score at her 10th and 20th moves and the first corner each side took, so a
+read-back says where a game turned rather than only how it ended. Labels
+normalised. **Arm start 2026-09-22 04:11:06 CDT** (daemon restart; filter on timestamp).
+Read on/after 09-26: what she does on rest ticks, whether `games` is ever
+read, revisions during rest, heartbeats/explorations vs the 2/0 floor.
+
+**Next-stage candidates (not built, superseded in part by 22.15):** normalise note labels; a cap or
 cadence on games per day so the other tools get surface back (or an
 "idle" between games); an opponent ladder (random → greedy → minimax-2)
 so wins carry more information; nudge toward `games` recall only if the
@@ -428,6 +438,8 @@ repetition penalty on (`bf37aec`). Era 3 begins.
 enabled in the live yaml; daemon stopped 09:53 CDT for unrelated GPU work,
 restarted 20:41:09 CDT (22.13 alone, ~3h, no game opened); Stage 22.14
 implemented; **restarted 2026-09-18 21:08:07 CDT = arm start for 22.13+22.14.**
+
+**2026-09-22 04:11:06** — Stage 22.15 live (rest + stories + labels), arm start.
 
 **2026-09-22** — three-day read of 22.13/22.14 (above): 94% take-up, 27 games,
 14–12–1, six note versions all following losses, predictions at chance, zero

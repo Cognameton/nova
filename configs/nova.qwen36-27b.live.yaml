@@ -98,6 +98,11 @@ prompt:
 # seed). Stage 22.14 (same day) adds the loop under the same flag: a
 # versioned strategy note, a per-version scoreboard, a scored prediction,
 # and recall_history source 'games'. Arm start 2026-09-18 21:08:07 CDT.
+# Stage 22.15 (2026-09-22, after the three-day read: 94% of ticks on the
+# board, zero recalls, explorations dark): rest after each result before
+# the next game may open — 1800s = 6 ticks at the 300s cadence. Game
+# entries now carry turning points; note labels are normalised.
 game:
   reversi_enabled: true
   reversi_opponent: greedy
+  reversi_rest_seconds: 1800

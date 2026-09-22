@@ -20,6 +20,14 @@ never by her prose:
                  checked against the result; hit rate kept in the record
   memory         recall_history source 'games' — finished games, one line each
 
+22.15 (after the 09-22 read: 94% of ticks on the board, zero recalls,
+explorations dark) adds REST — a runtime-enforced pause after each result
+before the next game can open, so the other tools get surface back — and
+makes a past game worth reading: each recall entry carries the score at
+her 10th and 20th moves and the first corner each side took. Note labels
+("v3: ...") are normalised so a re-sent note no longer splits the
+scoreboard, and the note can be revised during rest without a game.
+
 Nothing here is a mandate. The purpose is stated on the surface once, in
 plain words; whether she uses any of it is the measurement.
 
@@ -55,6 +63,8 @@ _SQUARE_RE = re.compile(r"^([a-h])\s*[-]?\s*([1-8])$")
 OPPONENT_POLICIES = ("random", "greedy")
 EXPECTATIONS = ("win", "loss", "draw")
 STRATEGY_MAX_CHARS = 400
+_NOTE_LABEL_RE = re.compile(r"^\s*v\d+\s*[:\-–—]\s*", re.IGNORECASE)
+CORNERS = ("a1", "a8", "h1", "h8")
 COMMENT_MAX_CHARS = 280
 
 # One sentence of purpose, shown on the surface. The operator's framing
@@ -196,6 +206,32 @@ def board_from_rows(rows: list[str]) -> Board:
     return [list(row) for row in rows]
 
 
+def game_story(moves: list[dict[str, Any]]) -> dict[str, Any]:
+    """Replay a move list; return the turning points a reader can learn from.
+
+    score_at_10 / score_at_20: the score after Nova's 10th and 20th moves.
+    first_corner: {player: (square, nova_move_number)} for each side's
+    first corner, keyed by X / O.
+    """
+    board = new_board()
+    nova_n = 0
+    out: dict[str, Any] = {"first_corner": {}}
+    for m in moves:
+        if m["square"] == "pass":
+            continue
+        parsed = parse_square(m["square"])
+        if parsed is None:
+            continue
+        apply_move(board, m["player"], *parsed)
+        if m["player"] == NOVA:
+            nova_n += 1
+            if nova_n in (10, 20):
+                out[f"score_at_{nova_n}"] = score(board)
+        if m["square"] in CORNERS and m["player"] not in out["first_corner"]:
+            out["first_corner"][m["player"]] = [m["square"], nova_n]
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Records
 # ---------------------------------------------------------------------------
@@ -223,6 +259,8 @@ class ReversiGame:
     strategy_version: int = 0
     expect: str = ""
     prediction_correct: bool | None = None
+    # 22.15 — turning points, computed at finish (replayed for old records).
+    story: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -309,6 +347,10 @@ class ReversiStore:
     def list_finished(self) -> list[ReversiGame]:
         return [ReversiGame.from_dict(p) for p in _read_jsonl(self._finished)]
 
+    def last_finished(self) -> ReversiGame | None:
+        games = self.list_finished()
+        return games[-1] if games else None
+
     # -- strategy notes (22.14) --------------------------------------------
 
     def list_strategies(self) -> list[StrategyNote]:
@@ -365,12 +407,38 @@ class ReversiController:
         *,
         opponent_policy: str = "greedy",
         seed: int | None = None,
+        rest_seconds: int = 0,
+        now: Any = None,
     ) -> None:
         if opponent_policy not in OPPONENT_POLICIES:
             raise ValueError(f"opponent policy must be one of {OPPONENT_POLICIES}")
+        if rest_seconds < 0:
+            raise ValueError("rest_seconds must be non-negative")
         self._store = store
         self._policy = opponent_policy
         self._seed = seed
+        # 22.15 — rest after a result. 0 = none (22.14 behaviour). Clock is
+        # injectable so the suite never sleeps.
+        self._rest_seconds = rest_seconds
+        self._now = now or (lambda: datetime.now(timezone.utc))
+
+    # -- rest (22.15) ------------------------------------------------------
+
+    def rest_remaining_seconds(self) -> int:
+        """Seconds until a new game may open; 0 when she may play now."""
+        if self._rest_seconds <= 0 or self._store.load_current() is not None:
+            return 0
+        last = self._store.last_finished()
+        if last is None or not last.closed_at:
+            return 0
+        try:
+            closed = datetime.fromisoformat(last.closed_at)
+        except ValueError:
+            return 0
+        if closed.tzinfo is None:
+            closed = closed.replace(tzinfo=timezone.utc)
+        remaining = self._rest_seconds - (self._now() - closed).total_seconds()
+        return max(0, int(remaining + 0.999))
 
     # -- state -------------------------------------------------------------
 
@@ -390,6 +458,7 @@ class ReversiController:
         return ReversiGame(
             game_number=number,
             session_id=session_id,
+            opened_at=self._now().isoformat(),
             opponent_policy=self._policy,
             seed=seed,
             strategy_version=note.version if note else 0,
@@ -403,7 +472,10 @@ class ReversiController:
 
     def set_strategy(self, text: str, *, session_id: str = "", tick_ref: str = "") -> dict[str, Any]:
         """A new version each time the text changes; identical text is a no-op."""
-        text = " ".join((text or "").split())[:STRATEGY_MAX_CHARS]
+        text = " ".join((text or "").split())
+        # 22.15: she labels the note with its own version ("v3: ..."); the
+        # label is not content, so it must not open a new version.
+        text = _NOTE_LABEL_RE.sub("", text).strip()[:STRATEGY_MAX_CHARS]
         if not text:
             return {"changed": False, "note": "Empty strategy text ignored."}
         current = self._store.current_strategy()
@@ -461,18 +533,30 @@ class ReversiController:
             if move_text == "resign":
                 return self._reply(None, ok=False, error="no_game",
                                    note="There is no game to resign.", **extra)
-            if move_text or expect:
-                game = self._new_game(session_id)
-                started = True
+            if not move_text:
+                # 22.15: a note or a prediction alone never opens a game.
                 if expect:
-                    game.expect = expect
-                    notes.append(f"Prediction '{expect}' recorded for game {game.game_number}.")
-                if move_text in ("", "new", "start"):
-                    notes.insert(0, "New game. You are X and move first.")
-                    self._store.save_current(game)
-                    return self._reply(game, ok=True, started=True, note=" ".join(notes), **extra)
-            else:
+                    notes.append("No game in progress; 'expect' applies to a game once one is open.")
                 return self._reply(None, ok=True, note=" ".join(notes), **extra)
+            # 22.15: rest after a result. Refuse to open; nothing else changes.
+            remaining = self.rest_remaining_seconds()
+            if remaining > 0:
+                notes.append(
+                    f"Resting after game {self._store.last_finished().game_number}: "
+                    f"the next game opens in about {max(1, round(remaining / 60))} min."
+                )
+                return self._reply(None, ok=False, error="resting",
+                                   rest_remaining_seconds=remaining,
+                                   note=" ".join(notes), **extra)
+            game = self._new_game(session_id)
+            started = True
+            if expect:
+                game.expect = expect
+                notes.append(f"Prediction '{expect}' recorded for game {game.game_number}.")
+            if move_text in ("new", "start"):
+                notes.insert(0, "New game. You are X and move first.")
+                self._store.save_current(game)
+                return self._reply(game, ok=True, started=True, note=" ".join(notes), **extra)
         else:
             if expect:
                 game.expect = expect
@@ -572,7 +656,7 @@ class ReversiController:
         final = score(board)
         game.final_score = final
         game.status = "finished"
-        game.closed_at = _utc_now()
+        game.closed_at = self._now().isoformat()
         if resigned or final[NOVA] < final[OPPONENT]:
             game.result = "loss"
         elif final[NOVA] > final[OPPONENT]:
@@ -581,6 +665,7 @@ class ReversiController:
             game.result = "draw"
         if game.expect:
             game.prediction_correct = game.expect == game.result
+        game.story = game_story(game.moves)
         self._store.append_finished(game)
         self._store.clear_current()
 
@@ -599,6 +684,7 @@ class ReversiController:
         note = self._store.current_strategy()
         reply["strategy"] = {"version": note.version, "text": note.text} if note else None
         if game is None:
+            reply.setdefault("rest_remaining_seconds", self.rest_remaining_seconds())
             return reply
         board = board_from_rows(game.board)
         legal = legal_moves(board, NOVA) if game.status == "active" else []
@@ -656,15 +742,32 @@ class ReversiController:
         header = f"[Reversi] — {PURPOSE}."
         game = self._store.load_current()
         if game is None:
-            return "\n".join(
-                [
-                    header,
-                    "No game in progress. " + record_line,
-                    *self.scoreboard_lines(),
+            remaining = self.rest_remaining_seconds()
+            last = self._store.last_finished()
+            lines = [header]
+            if remaining > 0 and last is not None:
+                lines.append(
+                    f"Resting after game {last.game_number} (you {last.result},"
+                    f" X {last.final_score.get(NOVA, 0)} - O {last.final_score.get(OPPONENT, 0)})."
+                    f" The next game opens in about {max(1, round(remaining / 60))} min. "
+                    + record_line
+                )
+            else:
+                lines.append("No game in progress. " + record_line)
+            lines.extend(self.scoreboard_lines())
+            if last is not None:
+                lines.append("Last game: " + self.game_line(last))
+            if remaining > 0:
+                lines.append(
+                    "While resting: the note can be revised with 'strategy' at any time, and"
+                    " past games are readable through recall_history source 'games'."
+                )
+            else:
+                lines.append(
                     "play_reversi with move 'new' starts one; you are X and move first."
-                    " 'expect' records a prediction that is checked when the game ends.",
-                ]
-            )
+                    " 'expect' records a prediction that is checked when the game ends."
+                )
+            return "\n".join(lines)
         board = board_from_rows(game.board)
         legal = legal_moves(board, NOVA)
         sc = score(board)
@@ -690,27 +793,51 @@ class ReversiController:
             lines.append("No prediction for this game yet ('expect': win, loss or draw).")
         return "\n".join(lines)
 
+    @staticmethod
+    def game_line(g: ReversiGame) -> str:
+        """One compact line per finished game, with its turning points (22.15).
+
+        Sized to survive the recall_history per-entry cap: result, note
+        version, prediction, the score after her 10th and 20th moves, and
+        the first corner each side took (square @ her move number).
+        """
+        sc = g.final_score
+        text = (
+            f"g{g.game_number} {g.result} {sc.get(NOVA, 0)}-{sc.get(OPPONENT, 0)}"
+            f" v{g.strategy_version}"
+        )
+        if g.resigned:
+            text += " resigned"
+        if g.expect:
+            text += f" pred {g.expect} ({'right' if g.prediction_correct else 'wrong'})"
+        story = g.story or game_story(g.moves)
+        marks = []
+        for n in (10, 20):
+            s10 = story.get(f"score_at_{n}")
+            if s10:
+                marks.append(f"m{n} {s10.get(NOVA, 0)}-{s10.get(OPPONENT, 0)}")
+        if marks:
+            text += " | " + " ".join(marks)
+        fc = story.get("first_corner") or {}
+        corners = []
+        if NOVA in fc:
+            corners.append(f"you {fc[NOVA][0]}@{fc[NOVA][1]}")
+        if OPPONENT in fc:
+            corners.append(f"opp {fc[OPPONENT][0]}@{fc[OPPONENT][1]}")
+        text += " | corners: " + (", ".join(corners) if corners else "none")
+        if g.illegal_attempts:
+            text += f" | {g.illegal_attempts} illegal"
+        comments = [m["comment"] for m in g.moves if m.get("comment")]
+        if comments:
+            text += f" :: {comments[-1]}"
+        return text
+
     def recall_entries(self) -> list[tuple[str, str]]:
         """recall_history source 'games' — one line per finished game."""
-        entries: list[tuple[str, str]] = []
-        for g in self._store.list_finished():
-            sc = g.final_score
-            moves = sum(1 for m in g.moves if m["player"] == NOVA and m["square"] != "pass")
-            text = (
-                f"game {g.game_number}: {g.result} X {sc.get(NOVA, 0)}-O {sc.get(OPPONENT, 0)}"
-                f" in {moves} moves, note v{g.strategy_version}"
-            )
-            if g.resigned:
-                text += ", resigned"
-            if g.expect:
-                text += f", predicted {g.expect} ({'right' if g.prediction_correct else 'wrong'})"
-            if g.illegal_attempts:
-                text += f", {g.illegal_attempts} illegal"
-            comments = [m["comment"] for m in g.moves if m.get("comment")]
-            if comments:
-                text += f" :: {comments[-1]}"
-            entries.append((g.closed_at or g.opened_at, text))
-        return entries
+        return [
+            (g.closed_at or g.opened_at, self.game_line(g))
+            for g in self._store.list_finished()
+        ]
 
 
 def render_play_result(result: dict[str, Any]) -> str:

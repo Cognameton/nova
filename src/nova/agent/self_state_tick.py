@@ -94,8 +94,9 @@ _GAME_TOOL = "\n".join(
         "  game, and your results are kept per version of it, so you can see",
         "  whether a change helped); 'expect' ('win', 'loss' or 'draw' — a",
         "  prediction, checked when the game ends); 'comment'. You are X; the",
-        "  opponent replies in the same call. Past games are readable through",
-        "  recall_history source 'games'.",
+        "  opponent replies in the same call. After a result there is a short",
+        "  rest before the next game can open; the note can be revised at any",
+        "  time. Past games are readable through recall_history source 'games'.",
     ]
 )
 _GAMES_SOURCE = ", 'games'"

@@ -1,0 +1,66 @@
+PHASE 22 — STAGE 22.15: REST BETWEEN GAMES, AND GAMES WORTH READING
+====================================================================
+Status: IMPLEMENTED 2026-09-22 after the three-day read of 22.13/22.14.
+Live at the daemon restart 2026-09-22 04:11:06 CDT = ARM START (filter traces on
+timestamp; the session id is shared with the pre-22.15 ticks of the day).
+Same flag as 22.13/22.14; defaults byte-identical.
+
+WHY (from the 09-22 read, docs/RESEARCH_LOG.md)
+---------------------------------------------------
+She chose play_reversi on 94% of ticks from the first tick; 27 games in
+72 h; six note versions, every revision after losses; predictions at
+chance ("win" 22 of 27); ZERO recall_history calls of any source;
+heartbeats down to 2/day; explorations ZERO. The board did not
+diversify her surface, it replaced it. Two of the six note versions were
+the same text re-sent with a "v3:" label she added herself.
+
+Operator direction: "she rests between games and she needs to read her
+own previous game strategies before each new game." Built as: rest
+ENFORCED by the runtime (the one gate — a suggestion loses to an
+unfinished board every time); reading NUDGED, not required (a forced
+recall would measure the ritual, not her); and each past game made worth
+reading by adding its turning points.
+
+WHAT
+----
+  REST (game.reversi_rest_seconds, live 1800 = 6 ticks): after a result,
+    play_reversi refuses to open a game ("resting", note says when the
+    next opens) until the window has passed. Nothing else is gated: the
+    note can be revised with 'strategy' at any time; 'expect' alone no
+    longer opens a game (it never should have). The [Reversi] block
+    during rest: "Resting after game N (you won/lost X-O). The next game
+    opens in about M min." + record + scoreboard + "Last game: <line>" +
+    "While resting: the note can be revised ... past games are readable
+    through recall_history source 'games'." Clock is injectable;
+    records are stamped with the controller clock.
+  STORIES: game_story() replays a move list -> score after her 10th and
+    20th moves, and the first corner each side took (square @ her move
+    number). Stored on the record at finish (ReversiGame.story, schema
+    1.1 field), replayed on read for older records. game_line() renders
+    one compact line, sized under the 140-char recall cap:
+      g24 loss 28-36 v2 pred win (wrong) | m10 9-12 m20 15-26 | corners: opp a1@17, you h8@22
+    Used by recall_history 'games' and by the "Last game:" line.
+  LABELS: a leading "vN:" / "vN -" on a strategy note is stripped before
+    comparison and storage, so a re-sent note is a no-op.
+  Tool sentence adds one clause: "After a result there is a short rest
+    before the next game can open; the note can be revised at any time."
+
+Tests: tests/test_reversi.py 31 -> 39 (rest refusal and release on an
+injected clock, note/prediction during rest, rest block content, rest=0
+keeps 22.14 behaviour, story + line under the cap, old records replayed,
+label normalisation, config default/validation). Suite 1114 -> 1122.
+
+MEASUREMENT (added; same caveats)
+---------------------------------
+  what she does during rest: tool mix on rest ticks (the point of the
+    stage); whether recall_history 'games' is ever called, and when
+    (during rest / before 'new');
+  note revisions during rest vs at 'new';
+  games per day (expect ~9 -> ~6 at 30 min rest + 2.5 h games);
+  heartbeats and explorations per day vs the 09-19..09-21 floor (2, 0);
+  unchanged: win rate, calibration, illegal rate.
+Read at >= 3 complete days (on/after 2026-09-26).
+
+REVERSAL
+--------
+reversi_rest_seconds: 0 restores 22.14 exactly; the flag restores 22.12.

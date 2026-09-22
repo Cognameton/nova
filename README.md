@@ -115,7 +115,7 @@ As of 2026-09-05:
     full live-record analysis and the Phase 23 QLoRA go/no-go, scored
     against a positive architecture-use rubric recorded in
     `PHASE22_PLAN.txt`.
-- Full suite: 1114 tests passing (check `git log` for the current
+- Full suite: 1122 tests passing (check `git log` for the current
   count — this will have moved).
 
 Recommended current model baseline:

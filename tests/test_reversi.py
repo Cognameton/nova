@@ -527,14 +527,14 @@ class ReversiLoopTests(unittest.TestCase):
         self._play_out(expect="win")
         entries = self.ctl.recall_entries()
         self.assertEqual(len(entries), 1)
-        self.assertTrue(entries[0][1].startswith("game 1: "))
-        self.assertIn("note v1", entries[0][1])
-        self.assertIn("predicted win (", entries[0][1])
+        self.assertTrue(entries[0][1].startswith("g1 "))
+        self.assertIn(" v1 ", entries[0][1])
+        self.assertIn("pred win (", entries[0][1])
         result = _dispatcher(self.ctl).dispatch(
             ToolRequest(tool_name="recall_history", arguments={"source": "games"})
         )
         self.assertEqual(result["total"], 1)
-        self.assertIn("game 1:", result["entries"][0]["text"])
+        self.assertTrue(result["entries"][0]["text"].startswith("g1 "))
         rendered = render_read_tool_result("recall_history", result)
         self.assertIn("recall_history games", rendered)
         off = _dispatcher().dispatch(ToolRequest(tool_name="recall_history", arguments={"source": "games"}))
@@ -558,3 +558,131 @@ class ReversiLoopTests(unittest.TestCase):
         self.assertIn("You have no strategy note yet.", block)
         self.assertIn("'expect' records a prediction", block)
         self.assertLess(len(block), 600)
+
+
+# ---------------------------------------------------------------------------
+# Stage 22.15 — rest, game stories, label normalisation
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+from nova.agent.reversi import game_story  # noqa: E402
+from nova.agent.self_state_tools import RECALL_HISTORY_ENTRY_CHARS  # noqa: E402
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.t = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)
+
+    def __call__(self) -> datetime:
+        return self.t
+
+    def advance(self, seconds: int) -> None:
+        self.t += timedelta(seconds=seconds)
+
+
+class ReversiRestTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.clock = _Clock()
+        self.ctl = ReversiController(
+            ReversiStore(self.dir), opponent_policy="greedy", seed=11,
+            rest_seconds=1800, now=self.clock,
+        )
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _finish_one(self) -> dict:
+        rng = random.Random(2)
+        reply = self.ctl.play(move="new", session_id="s")
+        while reply["status"] != "finished":
+            reply = self.ctl.play(move=rng.choice(reply["legal_moves"]), session_id="s")
+        return reply
+
+    def test_no_rest_before_first_game_and_none_while_playing(self) -> None:
+        self.assertEqual(self.ctl.rest_remaining_seconds(), 0)
+        self.ctl.play(move="d3", session_id="s")
+        self.assertEqual(self.ctl.rest_remaining_seconds(), 0)
+
+    def test_new_game_is_refused_during_rest_then_allowed(self) -> None:
+        self._finish_one()
+        self.assertEqual(self.ctl.rest_remaining_seconds(), 1800)
+        for move in ("new", "d3", ""):
+            reply = self.ctl.play(move=move, session_id="s")
+            self.assertFalse(reply["ok"], move)
+            self.assertEqual(reply["error"], "resting")
+            self.assertIn("next game opens in about 30 min", reply["note"])
+            self.assertIsNone(self.ctl.current())
+        self.clock.advance(1799)
+        self.assertEqual(self.ctl.play(move="new", session_id="s")["error"], "resting")
+        self.clock.advance(1)
+        reply = self.ctl.play(move="new", session_id="s")
+        self.assertTrue(reply["ok"])
+        self.assertEqual(reply["game_number"], 2)
+
+    def test_note_and_prediction_during_rest(self) -> None:
+        self._finish_one()
+        r = self.ctl.play(strategy="corners first", session_id="s")
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["strategy"]["version"], 1)
+        self.assertIsNone(self.ctl.current())
+        e = self.ctl.play(expect="win", session_id="s")
+        self.assertTrue(e["ok"])
+        self.assertIn("No game in progress", e["note"])
+        self.assertIsNone(self.ctl.current())
+
+    def test_prompt_block_during_rest_points_at_games_source(self) -> None:
+        last = self._finish_one()
+        block = self.ctl.prompt_block()
+        self.assertIn(f"Resting after game 1 (you {last['result']},", block)
+        self.assertIn("next game opens in about 30 min", block)
+        self.assertIn("Last game: g1 ", block)
+        self.assertIn("recall_history source 'games'", block)
+        self.assertNotIn("play_reversi with move 'new' starts one", block)
+        self.clock.advance(1800)
+        block = self.ctl.prompt_block()
+        self.assertIn("No game in progress.", block)
+        self.assertIn("Last game: g1 ", block)
+        self.assertIn("play_reversi with move 'new' starts one", block)
+
+    def test_rest_zero_keeps_22_14_behaviour(self) -> None:
+        ctl = ReversiController(ReversiStore(self.dir), seed=11, rest_seconds=0, now=self.clock)
+        rng = random.Random(2)
+        reply = ctl.play(move="new", session_id="s")
+        while reply["status"] != "finished":
+            reply = ctl.play(move=rng.choice(reply["legal_moves"]), session_id="s")
+        self.assertTrue(ctl.play(move="new", session_id="s")["ok"])
+
+    def test_story_and_game_line_fit_the_recall_cap(self) -> None:
+        reply = self._finish_one()
+        g = ReversiStore(self.dir).last_finished()
+        assert g is not None
+        self.assertIn("score_at_10", g.story)
+        self.assertIn("score_at_20", g.story)
+        self.assertEqual(g.story, game_story(g.moves))
+        line = ReversiController.game_line(g)
+        self.assertLessEqual(len(line), RECALL_HISTORY_ENTRY_CHARS, line)
+        self.assertIn("| m10 ", line)
+        self.assertIn("| corners:", line)
+        # old 1.0/1.1 records without a story are replayed on read
+        g.story = {}
+        self.assertEqual(ReversiController.game_line(g), line)
+
+    def test_note_label_is_not_content(self) -> None:
+        self.ctl.play(strategy="Corners first; keep mobility.", session_id="s")
+        again = self.ctl.play(strategy="v1: Corners first; keep mobility.", session_id="s")
+        self.assertFalse(again["strategy_set"]["changed"])
+        third = self.ctl.play(strategy="V2 - Corners first; keep mobility.", session_id="s")
+        self.assertFalse(third["strategy_set"]["changed"])
+        changed = self.ctl.play(strategy="v3: Edges first.", session_id="s")
+        self.assertTrue(changed["strategy_set"]["changed"])
+        self.assertEqual(changed["strategy"], {"version": 2, "text": "Edges first."})
+
+    def test_config_rest_default_and_validation(self) -> None:
+        cfg = NovaConfig()
+        self.assertEqual(cfg.game.reversi_rest_seconds, 0)
+        cfg.model.model_path = "x"
+        cfg.game = GameConfig(reversi_rest_seconds=-1)
+        with self.assertRaises(ValueError):
+            cfg.validate()

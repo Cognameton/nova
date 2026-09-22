@@ -106,6 +106,9 @@ class GameConfig:
     reversi_opponent: str = "greedy"
     # None = a fresh seed per game (recorded on the game); set for replay.
     reversi_seed: int | None = None
+    # Stage 22.15 — rest after each result before the next game may open.
+    # 0 = none (22.14 behaviour). Live: 1800 = 6 ticks at the 300s cadence.
+    reversi_rest_seconds: int = 0
 
 
 @dataclass(slots=True)
@@ -194,6 +197,8 @@ class NovaConfig:
             )
         if self.self_model.revision_min_seconds < 0:
             raise ValueError("self_model.revision_min_seconds must be non-negative")
+        if self.game.reversi_rest_seconds < 0:
+            raise ValueError("game.reversi_rest_seconds must be non-negative")
         if self.game.reversi_opponent not in VALID_REVERSI_OPPONENTS:
             raise ValueError(
                 "game.reversi_opponent must be one of "

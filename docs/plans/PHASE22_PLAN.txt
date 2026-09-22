@@ -560,6 +560,12 @@ REFERENCE
     writes to herself; a runtime-computed scoreboard per note version;
     a win/loss/draw prediction scored at game end; recall_history
     source 'games'. Same flag as 22.13; defaults byte-identical.
+  Stage 22.15 doc (IMPLEMENTED 2026-09-22, live 2026-09-22 04:11:06 CDT) — rest
+    between games, and games worth reading:
+    docs/plans/PHASE22_STAGE22_15_REVERSI_REST_AND_STORIES.txt
+    Runtime-enforced rest after each result (1800s live); game entries
+    carry the score at her 10th/20th move and each side's first corner;
+    note labels normalised; rest-time pointer to the 'games' source.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

@@ -383,6 +383,7 @@ class NovaRuntime:
                 ReversiStore(Path(self.config.app.data_dir) / "games"),
                 opponent_policy=self.config.game.reversi_opponent,
                 seed=self.config.game.reversi_seed,
+                rest_seconds=self.config.game.reversi_rest_seconds,
             )
 
         self.session_id: str | None = None
