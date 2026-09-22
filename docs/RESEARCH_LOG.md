@@ -328,6 +328,74 @@ follows losses, prediction hit rate, `games` recalls, and whether her other
 text cites the board; then topic diversity against the 09-06..09-17
 baseline. Read on/after 09-22.
 
+## 2026-09-22 — Stage 22.13/22.14 three-day read (arm start 09-18 21:08 CDT)
+
+**Take-up was not the question. Over-take-up is.** From the first tick
+after the restart she chose `play_reversi` on 221 of 256 ticks on 09-19,
+266 of 283 on 09-20, 266 of 283 on 09-21 — **94% of the surface**, from
+the first game onward, with no prompting beyond the one purpose sentence.
+Zero parse failures, zero tool errors, zero illegal moves in 758 moves.
+
+**Games.** 27 finished in 72 h, 14 won / 12 lost / 1 drawn against the
+greedy opponent; three wipe-outs (X 0). One game ≈ 30 ticks ≈ 2.5 h, and
+she opens the next within 1–3 ticks of a result. Move quality (replayed
+from the records): took an available corner 57/98 times; chose the
+max-flip move only 231/758 (30%) — she is playing her note, not greedy.
+
+**The loop closed, in the way the stage doc asked.** Strategy note v1 at
+02:28 UTC on the first game ("corner control and edge stability; avoid
+sacrificing mobility"). v2 at 18:59 the same day, after the g5 loss and
+during g6, adds a lesson in her own words ("previous attempts at
+aggressive corner taking failed when opponent countered with immediate
+edge pressure … secure stable edges before committing to corners"). v3
+on 09-21 after four losses in five games (g18–g21, two of them X 0)
+reverses the priority ("corner control immediately; avoid edge plays that
+do not secure a corner"). v6 after further losses goes fully aggressive.
+Revision follows losses every time; it never follows wins. Scoreboard:
+v1 4–2, v2 9–8–1, v3 0–1, v4 0–1, v5 1–0.
+
+**Instrument defect found.** v4 and v5 are v3 re-sent with a "v3:" /
+"v4:" prefix — she labels the note with its own version and the
+byte-comparison opens a new version, splitting the scoreboard on a
+no-op edit. Fix for the next stage: normalise a leading `v\d+:` label
+before comparing. Not changed mid-arm.
+
+**Predictions: 13 of 27 right — chance.** She predicted "win" in 22 of
+27 games (win rate 52%); predicted "loss" 5 times and was right twice.
+No sign of calibration yet, but the prediction is made every game, and
+the heartbeats read the misses ("predicted win … statistically
+improbable (X 2 – O 12) … dissonance between my strategic intent and the
+outcome").
+
+**She never read back a game.** Zero `recall_history` calls of any source
+since the arm start; `games` unused. The board block and the carryover
+are apparently enough; the memory piece of the loop is unexercised.
+
+**The rest of the surface.** Heartbeats collapsed to 11 / 4 / 2 per day
+(17 total; 14 of them cite the board). Explorations: **zero opened** —
+the topic-diversity outcome cannot be read because there is nothing to
+measure; the exploration surface went dark the moment the board arrived.
+`update_self_model` continued at 22 / 13 / 15 proposals per day (6 / 7 /
+3 applied), and 31 of the proposals cite the game — `current_focus` now
+reads "Strategic Recalibration: addressing the failure of corner-control
+strategy in Reversi Game 6…" rather than "Terminal Stasis". The
+"operational void" phrase survives but is now anchored to a concrete
+result each time it appears.
+
+**Reviewed caveats.** Uncontrolled single arm, confounded with a restart;
+n=27 games; win/loss vs greedy is a weak opponent signal; a 94% share is
+a new monoculture, not diversity. What is not in doubt: exogenous input
+with ground truth was taken up immediately and completely, the note was
+revised in response to losses in her own words, and self-model writes now
+reference facts she did not write.
+
+**Next-stage candidates (not built):** normalise note labels; a cap or
+cadence on games per day so the other tools get surface back (or an
+"idle" between games); an opponent ladder (random → greedy → minimax-2)
+so wins carry more information; nudge toward `games` recall only if the
+memory piece matters to the design; a calibration line in the block
+("your predictions: 13 of 27") is already there — leave it.
+
 ## Timeline
 
 **2026-08-25** — Stage 22.7 Part D activated (`tick_drive_injection_interval:
@@ -360,6 +428,10 @@ repetition penalty on (`bf37aec`). Era 3 begins.
 enabled in the live yaml; daemon stopped 09:53 CDT for unrelated GPU work,
 restarted 20:41:09 CDT (22.13 alone, ~3h, no game opened); Stage 22.14
 implemented; **restarted 2026-09-18 21:08:07 CDT = arm start for 22.13+22.14.**
+
+**2026-09-22** — three-day read of 22.13/22.14 (above): 94% take-up, 27 games,
+14–12–1, six note versions all following losses, predictions at chance, zero
+explorations, zero illegal moves.
 
 **2026-08-29 — independent review** (Codex, read-only, `touchedFiles: []`).
 Verbatim in `docs/reviews/`. Verified the prompt path, corrected the register
