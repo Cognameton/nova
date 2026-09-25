@@ -239,3 +239,37 @@ class ConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BudgetForcingTests(unittest.TestCase):
+    def test_unclosed_reasoning_is_closed_and_answer_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            backend = ScriptedBackend([
+                "Reading the board: d3 is X, e3 is O, the corner a1 is open",   # budget exhausted, no </think>
+                _call("emit_heartbeat", observation="I could not finish reading the board."),
+            ])
+            rt = build_test_runtime(data_dir=base / "data", log_dir=base / "logs", backend=backend)
+            rt.config.generation.tick_enable_thinking = True
+            rt.config.generation.tick_thinking_max_tokens = 64
+            rt.start(session_id="force")
+            rt.start_operational_autonomy(max_ticks=0)
+            tick = rt.model_self_state_tick()
+            self.assertEqual(backend.generate_calls, 2)
+            first, second = backend.requests
+            self.assertEqual(first.assistant_prefix, "")
+            self.assertEqual(first.max_tokens, 64 + rt.config.generation.max_tokens)
+            self.assertTrue(second.assistant_prefix.startswith("Reading the board"))
+            self.assertTrue(second.assistant_prefix.endswith("\n</think>\n\n"))
+            self.assertEqual(second.max_tokens, rt.config.generation.max_tokens)
+            a = tick.adapter_audit
+            self.assertTrue(a["parse_ok"])
+            self.assertEqual(a["tool_requested"], "emit_heartbeat")
+            self.assertTrue(a["calls"][0]["thinking_forced_close"])
+            self.assertEqual(a["thinking_text"], "Reading the board: d3 is X, e3 is O, the corner a1 is open")
+            self.assertEqual(a["calls"][0]["completion_tokens"], 24)  # both generations counted
+            rt.close()
+
+    def test_split_thinking_enabled_treats_unclosed_as_reasoning(self) -> None:
+        self.assertEqual(split_thinking("all reasoning", thinking_enabled=True), ("all reasoning", ""))
+        self.assertEqual(split_thinking("all reasoning", thinking_enabled=False), ("", "all reasoning"))

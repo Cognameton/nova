@@ -59,8 +59,13 @@ generation:
   # 512 + 512. Reserved for respond() since 22.6 part 2; the tick never
   # had it — a 27B model was choosing reversi moves and self-model
   # revisions one-shot.
+  # First deep tick (08:20Z 09-25): 1,024 tokens reading the board square
+  # by square, no closing tag, no answer. Budget forcing added the same
+  # hour: when the budget runs out the runtime closes the block and asks
+  # for the answer (assistant_prefix), so a tick always yields an action.
+  # Budget raised to 1024 (~73 s at ~14 tok/s); answer adds up to 512.
   tick_enable_thinking: true
-  tick_thinking_max_tokens: 512
+  tick_thinking_max_tokens: 1024
   stop:
     - "<|im_end|>"
     - "<|im_start|>"

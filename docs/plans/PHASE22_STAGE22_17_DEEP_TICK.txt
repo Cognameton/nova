@@ -1,8 +1,9 @@
 PHASE 22 — STAGE 22.17: THE DEEP TICK
 =====================================
 Status: IMPLEMENTED 2026-09-25 (scaffolding review recommendation 1, plus
-the operator's question "would extending the ticks help?"). Live at the
-daemon restart 2026-09-25 03:14:34 CDT = ARM START. Baseline = 22.15+22.16
+the operator's question "would extending the ticks help?"). First live at the daemon
+restart 2026-09-25 03:14:34 CDT; the first deep tick failed (below); budget
+forcing added and the daemon restarted 2026-09-25 03:23:23 CDT = ARM START. Baseline = 22.15+22.16
 (09-22 09:11Z -> this restart). Defaults byte-identical to 22.16.
 
 WHY
@@ -25,7 +26,15 @@ WHAT
     Observer sees the visible text only. Audit: thinking_enabled,
     thinking_chars, thinking_text (first 4,000 chars). A think block that
     runs past the budget has no closing tag and therefore no visible
-    output: parse fails, and 22.16's parse-failure feedback tells her.
+    output. BUDGET FORCING (added 09-25 after the first live tick): when
+    the first generation returns no closing tag, the runtime appends the
+    reasoning plus "\n</think>\n\n" as the assistant prefix
+    (GenerationRequest.assistant_prefix, native-template mode) and
+    generates the answer with max_tokens; completion tokens and latency
+    are summed; calls[].thinking_forced_close records it. A tick always
+    yields an answer to parse. First live tick, 08:20:52Z: 1,024 tokens
+    of square-by-square board reading, no close, no action, 72 s — the
+    deliberation was real and the budget was not.
   prompt.tick_max_reads (default 0; live 3): read tools (recall_self,
     reflect, recall_history, read_instructions) are dispatched inside the
     tick, rendered under "[Results of your reads this tick]", and the

@@ -120,7 +120,7 @@ class LlamaCppBackend:
                 dict.fromkeys(list(formatted.stop or []) + list(request.stop))
             )
             response = self._llm(
-                formatted.prompt,
+                formatted.prompt + (request.assistant_prefix or ""),
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_p=request.top_p,

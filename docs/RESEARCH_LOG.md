@@ -511,7 +511,10 @@ repeat_last_n plumbed). Scaffolding review at
 `docs/reviews/2026-09-25_scaffolding_review.md`.
 
 **2026-09-25 03:14:34** — Stage 22.17 live (deep tick: thinking, in-tick reads,
-read_instructions, wider recall) = ARM START; read on/after 09-29.
+read_instructions, wider recall) — first deep tick 08:20:52Z: 1,024 tokens reading the board square by
+square, no closing tag, no action (72 s). Budget forcing added (the runtime
+closes the block and asks for the answer), budget 1024; **restarted
+2026-09-25 03:23:23 CDT = ARM START**; read on/after 09-29.
 
 **2026-09-25** — Stage 22.15 read (above): rest ticks 20% of the surface and
 all diversification comes from them; games read in 10/17 windows; notes

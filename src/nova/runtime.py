@@ -1141,7 +1141,38 @@ class NovaRuntime:
                     max_tokens_override=tick_max_tokens,
                 )
             )
-            thinking_text, visible_text = split_thinking(generation.raw_text or "")
+            thinking_forced = False
+            if tick_thinking and "</think>" not in (generation.raw_text or ""):
+                # Budget forcing: the reasoning used the whole budget without
+                # closing. Close the block for her and ask for the answer;
+                # the first deep tick on 2026-09-25 spent 1,024 tokens
+                # reading the board square by square and never got to move.
+                thinking_forced = True
+                prefix = (generation.raw_text or "") + "\n</think>\n\n"
+                answer = self.backend.generate(
+                    self._generation_request(
+                        prompt="",
+                        messages=messages,
+                        enable_thinking=True,
+                        max_tokens_override=self.config.generation.max_tokens,
+                        assistant_prefix=prefix,
+                    )
+                )
+                from nova.types import GenerationResult as _GR
+
+                generation = _GR(
+                    model_id=generation.model_id,
+                    raw_text=prefix + (answer.raw_text or ""),
+                    finish_reason=answer.finish_reason,
+                    prompt_tokens=generation.prompt_tokens,
+                    completion_tokens=int(generation.completion_tokens or 0)
+                    + int(answer.completion_tokens or 0),
+                    latency_ms=int(generation.latency_ms or 0) + int(answer.latency_ms or 0),
+                    metadata={**(generation.metadata or {}), "thinking_forced_close": True},
+                )
+            thinking_text, visible_text = split_thinking(
+                generation.raw_text or "", thinking_enabled=tick_thinking
+            )
             tool_request = self.self_state_tick_engine.parse(
                 raw_text=generation.raw_text,
                 session_id=self.session_id,
@@ -1157,6 +1188,7 @@ class NovaRuntime:
                     "latency_ms": generation.latency_ms,
                     "thinking_chars": len(thinking_text),
                     "visible_chars": len(visible_text),
+                    "thinking_forced_close": thinking_forced,
                 }
             )
             if (
@@ -4580,6 +4612,7 @@ class NovaRuntime:
         messages: list[dict[str, str]] | None = None,
         enable_thinking: bool = False,
         max_tokens_override: int | None = None,
+        assistant_prefix: str = "",
     ):
         from nova.types import GenerationRequest
 
@@ -4600,4 +4633,5 @@ class NovaRuntime:
             retries_allowed=self.config.generation.retries,
             messages=list(messages) if messages else None,
             enable_thinking=enable_thinking,
+            assistant_prefix=assistant_prefix,
         )

@@ -1020,6 +1020,10 @@ class GenerationRequest:
     # loop. 1.0 preserves the historical default; configs opt in.
     repeat_penalty: float = 1.0
     repeat_last_n: int = 64
+    # Stage 22.17 — budget forcing. Text appended to the assistant prefix of
+    # the formatted prompt (native-template mode only): the runtime uses it
+    # to close an over-budget think block and continue to the answer.
+    assistant_prefix: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

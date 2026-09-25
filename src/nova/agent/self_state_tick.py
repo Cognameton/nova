@@ -133,13 +133,14 @@ def _deep_tick_sentence(max_reads: int, instructions_enabled: bool) -> str:
 _THINK_CLOSE = "</think>"
 
 
-def split_thinking(raw_text: str) -> tuple[str, str]:
+def split_thinking(raw_text: str, *, thinking_enabled: bool = False) -> tuple[str, str]:
     """Separate a think block from the visible output.
 
     Two shapes occur. With enable_thinking=True the Qwen template opens the
     block in the prompt itself, so the output carries only the closing tag:
-    "reasoning</think>visible". Some outputs carry both tags. A missing
-    closing tag means the reasoning ran past the budget: nothing visible.
+    "reasoning</think>visible". Some outputs carry both tags. With
+    thinking_enabled and no closing tag at all, the whole output is
+    reasoning that ran past its budget: nothing is visible.
     """
     text = raw_text or ""
     if _THINK_CLOSE in text:
@@ -148,6 +149,8 @@ def split_thinking(raw_text: str) -> tuple[str, str]:
         return head.strip(), tail.strip()
     if "<think>" in text:
         return text.split("<think>", 1)[-1].strip(), ""
+    if thinking_enabled:
+        return text.strip(), ""
     return "", text.strip()
 
 # Stage 22.9: assertion-register additions. enter_exploration continues the
