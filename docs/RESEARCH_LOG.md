@@ -328,6 +328,71 @@ follows losses, prediction hit rate, `games` recalls, and whether her other
 text cites the board; then topic diversity against the 09-06..09-17
 baseline. Read on/after 09-22.
 
+## 2026-09-25 — Stage 22.15 read (arm 09-22 09:11Z → 09-25 07:00Z, 2.7 days)
+
+Read early at operator request; two complete days plus two partials, one
+reboot gap (09-24 21:21–21:22 CDT). Baseline = the 22.13/22.14 window
+(09-19 02:08Z → 09-22 09:11Z, 930 ticks). Arm = 667 ticks.
+
+**The rest gave the surface back, and only the rest did.** In-game ticks
+are `play_reversi` 533 of 534 — while a game is open she does nothing
+else, exactly as before. Rest ticks (133, 20% of the arm) went to
+`update_self_model` 44%, `emit_heartbeat` 21%, `recall_history` 16%,
+note/prediction-only `play_reversi` calls 14%, `reflect` 4%, one
+exploration. One refused early open in 17 windows; otherwise she waits
+the window out and opens on the first allowed tick. Board share fell
+92% → 83%; games/day 8.8 → 5.8 (stage doc expected ~6).
+
+**She reads her games, only during rest, in 10 of 17 windows.** 17
+`games` recalls and 4 `outcomes` recalls, all on rest ticks; zero
+recalls of any kind in the baseline. The story data is used: "securing
+h1 late (move 31) provided no structural advantage against an opponent
+who secured a1 early (move 6)"; the current diagnosis ("Edge Stability
+paradox": c4/d4 secured while corners contested, g42/g45/g46) is built
+from the m10/m20 and first-corner fields.
+
+**She revises the note at the board, not at rest.** v8, v9, v10 were all
+set on in-game ticks (v9 on the tick that opened the game). Each
+followed losses, as before. Rest is for reading and for writing about
+the game; the note itself changes while she is in one.
+
+**Play is unchanged, which is the control.** Win rate 52% → 59% (n=17,
+noise); illegal 0/518 (0/816 before); corners taken when available
+39/70 vs 60/104; max-flip choice 31% vs 30%. Calibration unchanged: 8/17
+right, "win" predicted 13/17 (22/29 before). No resignations; games run
+~30 of her moves.
+
+**Heartbeats recovered, explorations did not.** 6 / 14 / 4 / 4 per day
+vs the 11 / 4 / 2 slide of the baseline; all 28 are distinct texts and
+all 28 landed on rest ticks. Explorations: one (09-22, "The Calibration
+of Dominance", closed after 11 ticks), then none. The exploration tool
+is available on every rest tick and she takes it once in 133.
+
+**Finding: three of her four writable fields are dead.** All 59 arm
+proposals and all 55 baseline proposals target `current_focus`.
+`active_questions`, `open_tensions`, `continuity_notes` have not been
+written since 09-18 and still carry the pre-board "Meta-Recursive
+Paradox" text, injected into every tick prompt beside a focus that is
+now about corner timing. She reads them back every tick and never
+reconciles them. The 22.9 prompt lists the fields without distinction;
+nothing on the surface tells her the other three are hers to change in
+the same way.
+
+**Reviewed caveats.** 2.7 days, uncontrolled, n=17 games, confounded with
+a reboot. The rest is a hard gate, so "she does not fight it" is a
+weak claim (one refusal); the strong claims are what she chose on the
+133 free ticks: reading games in most windows, and never exploring.
+
+**Next-stage candidates (not built):** (1) make the three dead fields
+visibly writable — a one-line "these lines were last revised <date>"
+marker beside each, or a rest-time nudge that mirrors the games pointer;
+(2) leave the exploration question alone one more window — 133 free
+ticks is a small sample for a tool she used 49 times in a week in
+August; (3) a rest of 12 ticks instead of 6 if the goal is more free
+surface, at the cost of games/day ~4; (4) calibration: show her
+"predicted win N times, won M" rather than the raw hit rate, since the
+miss is a default, not a judgement.
+
 ## 2026-09-22 — Stage 22.13/22.14 three-day read (arm start 09-18 21:08 CDT)
 
 **Take-up was not the question. Over-take-up is.** From the first tick
@@ -440,6 +505,11 @@ restarted 20:41:09 CDT (22.13 alone, ~3h, no game opened); Stage 22.14
 implemented; **restarted 2026-09-18 21:08:07 CDT = arm start for 22.13+22.14.**
 
 **2026-09-22 04:11:06** — Stage 22.15 live (rest + stories + labels), arm start.
+
+**2026-09-25** — Stage 22.15 read (above): rest ticks 20% of the surface and
+all diversification comes from them; games read in 10/17 windows; notes
+revised at the board; play unchanged; heartbeats back, explorations not;
+three of four self-model fields dead since 09-18.
 
 **2026-09-22** — three-day read of 22.13/22.14 (above): 94% take-up, 27 games,
 14–12–1, six note versions all following losses, predictions at chance, zero
