@@ -52,6 +52,15 @@ generation:
   # topic_diversity_recent and topic_repeat_streak after three days.
   repeat_penalty: 1.1
   repeat_last_n: 256
+  # Stage 22.17 (2026-09-25, scaffolding review rec 1 + the operator's
+  # "deep tick"): deliberation on the tick. The template opens a think
+  # block; the runtime strips it before parsing and audits its size
+  # (adapter_audit.thinking_chars / thinking_text). Tick max_tokens becomes
+  # 512 + 512. Reserved for respond() since 22.6 part 2; the tick never
+  # had it — a 27B model was choosing reversi moves and self-model
+  # revisions one-shot.
+  tick_enable_thinking: true
+  tick_thinking_max_tokens: 512
   stop:
     - "<|im_end|>"
     - "<|im_start|>"
@@ -93,6 +102,14 @@ prompt:
   tick_tool_feedback: true
   tick_carryover_entries: 4
   tick_log_prompt_text: true
+  # Stage 22.17 — the deep tick: reads answer inside the tick (up to 3),
+  # one action ends it; read_instructions exposes the soul and these
+  # rules (neither reached the tick before); recall_history window
+  # widened from 8 x 140 to 12 x 200 (prompt is ~2.1k of 8,192 tokens).
+  tick_max_reads: 3
+  tick_read_instructions_tool: true
+  tick_recall_entries: 12
+  tick_recall_entry_chars: 200
 
 # Phase 22 Stage 22.13 — reversi, ENABLED 2026-09-18 (operator decision:
 # "give her something to do"). The research log's diagnosis of the

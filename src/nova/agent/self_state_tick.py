@@ -27,6 +27,7 @@ _SYSTEM = "\n".join(
         "Output JSON only with these keys:",
         '{ "tool_name": string, "arguments": object }',
         "Output the JSON object only. No prose before or after, no code fences.",
+        "{deep_tick}",
         "",
         "Tools:",
         "- recall_self (arguments: {}) — re-read your full recorded state:",
@@ -60,6 +61,7 @@ _SYSTEM = "\n".join(
         "  is current_self_model_summary or drive_gap_evidence. Propose only when",
         "  accumulated evidence clearly supports the update.",
         "{game_tool}",
+        "{instructions_tool}",
         "{register_rules}",
         "",
         "Boundaries:",
@@ -100,6 +102,53 @@ _GAME_TOOL = "\n".join(
     ]
 )
 _GAMES_SOURCE = ", 'games'"
+
+# Phase 22 Stage 22.17: the deep tick. Reads answer inside the tick; one
+# action ends it. read_instructions shows her the soul and these rules.
+# Both are config-gated; when off the surface is byte-identical to 22.16.
+_INSTRUCTIONS_MENU_SUFFIX = ", read_instructions"
+_INSTRUCTIONS_TOOL = "\n".join(
+    [
+        "- read_instructions (arguments: 'section' one of 'soul', 'tick_rules')",
+        "  — read the standing text that describes who you are (soul) or the",
+        "  rules of this surface (tick_rules), in full.",
+    ]
+)
+
+
+def _deep_tick_sentence(max_reads: int, instructions_enabled: bool) -> str:
+    reads = "recall_self, reflect, recall_history"
+    if instructions_enabled:
+        reads += ", read_instructions"
+    return "\n".join(
+        [
+            f"Reads ({reads}) answer within this tick: the result is shown to you",
+            f"at once under [Results of your reads this tick] and you choose again,",
+            f"up to {max_reads} reads per tick. Any other tool is your action for",
+            "this tick and ends it.",
+        ]
+    )
+
+
+_THINK_CLOSE = "</think>"
+
+
+def split_thinking(raw_text: str) -> tuple[str, str]:
+    """Separate a think block from the visible output.
+
+    Two shapes occur. With enable_thinking=True the Qwen template opens the
+    block in the prompt itself, so the output carries only the closing tag:
+    "reasoning</think>visible". Some outputs carry both tags. A missing
+    closing tag means the reasoning ran past the budget: nothing visible.
+    """
+    text = raw_text or ""
+    if _THINK_CLOSE in text:
+        head, _, tail = text.partition(_THINK_CLOSE)
+        head = head.split("<think>", 1)[-1] if "<think>" in head else head
+        return head.strip(), tail.strip()
+    if "<think>" in text:
+        return text.split("<think>", 1)[-1].strip(), ""
+    return "", text.strip()
 
 # Stage 22.9: assertion-register additions. enter_exploration continues the
 # Tools list; the update_self_model WHEN guidance stays assertion-only (the
@@ -192,6 +241,9 @@ class SelfStateTickEngine:
         tool_results_block: str = "",
         reversi_enabled: bool = False,
         reversi_block: str = "",
+        max_reads: int = 0,
+        instructions_enabled: bool = False,
+        in_tick_reads_block: str = "",
     ) -> list[dict[str, str]]:
         in_exploration = register == "exploratory"
         if in_exploration:
@@ -217,10 +269,17 @@ class SelfStateTickEngine:
         tool_menu = _EXPLORATORY_MENU if in_exploration else _ASSERTION_MENU
         if reversi_enabled:
             tool_menu += _GAME_MENU_SUFFIX
+        if instructions_enabled:
+            tool_menu += _INSTRUCTIONS_MENU_SUFFIX
         system_body = _SYSTEM.replace(
             "{tool_menu}", tool_menu
         ).replace(
+            "{deep_tick}\n",
+            (_deep_tick_sentence(max_reads, instructions_enabled) + "\n") if max_reads > 0 else "",
+        ).replace(
             "{game_tool}\n", (_GAME_TOOL + "\n") if reversi_enabled else ""
+        ).replace(
+            "{instructions_tool}\n", (_INSTRUCTIONS_TOOL + "\n") if instructions_enabled else ""
         ).replace(
             "{games_source}", _GAMES_SOURCE if reversi_enabled else ""
         ).replace(
@@ -248,6 +307,7 @@ class SelfStateTickEngine:
                     heartbeat_framing=heartbeat_framing,
                     tool_results_block=tool_results_block,
                     reversi_block=reversi_block if reversi_enabled else "",
+                    in_tick_reads_block=in_tick_reads_block,
                 ),
             },
         ]
@@ -265,6 +325,7 @@ class SelfStateTickEngine:
         heartbeat_framing: str = "recent",
         tool_results_block: str = "",
         reversi_block: str = "",
+        in_tick_reads_block: str = "",
     ) -> str:
         parts = [
             f"session_id: {session_id}",
@@ -280,6 +341,11 @@ class SelfStateTickEngine:
             parts.append("[Results of your recent tool calls]")
             parts.append("(you asked for these on earlier ticks)")
             parts.append(tool_results_block)
+        # Stage 22.17: what she read a moment ago, inside this tick.
+        if in_tick_reads_block:
+            parts.append("")
+            parts.append("[Results of your reads this tick]")
+            parts.append(in_tick_reads_block)
         # Stage 22.13: the board, every tick, while the game is enabled.
         if reversi_block:
             parts.append("")
@@ -317,8 +383,9 @@ class SelfStateTickEngine:
         tick_id: str,
     ) -> ToolRequest | None:
         """Parse raw model output into a ToolRequest, or return None on failure."""
-        text = (raw_text or "").strip()
-        # Strip <think>...</think> blocks before JSON extraction (Qwen 3).
+        # Stage 22.17: the think block may carry only its closing tag (the
+        # template opens it); split_thinking handles both shapes.
+        _thinking, text = split_thinking(raw_text or "")
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
         if not text:
             return None

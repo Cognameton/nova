@@ -94,10 +94,11 @@ from nova.agent.exploration import (
     ExplorationJournal,
     ExplorationStore,
 )
-from nova.agent.self_state_tick import SelfStateTickEngine
+from nova.agent.self_state_tick import SelfStateTickEngine, split_thinking
 from nova.agent.self_state_tools import (
     CARRYOVER_TOOL_NAMES,
     PARSE_FAILURE_FEEDBACK,
+    READ_TOOL_NAMES,
     render_tool_feedback,
     SelfStateToolDispatcher,
     _UPDATABLE_SELF_STATE_FIELDS,
@@ -1071,34 +1072,49 @@ class NovaRuntime:
                 ]
             )
 
-        messages = self.self_state_tick_engine.build_messages(
-            heartbeat_framing=self.config.prompt.tick_heartbeat_sampling,
-            session_id=self.session_id,
-            tick_id=tick_id,
-            trigger=trigger,
-            self_context_block=self_context_block,
-            recent_heartbeats=recent_heartbeats,
-            register=register,
-            exploration_block=exploration_block,
-            exploration_history_block=exploration_history_block,
-            soft_grounding=self.config.prompt.tick_soft_grounding,
-            # Stage 22.8b: the prompt's writability wording must match what
-            # dispatch below will actually grant — same flag, same source.
-            inquiry_fields_writable=(
-                self.config.self_model.nova_writable_inquiry_fields
-            ),
-            # Stage 22.10: what she asked to see on earlier ticks.
-            tool_results_block="\n".join(
-                text for _tick, text in self._tick_read_results
-            ),
-            # Stage 22.13: the board is in her context whenever the tool is.
-            reversi_enabled=self.reversi_controller is not None,
-            reversi_block=(
-                self.reversi_controller.prompt_block()
-                if self.reversi_controller is not None
-                else ""
-            ),
+        # Stage 22.17: the deep tick. Reads answer inside the tick (up to
+        # tick_max_reads), then one action ends it. Every generation is
+        # audited in `calls`; the final one carries the action.
+        reversi_block = (
+            self.reversi_controller.prompt_block()
+            if self.reversi_controller is not None
+            else ""
         )
+        max_reads = int(self.config.prompt.tick_max_reads)
+        instructions_enabled = bool(self.config.prompt.tick_read_instructions_tool)
+        in_tick_reads: list[str] = []
+        calls: list[dict] = []
+
+        def _build(in_tick_block: str) -> list[dict[str, str]]:
+            return self.self_state_tick_engine.build_messages(
+                heartbeat_framing=self.config.prompt.tick_heartbeat_sampling,
+                session_id=self.session_id,
+                tick_id=tick_id,
+                trigger=trigger,
+                self_context_block=self_context_block,
+                recent_heartbeats=recent_heartbeats,
+                register=register,
+                exploration_block=exploration_block,
+                exploration_history_block=exploration_history_block,
+                soft_grounding=self.config.prompt.tick_soft_grounding,
+                # Stage 22.8b: the prompt's writability wording must match what
+                # dispatch below will actually grant — same flag, same source.
+                inquiry_fields_writable=(
+                    self.config.self_model.nova_writable_inquiry_fields
+                ),
+                # Stage 22.10: what she asked to see on earlier ticks.
+                tool_results_block="\n".join(
+                    text for _tick, text in self._tick_read_results
+                ),
+                # Stage 22.13: the board is in her context whenever the tool is.
+                reversi_enabled=self.reversi_controller is not None,
+                reversi_block=reversi_block,
+                max_reads=max_reads,
+                instructions_enabled=instructions_enabled,
+                in_tick_reads_block=in_tick_block,
+            )
+
+        messages = _build("")
         # 2026-09-05: measure the tick prompt before generating it. n_ctx has
         # been 32768 since Phase 22 while the rendered surface is roughly an
         # order of magnitude smaller, and nothing recorded the difference —
@@ -1108,15 +1124,60 @@ class NovaRuntime:
         # n_ctx against this number, never against an estimate; an n_ctx below
         # the true ceiling truncates prompts and looks exactly like a model
         # regression.
-        prompt_tokens = self._measure_prompt_tokens(messages)
-        generation = self.backend.generate(
-            self._generation_request(prompt="", messages=messages)
+        tick_thinking = bool(self.config.generation.tick_enable_thinking)
+        tick_max_tokens = (
+            self.config.generation.tick_thinking_max_tokens + self.config.generation.max_tokens
+            if tick_thinking
+            else None
         )
-        tool_request = self.self_state_tick_engine.parse(
-            raw_text=generation.raw_text,
-            session_id=self.session_id,
-            tick_id=tick_id,
-        )
+        reads_used = 0
+        while True:
+            prompt_tokens = self._measure_prompt_tokens(messages)
+            generation = self.backend.generate(
+                self._generation_request(
+                    prompt="",
+                    messages=messages,
+                    enable_thinking=tick_thinking,
+                    max_tokens_override=tick_max_tokens,
+                )
+            )
+            thinking_text, visible_text = split_thinking(generation.raw_text or "")
+            tool_request = self.self_state_tick_engine.parse(
+                raw_text=generation.raw_text,
+                session_id=self.session_id,
+                tick_id=tick_id,
+            )
+            calls.append(
+                {
+                    "tool": tool_request.tool_name if tool_request else None,
+                    "parse_ok": tool_request is not None,
+                    "prompt_tokens": prompt_tokens,
+                    "finish_reason": generation.finish_reason,
+                    "completion_tokens": generation.completion_tokens,
+                    "latency_ms": generation.latency_ms,
+                    "thinking_chars": len(thinking_text),
+                    "visible_chars": len(visible_text),
+                }
+            )
+            if (
+                tool_request is not None
+                and tool_request.tool_name in READ_TOOL_NAMES
+                and reads_used < max_reads
+            ):
+                reads_used += 1
+                try:
+                    read_result = self._tick_dispatcher(messages).dispatch(tool_request)
+                    rendered = render_read_tool_result(
+                        tool_request.tool_name,
+                        read_result if isinstance(read_result, dict) else {},
+                    )
+                except Exception as exc:  # a failed read is still an answer
+                    rendered = f"{tool_request.tool_name} failed: {exc}"
+                in_tick_reads.append(rendered or f"{tool_request.tool_name}: (empty)")
+                calls[-1]["in_tick_read"] = True
+                messages = _build("\n".join(in_tick_reads))
+                continue
+            break
 
         # Phase 21 Stage 21.2 (D5): the Observer runs on every tick, in both
         # registers, at full sensitivity — evidence only. No retry or
@@ -1127,7 +1188,8 @@ class NovaRuntime:
             session_id=self.session_id,
             turn_id=tick_id,
             actor_surface="self_state_tick",
-            answer_text=generation.raw_text or "",
+            # Stage 22.17: observe what she said, not what she thought.
+            answer_text=visible_text,
             motive_state=self.motive_state,
             self_state=self.self_state,
             register=register,
@@ -1151,7 +1213,14 @@ class NovaRuntime:
             "prompt_sha256": hashlib.sha256(
                 "\n".join(m.get("content", "") for m in messages).encode("utf-8")
             ).hexdigest(),
+            # Stage 22.17: every generation this tick, and the deliberation.
+            "calls": calls,
+            "reads_this_tick": [c["tool"] for c in calls if c.get("in_tick_read")],
+            "thinking_enabled": tick_thinking,
+            "thinking_chars": len(thinking_text),
         }
+        if tick_thinking and thinking_text:
+            adapter_audit["thinking_text"] = thinking_text[:4000]
         if self.config.prompt.tick_log_prompt_text:
             adapter_audit["prompt_text"] = [
                 {"role": m.get("role", ""), "content": m.get("content", "")} for m in messages
@@ -1182,28 +1251,7 @@ class NovaRuntime:
                 )
 
         if tool_request is not None:
-            dispatcher = SelfStateToolDispatcher(
-                self_state=self.self_state,
-                motive_state=self.motive_state,
-                soul_block=load_soul_block(),
-                session_id=self.session_id,
-                heartbeat_store=self.heartbeat_store,
-                proposal_store=self.proposal_store,
-                instruction_proposal_store=self.instruction_proposal_store,
-                instruction_write_engine=self.instruction_write_engine,
-                exploration_controller=self.exploration_controller,
-                # Stage 22.8: inquiry-class self-model writes land directly,
-                # so the dispatcher needs the store to persist through.
-                self_state_store=self.self_state_store,
-                self_model_writes_enabled=(
-                    self.config.self_model.nova_writable_inquiry_fields
-                ),
-                revision_min_seconds=self.config.self_model.revision_min_seconds,
-                # Stage 22.10 — recall_history's findings source (read-only).
-                claim_ladder_store=self.claim_ladder_store,
-                # Stage 22.13 — None unless game.reversi_enabled.
-                reversi_controller=self.reversi_controller,
-            )
+            dispatcher = self._tick_dispatcher(messages)
             try:
                 result = dispatcher.dispatch(tool_request)
                 adapter_audit["tool_result"] = result
@@ -1279,9 +1327,9 @@ class NovaRuntime:
                 content=(generation.raw_text or "")[:2000],
                 notes=journal_notes,
             )
-            tokens_used = generation.completion_tokens or (
-                len(generation.raw_text or "") // 4
-            )
+            tokens_used = sum(
+                int(c.get("completion_tokens") or 0) for c in calls
+            ) or (len(generation.raw_text or "") // 4)
             self.exploration_controller.record_tick(
                 session_id=self.session_id,
                 tick_id=tick_id,
@@ -1325,6 +1373,44 @@ class NovaRuntime:
             last_action_status="self_state_tick_completed",
         )
         return tick
+
+    # -- Stage 22.17: one dispatcher builder for reads and the action -------
+
+    def _tick_dispatcher(self, messages: list[dict[str, str]]) -> SelfStateToolDispatcher:
+        system_text = next(
+            (m.get("content", "") for m in messages if m.get("role") == "system"), ""
+        )
+        return SelfStateToolDispatcher(
+            self_state=self.self_state,
+            motive_state=self.motive_state,
+            soul_block=load_soul_block(),
+            session_id=self.session_id,
+            heartbeat_store=self.heartbeat_store,
+            proposal_store=self.proposal_store,
+            instruction_proposal_store=self.instruction_proposal_store,
+            instruction_write_engine=self.instruction_write_engine,
+            exploration_controller=self.exploration_controller,
+            # Stage 22.8: inquiry-class self-model writes land directly,
+            # so the dispatcher needs the store to persist through.
+            self_state_store=self.self_state_store,
+            self_model_writes_enabled=(
+                self.config.self_model.nova_writable_inquiry_fields
+            ),
+            revision_min_seconds=self.config.self_model.revision_min_seconds,
+            # Stage 22.10 — recall_history's findings source (read-only).
+            claim_ladder_store=self.claim_ladder_store,
+            # Stage 22.13 — None unless game.reversi_enabled.
+            reversi_controller=self.reversi_controller,
+            # Stage 22.17 — the texts read_instructions may return, and the
+            # recall window.
+            instruction_texts=(
+                {"soul": load_soul_block(), "tick_rules": system_text}
+                if self.config.prompt.tick_read_instructions_tool
+                else None
+            ),
+            recall_entries=self.config.prompt.tick_recall_entries,
+            recall_entry_chars=self.config.prompt.tick_recall_entry_chars,
+        )
 
     # -- Stage 22.16: carryover persistence -------------------------------
 

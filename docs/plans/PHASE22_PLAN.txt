@@ -574,6 +574,12 @@ REFERENCE
     persisted; finish_reason/latency/prompt blocks/prompt text on the
     trace; tick exceptions logged; midnight explorations closed as
     session_end; repeat_last_n finally passed to llama.cpp.
+  Stage 22.17 doc (IMPLEMENTED 2026-09-25, live 2026-09-25 03:14:34 CDT) — the deep
+    tick: docs/plans/PHASE22_STAGE22_17_DEEP_TICK.txt
+    Thinking on the tick (512-token budget, stripped and audited);
+    reads answer inside the tick (up to 3) before one action ends it;
+    read_instructions (soul, tick_rules); recall window 12 x 200.
+    Config-gated; defaults byte-identical to 22.16.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

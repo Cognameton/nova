@@ -161,6 +161,20 @@ def default_tool_registry() -> ToolRegistry:
     )
     registry.register_spec(
         ToolSpec(
+            name="read_instructions",
+            description=(
+                "Phase 22 Stage 22.17: read the soul document or the rules of "
+                "the tick surface, in full. Read-only; config-gated "
+                "(prompt.tick_read_instructions_tool)."
+            ),
+            permission=TOOL_ALLOWED,
+            destructive=False,
+            internal=True,
+            input_schema={"section": "one of: soul, tick_rules"},
+        )
+    )
+    registry.register_spec(
+        ToolSpec(
             name="emit_heartbeat",
             description=(
                 "Record a self-observation heartbeat: current state, drive-gap "

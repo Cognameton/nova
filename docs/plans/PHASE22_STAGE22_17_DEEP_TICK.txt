@@ -1,0 +1,80 @@
+PHASE 22 — STAGE 22.17: THE DEEP TICK
+=====================================
+Status: IMPLEMENTED 2026-09-25 (scaffolding review recommendation 1, plus
+the operator's question "would extending the ticks help?"). Live at the
+daemon restart 2026-09-25 03:14:34 CDT = ARM START. Baseline = 22.15+22.16
+(09-22 09:11Z -> this restart). Defaults byte-identical to 22.16.
+
+WHY
+---
+"More time" for a model is not a longer interval; it is more tokens of
+deliberation per decision and more information per decision. The tick had
+neither: one generation, thinking disabled, 512 tokens, one tool, results
+of reads arriving five minutes later in a two-slot carryover. No tool
+showed her the soul or the rules she runs under. A 27B model was choosing
+reversi moves and self-model revisions one-shot.
+
+WHAT
+----
+  generation.tick_enable_thinking (default False; live true),
+  generation.tick_thinking_max_tokens (default 512; live 512):
+    the tick request passes enable_thinking=True; the Qwen template opens
+    a think block in the assistant prefix, so the output carries only the
+    CLOSING tag. split_thinking() (self_state_tick.py) handles both
+    shapes; parse() uses it. Tick max_tokens = thinking + max_tokens. The
+    Observer sees the visible text only. Audit: thinking_enabled,
+    thinking_chars, thinking_text (first 4,000 chars). A think block that
+    runs past the budget has no closing tag and therefore no visible
+    output: parse fails, and 22.16's parse-failure feedback tells her.
+  prompt.tick_max_reads (default 0; live 3): read tools (recall_self,
+    reflect, recall_history, read_instructions) are dispatched inside the
+    tick, rendered under "[Results of your reads this tick]", and the
+    model chooses again — up to N reads, then any other tool is the
+    action that ends the tick. A read past the cap is dispatched as the
+    action (the pre-22.17 contract). In-tick reads are consumed; only the
+    action's feedback enters the carryover. One recorded action per tick,
+    so games, heartbeats and revisions per tick are unchanged in kind.
+    Audit: calls[] (tool, parse_ok, prompt_tokens, finish_reason,
+    completion_tokens, latency_ms, thinking_chars, visible_chars,
+    in_tick_read), reads_this_tick[]. Exploration token charging sums
+    over calls.
+  prompt.tick_read_instructions_tool (default False; live true): tool
+    read_instructions(section: soul | tick_rules) returns the full soul
+    document or the system prompt of this tick (rendered up to 4,500
+    chars, outside the 1,500-char read cap). Menu + tool sentence in both
+    registers when on.
+  prompt.tick_recall_entries / tick_recall_entry_chars (defaults 8/140;
+    live 12/200).
+  System prompt gains, when max_reads > 0: "Reads (...) answer within this
+    tick: the result is shown to you at once under [Results of your reads
+    this tick] and you choose again, up to N reads per tick. Any other
+    tool is your action for this tick and ends it."
+  One dispatcher builder (_tick_dispatcher) serves reads and the action.
+
+Tests: tests/test_stage22_17.py (12): think-block shapes and parse;
+read_instructions gating, sections, full-length render; recall window;
+prompt byte-identity when off and surface when on; runtime: reads answer
+in-tick then one action ends it, cap turns the next read into the action,
+zero reads = old contract, thinking requested/stripped/audited; config
+validation. Suite 1131 -> 1143.
+
+MEASUREMENT (pre-registered; read at >= 3 complete days, on/after 09-29)
+------------------------------------------------------------------------
+  latency: calls[].latency_ms per tick — the cadence question. If a
+    deep tick regularly exceeds ~240 s, move tick_interval to 600 s.
+  deliberation: thinking_chars distribution; parse failures from
+    over-budget thinking (finish_reason=length with no visible text).
+  reads: reads_this_tick per tick; which tools; read_instructions use and
+    which section; whether reads precede moves, revisions, or explorations.
+  play: max-flip rate, corner take rate, win rate vs greedy, prediction
+    calibration ("win" default rate) — vs the 22.15/22.16 baseline.
+  notes: revisions per game and whether they still follow losses only.
+  surface: heartbeats/explorations per day; rate-limited proposals per
+    day (22.16's own measure).
+  cost: prompt_tokens per call (in-tick reads grow the prompt).
+Caveats as before: uncontrolled single arm; 22.16 landed ~hours earlier
+and has no separate window; confounded with a restart.
+
+REVERSAL
+--------
+tick_enable_thinking: false and tick_max_reads: 0 restore 22.16 exactly.

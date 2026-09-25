@@ -155,7 +155,14 @@ SELF_STATE_TOOL_NAMES: frozenset[str] = frozenset({
     # Stage 22.13 — always parseable; dispatch answers reversi_unavailable
     # when the running config has not enabled the game.
     "play_reversi",
+    # Stage 22.17 — read the soul or the tick rules; answers "not available"
+    # when the running config has not enabled it.
+    "read_instructions",
 })
+
+# Stage 22.17 — what read_instructions may return, and how much.
+INSTRUCTION_SECTIONS = ("soul", "tick_rules")
+RENDER_INSTRUCTIONS_MAX_CHARS = 4500
 
 # Stage 22.10: bounded self-history reads. Fixed count and per-entry cap so
 # a read can never flood the tick context; the result always carries the
@@ -169,10 +176,10 @@ RECALL_HISTORY_MODES = ("recent", "earliest", "sample", "around")
 
 
 def _select_history_entries(
-    entries: list[tuple[str, str]], mode: str, around: str
+    entries: list[tuple[str, str]], mode: str, around: str, n: int = RECALL_HISTORY_COUNT
 ) -> list[tuple[str, str]]:
     """Deterministic window selection (no RNG — same rationale as 22.8 D1)."""
-    n = RECALL_HISTORY_COUNT
+    n = max(1, int(n))
     if mode == "recent":
         return entries[-n:]
     if mode == "earliest":
@@ -212,10 +219,17 @@ class SelfStateToolDispatcher:
         revision_min_seconds: float = SELF_MODEL_REVISION_MIN_SECONDS,
         claim_ladder_store: Any = None,
         reversi_controller: Any = None,
+        instruction_texts: dict[str, str] | None = None,
+        recall_entries: int = RECALL_HISTORY_COUNT,
+        recall_entry_chars: int = RECALL_HISTORY_ENTRY_CHARS,
     ) -> None:
         self._self_state = self_state
         # Stage 22.13 — None everywhere the game is not enabled.
         self._reversi_controller = reversi_controller
+        # Stage 22.17 — the standing texts she may read, and the recall window.
+        self._instruction_texts = instruction_texts
+        self._recall_entries = max(1, int(recall_entries))
+        self._recall_entry_chars = max(40, int(recall_entry_chars))
         # Stage 22.8 — needed to persist Nova's own inquiry-class writes.
         # Defaults keep every pre-22.8 construction site (and the whole test
         # suite) on the queue-only behavior.
@@ -278,6 +292,9 @@ class SelfStateToolDispatcher:
             return self.close_exploration(
                 findings_summary=str(args.get("findings_summary", "")),
             )
+        if request.tool_name == "read_instructions":
+            args = request.arguments or {}
+            return self.read_instructions(section=str(args.get("section", "") or ""))
         if request.tool_name == "play_reversi":
             args = request.arguments or {}
             return self.play_reversi(
@@ -318,6 +335,26 @@ class SelfStateToolDispatcher:
             session_id=self._session_id,
             tick_ref=tick_ref,
         )
+
+    def read_instructions(self, *, section: str) -> dict[str, Any]:
+        """Stage 22.17 — read the soul document or this surface's rules.
+
+        Before this, no tool showed her either: recall_self reduced the soul
+        to a boolean and the tick rules existed only as the system prompt.
+        """
+        section = (section or "").strip().lower()
+        if self._instruction_texts is None:
+            return {
+                "error": "instructions_unavailable",
+                "note": "read_instructions is not enabled in this configuration.",
+            }
+        if section not in INSTRUCTION_SECTIONS:
+            return {
+                "error": "unknown_section",
+                "note": f"section must be one of: {', '.join(INSTRUCTION_SECTIONS)}",
+            }
+        text = str(self._instruction_texts.get(section, "") or "")
+        return {"section": section, "text": text, "chars": len(text)}
 
     def recall_self(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -444,7 +481,7 @@ class SelfStateToolDispatcher:
             else:
                 note = "findings are not available on this surface"
 
-        selected = _select_history_entries(entries, mode, around)
+        selected = _select_history_entries(entries, mode, around, self._recall_entries)
         result: dict[str, Any] = {
             "source": source,
             "mode": mode,
@@ -452,7 +489,7 @@ class SelfStateToolDispatcher:
             "entries": [
                 {
                     "timestamp": (ts or "")[:19],
-                    "text": text[:RECALL_HISTORY_ENTRY_CHARS],
+                    "text": text[:self._recall_entry_chars],
                 }
                 for ts, text in selected
             ],
@@ -692,7 +729,7 @@ class SelfStateToolDispatcher:
 # reached Nova. These renderers produce the compact block the runtime holds
 # for her next ticks. Hard caps: a read can inform a tick, not become it.
 READ_TOOL_NAMES: frozenset[str] = frozenset(
-    {"recall_self", "reflect", "recall_history"}
+    {"recall_self", "reflect", "recall_history", "read_instructions"}
 )
 # Stage 22.13: a move's outcome must reach her the same way a read does —
 # the board block shows the position, the carryover says what happened.
@@ -749,6 +786,11 @@ def render_read_tool_result(tool_name: str, result: dict[str, Any]) -> str:
         from nova.agent.reversi import render_play_result
 
         lines.extend(render_play_result(result).splitlines())
+    elif tool_name == "read_instructions":
+        if result.get("error"):
+            return f"read_instructions failed: {result.get('note', result['error'])}"
+        text = str(result.get("text", "") or "")[:RENDER_INSTRUCTIONS_MAX_CHARS]
+        return f"read_instructions {result.get('section', '?')}:\n{text}"
     else:
         return ""
     rendered = "\n".join(lines)

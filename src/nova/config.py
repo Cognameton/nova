@@ -52,6 +52,13 @@ class GenerationConfig:
     # see docs/plans/PHASE22_STAGE22_6_ORGANIC_CONTEMPLATION_PART2.txt.
     respond_enable_thinking: bool = False
     respond_thinking_max_tokens: int = 2048
+    # Phase 22 Stage 22.17 — deliberation on the tick surface. Default off:
+    # the tick has run one-shot, thinking disabled, 512 tokens since Phase
+    # 20. When on, the template opens a think block and the model reasons
+    # before the JSON; the runtime strips it before parsing and audits its
+    # size. max_tokens for the tick = tick_thinking_max_tokens + max_tokens.
+    tick_enable_thinking: bool = False
+    tick_thinking_max_tokens: int = 512
 
 
 @dataclass(slots=True)
@@ -87,6 +94,17 @@ class PromptConfig:
     tick_tool_feedback: bool = False
     tick_carryover_entries: int = 2
     tick_log_prompt_text: bool = False
+    # Phase 22 Stage 22.17 — the deep tick. tick_max_reads: read tools
+    # (recall_self, reflect, recall_history, read_instructions) return
+    # inside the same tick, up to this many, before one action ends it
+    # (0 = one call per tick, the pre-22.17 contract).
+    # tick_read_instructions_tool: exposes read_instructions (soul,
+    # tick_rules). tick_recall_entries / tick_recall_entry_chars: the
+    # recall_history window (22.10 fixed these at 8 × 140).
+    tick_max_reads: int = 0
+    tick_read_instructions_tool: bool = False
+    tick_recall_entries: int = 8
+    tick_recall_entry_chars: int = 140
 
 
 @dataclass(slots=True)
@@ -202,6 +220,14 @@ class NovaConfig:
             raise ValueError("prompt.tick_drive_injection_interval must be >= 1")
         if self.prompt.tick_carryover_entries < 1:
             raise ValueError("prompt.tick_carryover_entries must be >= 1")
+        if self.prompt.tick_max_reads < 0:
+            raise ValueError("prompt.tick_max_reads must be non-negative")
+        if self.prompt.tick_recall_entries < 1:
+            raise ValueError("prompt.tick_recall_entries must be >= 1")
+        if self.prompt.tick_recall_entry_chars < 40:
+            raise ValueError("prompt.tick_recall_entry_chars must be >= 40")
+        if self.generation.tick_thinking_max_tokens <= 0:
+            raise ValueError("generation.tick_thinking_max_tokens must be positive")
         if self.prompt.tick_heartbeat_sampling not in VALID_TICK_HEARTBEAT_SAMPLING:
             raise ValueError(
                 "prompt.tick_heartbeat_sampling must be one of "
