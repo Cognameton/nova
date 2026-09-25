@@ -566,6 +566,14 @@ REFERENCE
     Runtime-enforced rest after each result (1800s live); game entries
     carry the score at her 10th/20th move and each side's first corner;
     note labels normalised; rest-time pointer to the 'games' source.
+  Stage 22.16 doc (IMPLEMENTED 2026-09-25, live 2026-09-25 03:09:19 CDT) — feedback
+    closure and record-keeping (scaffolding review recs 2, 3, 8):
+    docs/plans/PHASE22_STAGE22_16_FEEDBACK_CLOSURE.txt
+    Every tool outcome carried into her next prompts (rate-limited
+    writes say when the field opens again); carryover 4 entries and
+    persisted; finish_reason/latency/prompt blocks/prompt text on the
+    trace; tick exceptions logged; midnight explorations closed as
+    session_end; repeat_last_n finally passed to llama.cpp.
   Live daemon: scripts/run_live_daemon.sh,
     ~/.config/systemd/user/nova-live.service,
     configs/nova.qwen3-14b.live.yaml, data/live/qwen3-14b/

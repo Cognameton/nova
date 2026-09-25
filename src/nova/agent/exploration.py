@@ -62,7 +62,7 @@ CAP_WALL_CLOCK_SECONDS = 21_600
 VALID_ORIGINS = frozenset({"nova_tick", "runtime_offer", "operator"})
 VALID_STATUSES = frozenset({"active", "paused", "closed", "interrupted"})
 VALID_CLOSE_REASONS = frozenset(
-    {"nova_close", "budget_exhausted", "operator_close", "interrupted"}
+    {"nova_close", "budget_exhausted", "operator_close", "interrupted", "session_end"}
 )
 
 
@@ -306,6 +306,19 @@ class ExplorationController:
         if record is None:
             return None
         return self._close(record, close_reason=close_reason, findings_ref=findings_ref)
+
+    def close_stranded(self, *, current_session_id: str) -> list[ExplorationRecord]:
+        """Stage 22.16: close active/paused records left behind by earlier sessions.
+
+        Before this, a record open at the daily rotation stayed "active"
+        under the old session id forever — never resumed, never budget-closed,
+        rendered to her as "stranded at session end" on every later tick.
+        """
+        closed: list[ExplorationRecord] = []
+        for record in self.store.list_all():
+            if record.status in ("active", "paused") and record.session_id != current_session_id:
+                closed.append(self._close(record, close_reason="session_end"))
+        return closed
 
     def interrupt(self, session_id: str) -> ExplorationRecord | None:
         """Operator interrupt: closes without a findings pass, journal retained."""

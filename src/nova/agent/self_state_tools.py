@@ -7,7 +7,7 @@ structured self-inquiry, not for external work.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -536,8 +536,47 @@ class SelfStateToolDispatcher:
                 applied_by="nova",
             )
             if applied is not None:
-                return applied.to_dict()
-        return proposal.to_dict()
+                result = applied.to_dict()
+                result["outcome"] = "applied"
+                return result
+        result = proposal.to_dict()
+        # Stage 22.16: a structured outcome so the tick surface can tell her
+        # what happened, and when a refused field opens again.
+        if rate_limited_note:
+            result["outcome"] = "rate_limited"
+            result["rate_limited_remaining_seconds"] = self._revision_rate_limit_remaining(field)
+        elif not nova_writable:
+            result["outcome"] = "queued_for_operator"
+        else:
+            result["outcome"] = "recorded"
+        return result
+
+    def _revision_elapsed_seconds(self, field: str) -> float | None:
+        """Seconds since the last APPLIED revision of `field`, or None."""
+        if self._proposal_store is None:
+            return None
+        if not hasattr(self._proposal_store, "last_applied_for_field"):
+            return None
+        previous = self._proposal_store.last_applied_for_field(field)
+        if previous is None:
+            return None
+        stamp = previous.applied_at or previous.timestamp
+        if not stamp:
+            return None
+        try:
+            applied_at = datetime.fromisoformat(stamp)
+        except ValueError:
+            return None
+        if applied_at.tzinfo is None:
+            applied_at = applied_at.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - applied_at).total_seconds()
+
+    def _revision_rate_limit_remaining(self, field: str) -> int:
+        """Seconds until `field` may be revised again; 0 when it may now."""
+        elapsed = self._revision_elapsed_seconds(field)
+        if elapsed is None or elapsed >= self._revision_min_seconds:
+            return 0
+        return int(self._revision_min_seconds - elapsed + 0.999)
 
     def _revision_rate_limit_note(self, field: str) -> str:
         """Return a note if this field moved too recently, else "".
@@ -546,24 +585,8 @@ class SelfStateToolDispatcher:
         revision is preserved as evidence that she wanted to move the field,
         which is exactly the signal the frozen-self-model era destroyed.
         """
-        if self._proposal_store is None:
-            return ""
-        if not hasattr(self._proposal_store, "last_applied_for_field"):
-            return ""
-        previous = self._proposal_store.last_applied_for_field(field)
-        if previous is None:
-            return ""
-        stamp = previous.applied_at or previous.timestamp
-        if not stamp:
-            return ""
-        try:
-            applied_at = datetime.fromisoformat(stamp)
-        except ValueError:
-            return ""
-        if applied_at.tzinfo is None:
-            applied_at = applied_at.replace(tzinfo=timezone.utc)
-        elapsed = (datetime.now(timezone.utc) - applied_at).total_seconds()
-        if elapsed >= self._revision_min_seconds:
+        elapsed = self._revision_elapsed_seconds(field)
+        if elapsed is None or elapsed >= self._revision_min_seconds:
             return ""
         return (
             f"rate_limited: {field} was revised "
@@ -739,3 +762,91 @@ def render_read_tool_result(tool_name: str, result: dict[str, Any]) -> str:
         kept.append(line)
         used += len(line) + 1
     return "\n".join(kept)
+
+
+# ---------------------------------------------------------------------------
+# Stage 22.16 — feedback for every tool outcome, not only reads.
+#
+# Before this stage a refused revision, a tool error, a failed parse, or a
+# findings-export outcome was recorded for the operator and never shown to
+# her. 45 of 62 self-model proposals in the three days before this stage
+# were rate-limited no-ops she could not distinguish from success. These
+# renderers produce one short block per tick outcome; the runtime holds
+# them in the same carryover slots as read results.
+# ---------------------------------------------------------------------------
+
+PARSE_FAILURE_FEEDBACK = (
+    "your last output could not be used: it must be one JSON object with"
+    " \"tool_name\" and \"arguments\" and nothing before or after it."
+)
+
+
+def _minutes(seconds: int | float) -> str:
+    m = max(1, round(float(seconds) / 60))
+    return f"{m} min"
+
+
+def render_tool_feedback(
+    tool_name: str,
+    result: dict[str, Any] | None,
+    *,
+    error: str = "",
+    export: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> str:
+    """One compact block describing what her tool call actually did."""
+    if error:
+        return f"{tool_name} failed: {error[:200]}"
+    result = result or {}
+    if tool_name in READ_TOOL_NAMES or tool_name == "play_reversi":
+        return render_read_tool_result(tool_name, result)
+    if tool_name == "emit_heartbeat":
+        return "emit_heartbeat: recorded."
+    if tool_name == "update_self_model":
+        field = str(result.get("proposed_field", "") or "field")
+        outcome = str(result.get("outcome", "") or "")
+        if outcome == "applied":
+            return f"update_self_model: {field} revised and applied."
+        if outcome == "rate_limited":
+            remaining = int(result.get("rate_limited_remaining_seconds", 0) or 0)
+            clock = now or datetime.now(timezone.utc)
+            opens = (clock + timedelta(seconds=remaining)).strftime("%H:%M UTC")
+            return (
+                f"update_self_model: {field} NOT revised — it was revised too recently."
+                f" Your text was recorded, not applied. {field} opens again in"
+                f" {_minutes(remaining)} (at {opens})."
+            )
+        if outcome == "queued_for_operator":
+            return (
+                f"update_self_model: {field} is operator-gated; your revision is queued"
+                " for review and is not applied until approved."
+            )
+        return f"update_self_model: {field} proposal recorded."
+    if tool_name == "propose_instruction_update":
+        return (
+            "propose_instruction_update: recorded for operator review; it changes"
+            " nothing until an operator applies it."
+        )
+    if tool_name == "enter_exploration":
+        topic = str(result.get("topic", "") or "")[:90]
+        budget = result.get("max_ticks", "")
+        return f"enter_exploration: opened \"{topic}\" (budget {budget} ticks)."
+    if tool_name == "close_exploration":
+        text = "close_exploration: closed."
+        if export:
+            status = str(export.get("status", "") or "")
+            if status == "exported":
+                text += " Findings exported to your claim ladder (rung 0)."
+            elif status in ("duplicate", "already_duplicate"):
+                overlap = export.get("overlap")
+                text += (
+                    " Findings NOT exported: too close to an existing record"
+                    + (f" ({float(overlap):.2f} overlap)." if overlap is not None else ".")
+                )
+            elif status in ("rejected", "already_rejected"):
+                reasons = ", ".join(str(r) for r in (export.get("reasons") or [])[:3])
+                text += f" Findings NOT exported: {reasons or 'rejected by the gate'}."
+            elif status:
+                text += f" Export: {status}."
+        return text
+    return f"{tool_name}: done."

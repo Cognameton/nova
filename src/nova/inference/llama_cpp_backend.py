@@ -45,6 +45,11 @@ class LlamaCppBackend:
             tensor_split=tensor_split,
             main_gpu=self.config.model.main_gpu,
             chat_format=chat_format,
+            # Stage 22.16: the repetition-penalty window is a constructor
+            # argument in llama-cpp-python. Until now generation.repeat_last_n
+            # was carried on the request and never passed, so the F14 arm ran
+            # at the library default of 64, not the 256 the live yaml claimed.
+            last_n_tokens_size=int(getattr(self.config.generation, "repeat_last_n", 64) or 64),
             verbose=False,
         )
         self._chat_formatter = self._build_native_chat_formatter()

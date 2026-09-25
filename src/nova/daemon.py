@@ -14,8 +14,10 @@ from __future__ import annotations
 import json
 import signal
 import socket
+import sys
 import threading
 import time
+import traceback
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,6 +75,7 @@ class NovaDaemon:
         self._server_socket: socket.socket | None = None
         self._started_at: str = ""
         self._tick_count: int = 0
+        self._tick_errors: int = 0
         self._last_tick_at: str = ""
         self._client_count: int = 0
         self._client_lock = threading.Lock()
@@ -168,7 +171,15 @@ class NovaDaemon:
                     self._tick_count += 1
                     self._last_tick_at = datetime.now(timezone.utc).isoformat()
                 except Exception:
-                    pass
+                    # Stage 22.16: a failed tick used to vanish without a
+                    # trace. It is now logged (journalctl) and counted.
+                    self._tick_errors += 1
+                    print(
+                        f"[{datetime.now(timezone.utc).isoformat()}] tick failed"
+                        f" (#{self._tick_errors}):\n{traceback.format_exc()}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
     # ------------------------------------------------------------------
     # Socket server (main thread, blocking)

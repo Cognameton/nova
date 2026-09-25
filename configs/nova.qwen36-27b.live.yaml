@@ -83,6 +83,16 @@ prompt:
   # Off-cycle drops in drive mentions are EXPECTED, not erosion.
   tick_drive_injection_interval: 12
   tick_drive_descriptive: true
+  # Stage 22.16 (2026-09-25, from the scaffolding review): every tool
+  # outcome reaches her — applied / rate-limited with the wait / queued /
+  # opened / closed + export result / tool error / parse failure. Before
+  # this, 45 of 62 self-model proposals in three days were refused with no
+  # signal she could see. Carryover widened from 2 to 4 entries and
+  # persisted across restarts; the rendered tick prompt is stored on the
+  # trace (a prompt regression was not reproducible from the record).
+  tick_tool_feedback: true
+  tick_carryover_entries: 4
+  tick_log_prompt_text: true
 
 # Phase 22 Stage 22.13 — reversi, ENABLED 2026-09-18 (operator decision:
 # "give her something to do"). The research log's diagnosis of the

@@ -506,6 +506,10 @@ implemented; **restarted 2026-09-18 21:08:07 CDT = arm start for 22.13+22.14.**
 
 **2026-09-22 04:11:06** — Stage 22.15 live (rest + stories + labels), arm start.
 
+**2026-09-25 03:09:19** — Stage 22.16 live (feedback closure, record fixes,
+repeat_last_n plumbed). Scaffolding review at
+`docs/reviews/2026-09-25_scaffolding_review.md`.
+
 **2026-09-25** — Stage 22.15 read (above): rest ticks 20% of the surface and
 all diversification comes from them; games read in 10/17 windows; notes
 revised at the board; play unchanged; heartbeats back, explorations not;

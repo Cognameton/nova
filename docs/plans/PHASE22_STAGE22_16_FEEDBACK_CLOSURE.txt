@@ -1,0 +1,78 @@
+PHASE 22 — STAGE 22.16: FEEDBACK CLOSURE AND RECORD-KEEPING
+============================================================
+Status: IMPLEMENTED 2026-09-25 from the scaffolding review
+(docs/reviews/2026-09-25_scaffolding_review.md, recommendations 2, 3, 8).
+Live at the daemon restart 2026-09-25 03:09:19 CDT. Defaults byte-identical to 22.15.
+
+WHY
+---
+Three days of 22.15: 45 of 62 self-model proposals were rate-limited
+no-ops. The refusal was written to the audit and never shown to her; the
+tool text says "rate-limited" without an interval; so a third of her free
+ticks went to writes that looked, from her side, identical to success.
+Tool errors, parse failures and findings-export outcomes were likewise
+invisible. A loop with silent failures cannot converge. Separately, the
+record had gaps: tick exceptions were swallowed (except: pass),
+finish_reason was not audited, the rendered prompt was not stored,
+explorations open at midnight were stranded forever, the carryover was
+lost at every restart, and generation.repeat_last_n never reached
+llama.cpp (F14 ran at window 64, not 256).
+
+WHAT
+----
+  prompt.tick_tool_feedback (default False; live true): after every tick,
+    one short block describing what her call did is pushed into the same
+    carryover slots as read results (render_tool_feedback,
+    self_state_tools.py):
+      emit_heartbeat: recorded.
+      update_self_model: <field> revised and applied.
+      update_self_model: <field> NOT revised — it was revised too recently.
+        Your text was recorded, not applied. <field> opens again in N min
+        (at HH:MM UTC).
+      update_self_model: <field> is operator-gated; queued for review ...
+      propose_instruction_update: recorded for operator review; it changes
+        nothing until an operator applies it.
+      enter_exploration: opened "<topic>" (budget N ticks).
+      close_exploration: closed. Findings exported / NOT exported: too
+        close to an existing record (0.74 overlap) / NOT exported: <reasons>.
+      <tool> failed: <error>.
+      parse failure: "your last output could not be used: it must be one
+        JSON object ... It began: <first 80 chars>".
+    update_self_model now returns outcome (applied | rate_limited |
+    queued_for_operator | recorded) and rate_limited_remaining_seconds.
+  prompt.tick_carryover_entries (default 2; live 4).
+  Carryover persisted to data_dir/tick_carryover.json; reloaded at start.
+  prompt.tick_log_prompt_text (default False; live true): adapter_audit
+    gains prompt_text (the two messages). Always added regardless of flag:
+    finish_reason, completion_tokens, latency_ms, prompt_blocks (which
+    named blocks the user message contained), prompt_sha256.
+  ExplorationController.close_stranded(): at runtime.start(), any
+    active/paused record from another session is closed with the new
+    reason "session_end".
+  daemon._tick_loop: a failed tick is logged to stderr with its traceback
+    (visible in journalctl) and counted (_tick_errors).
+  llama_cpp_backend: last_n_tokens_size = generation.repeat_last_n at
+    construction. The live window is now genuinely 256.
+
+Tests: tests/test_stage22_16.py (9): renderer per outcome; outcome fields
+and remaining seconds; applied → rate-limited → parse-failure feedback
+visible in the next prompts; feedback off = 22.15 prompts; carryover cap
+and persistence across a restart; audit fields and prompt_text gating;
+stranded exploration closed on the next start; config validation; daemon
+logs and counts a failing tick. Suite 1122 -> 1131.
+
+MEASUREMENT
+-----------
+  rate-limited proposals per day (expect a sharp drop from ~15/day);
+  what replaces them on rest ticks;
+  parse failures per day (expect 0 still; if any, whether the next tick
+  recovers);
+  the prompt_text field makes every later prompt question answerable
+  from the record.
+Note: 22.17 (deep tick) follows within hours, so 22.16 has no clean arm
+of its own; read it as part of the 22.17 baseline/arm comparison via the
+rate-limited count, which 22.17 does not touch.
+
+REVERSAL
+--------
+Flip the three prompt flags; the record-keeping fixes stay.

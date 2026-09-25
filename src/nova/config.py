@@ -77,6 +77,16 @@ class PromptConfig:
     # markers. See docs/plans/PHASE22_STAGE22_8_SELF_MODEL_WRITE_LOOP.txt.
     tick_heartbeat_sampling: str = "recent"
     tick_self_model_revision_visibility: bool = False
+    # Phase 22 Stage 22.16 — feedback closure and record-keeping. Defaults
+    # reproduce 22.15 exactly. tick_tool_feedback: every tool outcome (applied,
+    # rate-limited with the wait, queued, opened, closed + export result,
+    # tool error, parse failure) is carried into her next prompts, not only
+    # read results. tick_carryover_entries: how many carried entries are
+    # kept (22.10 fixed this at 2). tick_log_prompt_text: store the rendered
+    # tick prompt on the trace (block list + sha256 are always stored).
+    tick_tool_feedback: bool = False
+    tick_carryover_entries: int = 2
+    tick_log_prompt_text: bool = False
 
 
 @dataclass(slots=True)
@@ -190,6 +200,8 @@ class NovaConfig:
             )
         if self.prompt.tick_drive_injection_interval < 1:
             raise ValueError("prompt.tick_drive_injection_interval must be >= 1")
+        if self.prompt.tick_carryover_entries < 1:
+            raise ValueError("prompt.tick_carryover_entries must be >= 1")
         if self.prompt.tick_heartbeat_sampling not in VALID_TICK_HEARTBEAT_SAMPLING:
             raise ValueError(
                 "prompt.tick_heartbeat_sampling must be one of "

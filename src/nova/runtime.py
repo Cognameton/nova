@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace as dataclass_replace
 from datetime import datetime, timezone
@@ -96,6 +97,8 @@ from nova.agent.exploration import (
 from nova.agent.self_state_tick import SelfStateTickEngine
 from nova.agent.self_state_tools import (
     CARRYOVER_TOOL_NAMES,
+    PARSE_FAILURE_FEEDBACK,
+    render_tool_feedback,
     SelfStateToolDispatcher,
     _UPDATABLE_SELF_STATE_FIELDS,
     apply_proposal_to_self_state,
@@ -393,6 +396,9 @@ class NovaRuntime:
         # entries; lost at process restart (the same daily boundary her
         # sessions already have — a deliberate v1 limit, see the stage doc).
         self._tick_read_results: list[tuple[str, str]] = []
+        # Stage 22.16: the carryover is persisted so a restart (including the
+        # daily rotation) no longer wipes what she asked to see.
+        self._tick_carryover_path = Path(self.config.app.data_dir) / "tick_carryover.json"
         self.persona = None
         self.self_state = None
         self.motive_state: MotiveState | None = None
@@ -409,6 +415,13 @@ class NovaRuntime:
         self.initiative_state = self.initiative_store.load(session_id=self.session_id)
         self.awareness_state = self.awareness_store.load(session_id=self.session_id)
         self.presence_state = self.presence_store.load(session_id=self.session_id)
+        # Stage 22.16: reload the carryover, and close explorations left open
+        # by earlier sessions instead of stranding them forever.
+        self._load_tick_carryover()
+        try:
+            self.exploration_controller.close_stranded(current_session_id=self.session_id)
+        except Exception:  # pragma: no cover - record-keeping must not block start
+            pass
         if self.probe_runner is not None and getattr(self.config.eval, "enable_probes", False):
             for probe in self.probe_runner.run_startup_probes(
                 model_id=self.backend.metadata().get("model_name", "nova-model"),
@@ -1130,7 +1143,19 @@ class NovaRuntime:
             "tool_executed": False,
             "register": register,
             "observer": tick_observer_record.to_dict(),
+            # Stage 22.16: what the generation actually did, and what she saw.
+            "finish_reason": generation.finish_reason,
+            "completion_tokens": generation.completion_tokens,
+            "latency_ms": generation.latency_ms,
+            "prompt_blocks": self._prompt_blocks(messages),
+            "prompt_sha256": hashlib.sha256(
+                "\n".join(m.get("content", "") for m in messages).encode("utf-8")
+            ).hexdigest(),
         }
+        if self.config.prompt.tick_log_prompt_text:
+            adapter_audit["prompt_text"] = [
+                {"role": m.get("role", ""), "content": m.get("content", "")} for m in messages
+            ]
         if exploration is not None:
             adapter_audit["exploration_id"] = exploration.exploration_id
 
@@ -1150,6 +1175,11 @@ class NovaRuntime:
                 observed_claim_classes=tick_observer_record.observed_claim_classes,
                 tick_id=tick_id,
             )
+            if self.config.prompt.tick_tool_feedback:
+                began = (generation.raw_text or "").strip().replace("\n", " ")[:80]
+                self._push_tick_carryover(
+                    tick_id, PARSE_FAILURE_FEEDBACK + (f" It began: {began}" if began else "")
+                )
 
         if tool_request is not None:
             dispatcher = SelfStateToolDispatcher(
@@ -1182,13 +1212,11 @@ class NovaRuntime:
                 # this audit record — hold it for the next tick prompts.
                 if tool_request.tool_name in CARRYOVER_TOOL_NAMES and isinstance(
                     result, dict
-                ):
+                ) and not self.config.prompt.tick_tool_feedback:
                     rendered = render_read_tool_result(
                         tool_request.tool_name, result
                     )
-                    if rendered:
-                        self._tick_read_results.append((tick_id, rendered))
-                        self._tick_read_results = self._tick_read_results[-2:]
+                    self._push_tick_carryover(tick_id, rendered)
                 if tool_request.tool_name == "close_exploration":
                     # Phase 21 Stage 21.4 (D8): governed export happens
                     # automatically at the moment Nova closes with
@@ -1202,8 +1230,22 @@ class NovaRuntime:
                         )
                     except Exception as export_exc:
                         adapter_audit["export_error"] = str(export_exc)
+                # Stage 22.16: every outcome reaches her, not only reads.
+                if self.config.prompt.tick_tool_feedback:
+                    self._push_tick_carryover(
+                        tick_id,
+                        render_tool_feedback(
+                            tool_request.tool_name,
+                            result if isinstance(result, dict) else {},
+                            export=adapter_audit.get("export_findings"),
+                        ),
+                    )
             except Exception as exc:
                 adapter_audit["tool_error"] = str(exc)
+                if self.config.prompt.tick_tool_feedback:
+                    self._push_tick_carryover(
+                        tick_id, render_tool_feedback(tool_request.tool_name, None, error=str(exc))
+                    )
                 self._quarantine(
                     session_id=self.session_id,
                     surface="self_state_tick",
@@ -1283,6 +1325,50 @@ class NovaRuntime:
             last_action_status="self_state_tick_completed",
         )
         return tick
+
+    # -- Stage 22.16: carryover persistence -------------------------------
+
+    def _load_tick_carryover(self) -> None:
+        try:
+            payload = json.loads(self._tick_carryover_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if isinstance(payload, list):
+            self._tick_read_results = [
+                (str(item[0]), str(item[1]))
+                for item in payload
+                if isinstance(item, (list, tuple)) and len(item) == 2
+            ][-self.config.prompt.tick_carryover_entries:]
+
+    def _push_tick_carryover(self, tick_id: str, rendered: str) -> None:
+        if not rendered:
+            return
+        self._tick_read_results.append((tick_id, rendered))
+        self._tick_read_results = self._tick_read_results[
+            -self.config.prompt.tick_carryover_entries:
+        ]
+        try:
+            self._tick_carryover_path.parent.mkdir(parents=True, exist_ok=True)
+            self._tick_carryover_path.write_text(
+                json.dumps(self._tick_read_results, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError:  # pragma: no cover - persistence is best effort
+            pass
+
+    @staticmethod
+    def _prompt_blocks(messages: list[dict[str, str]]) -> list[str]:
+        """Which named blocks the rendered tick prompt contains (audit)."""
+        user = "\n".join(m.get("content", "") for m in messages if m.get("role") == "user")
+        markers = [
+            ("self_context", "[Self-Context]"),
+            ("drive_line", "drive"),
+            ("tool_results", "[Results of your recent tool calls]"),
+            ("reversi", "[Reversi]"),
+            ("exploration_history", "Recent explorations"),
+            ("exploration", "[Exploration]"),
+            ("heartbeats", "eartbeat observations"),
+        ]
+        return [name for name, marker in markers if marker in user]
 
     def apply_self_model_proposal(self, *, proposal_id: str) -> SelfModelProposal | None:
         """Apply an operator-approved update_self_model proposal to SelfState.
