@@ -1,6 +1,6 @@
 PHASE 23 — THE TRAINABLE SUBSTRATE: A REVERSI SKILL LoRA
 ========================================================
-Status: PROPOSED 2026-09-26. Nothing implemented. Offline stages
+Status: PROPOSED 2026-09-26 (amended same day: opponent pool). Nothing implemented. Offline stages
 (23.1-23.4) may start after the Stage 22.17 arm read (on/after
 2026-09-29); the live stage (23.5) waits on operator decisions D1-D4
 below. Defaults stay byte-identical to Phase 22 throughout.
@@ -88,8 +88,33 @@ STAGES
 Stage 23.1: The Arena
   A headless harness that plays Reversi fast, with no daemon, no ticks
   and no self-context. It is the only instrument the phase trusts.
-  - Engine: src/nova/agent/reversi.py unchanged. The opponent is
+  - Engine: src/nova/agent/reversi.py unchanged. The EVAL opponent is
     greedy, with the same seeded tie-breaks as live.
+  - OPPONENT POOL (added 2026-09-26, operator: "provide Nova with a
+    dynamic opponent she can play against so we can train her to learn
+    from her mistakes with the lora layer"). These are classic scripted
+    game players, the kind old computer board games shipped: rules plus
+    search, nothing learned. They run on the CPU in microseconds and
+    never compete for GPU memory. A single training opponent would let
+    an adapter learn to exploit greedy's habits instead of learning
+    Reversi, so training draws from the pool.
+      random      uniform legal move
+      greedy      most flips (also the EVAL yardstick)
+      corner      static corner/edge weight table (the 81% player)
+      mobility    minimize the opponent's legal-move count
+      lookahead   1-2 ply minimax on the corner table
+    Each takes an epsilon (chance of a random legal move), so every
+    style has tunable strength. An opponent is seeded per game from
+    (seed, move count) exactly like greedy, so games replay from their
+    records. The game record gains opponent_policy + opponent_params,
+    and live code paths are unchanged (live stays greedy).
+    One pool member, mobility at epsilon 0.1, is HELD OUT: never used
+    in training, only in evaluation, to test whether learning carries
+    over to a player she has never met.
+    Why not a small LLM opponent (considered 2026-09-26): a 0.6B model
+    plays at about random strength, costs GPU memory, and its strength
+    cannot be dialed. Scripted players are stronger, controllable and
+    free.
   - Prompt: a fixed minimal game prompt. It contains the board
     (render_board with legal moves marked), the [Reversi] purpose line,
     and "answer with one tool call". The answer is the same JSON the
@@ -111,8 +136,12 @@ Stage 23.1: The Arena
     the reference line).
   - Cost estimate (measure, don't trust): 14B at ~3 s/move x ~30
     moves x 300 games ≈ 7-8 h. 27B is probably ~2x.
+  - Pool calibration: each pool member (at its epsilon settings) plays
+    greedy and the others over 1,000+ CPU games. The resulting strength
+    ladder is what the 23.4 curriculum climbs.
   - Tests: arena determinism per seed, parse/forfeit handling,
-    disjoint seed ranges.
+    disjoint seed ranges, per-policy replay from records, pool
+    policies never return illegal moves.
   Done when both model baselines exist on the 300 eval seeds.
 
 Stage 23.2: Training Environment and Smoke Test
@@ -146,11 +175,17 @@ Stage 23.3: Mechanism Check (teacher adapter)
 Stage 23.4: Learning From Her Own Games (the proof of concept)
   The signal must come from game outcomes, never from an external
   expert. Two arms, run in order:
+  Training opponents come from the pool (minus the held-out member),
+  on a CURRICULUM: each round draws opponents whose calibrated
+  strength keeps her training win rate near 40-60%, so games stay
+  close enough to carry signal. When a round's win rate passes 60%,
+  the next round moves up the ladder. The curriculum rule is fixed
+  before round 1 and logged per round.
   A. Expert iteration (win-filtered self-training). The model plays
-     arena games on TRAIN seeds at temperature 0.7. Keep the moves from
-     games it won. Fine-tune on them. Repeat for 3-4 rounds, each
-     starting from the previous adapter. This is "learn from what
-     worked" in its plainest form.
+     arena games on TRAIN seeds at temperature 0.7 against curriculum
+     opponents. Keep the moves from games it won. Fine-tune on them.
+     Repeat for 3-4 rounds, each starting from the previous adapter.
+     This is "learn from what worked" in its plainest form.
   B. Outcome-labeled preferences (DPO), run only if A is flat. At
      sampled positions the model proposes two different moves. Each
      move is scored by the outcome of K fast CPU rollouts
@@ -181,7 +216,11 @@ Stage 23.6: Closure
   Verdict against the pre-registration below, stated plainly,
   including a null result. Decide whether a 27B attempt or an
   identity-scale QLoRA (the Corpus Policy's actual subject) is
-  warranted next.
+  warranted next. If the pool is outgrown (training win rate above
+  60% against its strongest member), the next opponent is SELF-PLAY:
+  a frozen earlier adapter as the opponent, so the opponent improves
+  as she does. It doubles model cost per game, so it comes only after
+  the pool has shown results.
 
 
 MEASUREMENT (pre-registered)
@@ -193,6 +232,10 @@ Success ("she learned"): >= +10 points over the no-adapter base AND
   secondary. 300 games per arm gives ~80% power for 48% -> 60%.
 Reference lines on every chart: 37.5 random / 48 greedy / 81 corner
   table / the 27B live-substrate baseline.
+Transfer: win rate vs the HELD-OUT pool opponent (mobility, epsilon
+  0.1) on the same 300 EVAL seeds, adapter vs no adapter. A primary
+  gain with no transfer gain is reported as "learned greedy, not
+  Reversi."
 Secondary: corner take rate, X-square (next-to-corner) rate, max-flip
   rate, forfeits and parse failures, mean final disc margin.
 Per round (23.4 A): the win-rate curve across rounds. A rise that
