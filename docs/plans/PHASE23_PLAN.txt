@@ -1,0 +1,241 @@
+PHASE 23 — THE TRAINABLE SUBSTRATE: A REVERSI SKILL LoRA
+========================================================
+Status: PROPOSED 2026-09-26. Nothing implemented. Offline stages
+(23.1-23.4) may start after the Stage 22.17 arm read (on/after
+2026-09-29); the live stage (23.5) waits on operator decisions D1-D4
+below. Defaults stay byte-identical to Phase 22 throughout.
+
+WHY
+---
+Operator, 2026-09-26, verbatim: "is she learining from her mistakes and
+improving her gameplay win percentage? That is the proof of concept."
+Then: "I thought a lora layer was supposed to fine tune a gguf model".
+
+The answer on the 51-game record (all vs greedy, 09-19 -> 09-25) is no.
+She won 27/51 = 53% (95% CI 40-66%). By thirds, 65% -> 41% -> 53%. Note
+versions v1-v2 won 54% and v3-v13 won 52%. Prediction accuracy fell
+from 13/24 to 8/27, and v13 contains an "inversion protocol" that reads
+her own loss forecasts as signs of advantage. Simulated baselines
+against the same greedy opponent, 4,000 games each, using
+src/nova/agent/reversi.py:
+    random move           37.5%
+    greedy (most flips)   48%
+    corner-weight table   81%
+So she beats random and ties greedy. Eleven note rewrites in 27 games
+bought nothing.
+
+That is the result 22.14 predicted: frozen weights can improve policy
+(the strategy note) but not capability. The note channel is exhausted
+as evidence. The only remaining route to "she got better at the game"
+is to change the weights. Phase 23 tests that route at the smallest
+honest scale: one narrow skill, one adapter, one ground-truth metric.
+
+A skill adapter changes the substrate, not the identity. The operator
+put it this way on 2026-08-19: "identity is the SYSTEM (self-model +
+memory + ladder + journal + accumulated state); the base model is the
+substrate/inference engine." A Reversi LoRA is a substrate change of
+exactly that kind. It is deliberately not the identity-consolidating
+QLoRA sleep cycle that the Corpus Policy and the 22.5 gate were written
+for (see GATES).
+
+WHAT THE MECHANISM IS (verified 2026-09-26)
+-------------------------------------------
+  - LoRA = small trainable low-rank matrices beside frozen base
+    weights. Only the adapter trains.
+  - It is NOT trained on the GGUF. Training uses QLoRA (PEFT +
+    bitsandbytes 4-bit) against the Hugging Face checkpoint.
+    llama.cpp's convert_lora_to_gguf.py turns the adapter into a GGUF
+    adapter. llama-cpp-python applies it at load time: Llama(lora_path=,
+    lora_scale=). The installed version (0.3.20) has both parameters.
+  - Therefore the GGUF base and the HF checkpoint must be the same
+    model. We download the HF checkpoint and build our own GGUF from it
+    with convert_hf_to_gguf.py + llama-quantize (Q4_K_M), so they match
+    by construction.
+  - Local tools: ~/Dev/ai-lab/llama.cpp has the convert scripts
+    (llama-quantize build still to verify). The nova venv has
+    llama_cpp 0.3.20 and no torch/transformers/peft/bitsandbytes/trl.
+    Driver 580.178.04. RAM 62 GB. /srv/ai has ~735 GB free.
+
+BASE MODEL
+----------
+Recommended: Qwen3-14B (HF Qwen/Qwen3-14B, ~30 GB bf16).
+  - Nova's Era-1 model, already proven in this architecture.
+  - QLoRA at 4-bit is ~9-10 GB of weights split across the two 3060s
+    (device_map auto), which leaves room for rank-16 adapters, the
+    optimizer and checkpointed activations at seq 2048. Expected to
+    fit; 23.2 measures the real peak.
+  - The existing ~/Dev/ai-lab/models/Qwen3_14b.gguf (May 2025, unknown
+    provenance and quant) is NOT reused. The base GGUF is rebuilt from
+    the downloaded checkpoint.
+Not recommended for this phase: Qwen3.6-27B (the live model). QLoRA on
+27B across 2x12 GB is at the edge. Its HF checkpoint id is unverified
+here. Revisit only if 14B shows the mechanism works (23.6).
+Consequence: the experiment compares 14B+LoRA against 14B without
+LoRA. Live Nova's 27B is a reference line, not the control.
+
+HARDWARE RULE
+-------------
+Training and serving cannot share the cards. The daemon stops for every
+arena run and every training run (launch-comfyui/launch-nova already
+enforce one GPU tenant at a time). Every stop is a gap in the live
+record and is logged in RESEARCH_LOG.md with start/end times. Offline
+work runs in declared blocks (D4), never ad hoc during a live arm.
+
+
+STAGES
+======
+
+Stage 23.1: The Arena
+  A headless harness that plays Reversi fast, with no daemon, no ticks
+  and no self-context. It is the only instrument the phase trusts.
+  - Engine: src/nova/agent/reversi.py unchanged. The opponent is
+    greedy, with the same seeded tie-breaks as live.
+  - Prompt: a fixed minimal game prompt. It contains the board
+    (render_board with legal moves marked), the [Reversi] purpose line,
+    and "answer with one tool call". The answer is the same JSON the
+    tick parser accepts: {"tool_name": "play_reversi", "arguments":
+    {"move": "d3"}}. No strategy note, so the note channel is held
+    constant and only weights can move the number.
+  - Thinking off in the arena (speed). Live uses a 1024-token think
+    budget, and 23.5 measures the transfer.
+  - An illegal or unparseable answer is recorded and retried up to 2
+    times. After that the move is scored as forfeited to a random legal
+    move, and the forfeit count is a reported metric.
+  - Seeds: EVAL seeds 1_000_000-1_000_299 (300 games). These are never
+    used for training data. TRAIN seeds come from a disjoint range.
+  - Records: data/arena/<run_id>/games.jsonl plus per-move records
+    (board, legal moves, raw answer, parse result, latency).
+  - Baselines to record: random / greedy / corner-table (already 37.5 /
+    48 / 81, re-run inside the harness for identity), Qwen3-14B GGUF
+    without an adapter, and Qwen3.6-27B GGUF (live Nova's substrate,
+    the reference line).
+  - Cost estimate (measure, don't trust): 14B at ~3 s/move x ~30
+    moves x 300 games ≈ 7-8 h. 27B is probably ~2x.
+  - Tests: arena determinism per seed, parse/forfeit handling,
+    disjoint seed ranges.
+  Done when both model baselines exist on the 300 eval seeds.
+
+Stage 23.2: Training Environment and Smoke Test
+  - Separate venv at /srv/ai/venvs/nova-train (torch, transformers,
+    peft, bitsandbytes, trl, accelerate). The runtime .venv is never
+    touched.
+  - HF checkpoint -> /srv/ai/models/hf/Qwen3-14B. Own GGUF ->
+    /srv/ai/models/gguf/qwen3-14b-q4_k_m.gguf. Adapters ->
+    /srv/ai/models/lora/<run_id>/.
+  - Smoke test: a 20-step LoRA on a toy target, then convert, then load
+    via lora_path and confirm the output changes, then confirm
+    lora_path="" restores it exactly. Record peak VRAM per card and
+    tokens/s.
+  - Training scripts live in tools/train/, outside src/nova. The
+    runtime never imports them.
+  Done when an adapter round-trips HF -> GGUF -> llama-cpp-python.
+
+Stage 23.3: Mechanism Check (teacher adapter)
+  Before asking whether she can learn from her own games, check whether
+  a LoRA can move this number at all.
+  - Data: arena positions from TRAIN seeds, labeled with the
+    corner-table move (the 81% player). ~5,000 examples.
+  - Train one adapter (rank 16, 1-2 epochs). Evaluate on the 300 EVAL
+    seeds.
+  - This is teaching, not learning. It is a control, never reported as
+    the proof of concept.
+  - If this adapter does not beat 14B-without-adapter clearly, stop.
+    Either the prompt/format or the mechanism is wrong, and 23.4 would
+    be uninterpretable.
+
+Stage 23.4: Learning From Her Own Games (the proof of concept)
+  The signal must come from game outcomes, never from an external
+  expert. Two arms, run in order:
+  A. Expert iteration (win-filtered self-training). The model plays
+     arena games on TRAIN seeds at temperature 0.7. Keep the moves from
+     games it won. Fine-tune on them. Repeat for 3-4 rounds, each
+     starting from the previous adapter. This is "learn from what
+     worked" in its plainest form.
+  B. Outcome-labeled preferences (DPO), run only if A is flat. At
+     sampled positions the model proposes two different moves. Each
+     move is scored by the outcome of K fast CPU rollouts
+     (greedy-vs-greedy to the end). Train on (better, worse) pairs.
+     Caveat recorded up front: the move values come from search
+     rollouts, which is closer to "she was shown which move worked"
+     than A is.
+  Each round is evaluated on the 300 EVAL seeds. Nova's live game
+  records (51+ games, ~1,500 moves) are too few and in the wrong format
+  to train on. They stay evidence, not corpus.
+
+Stage 23.5: Live Application (gated, optional)
+  The proof of concept is complete at 23.4. Live application is a
+  separate choice.
+  - Config: model.lora_path (default "") and model.lora_scale (default
+    1.0). When lora_path is empty, behavior is byte-identical.
+  - Requires the live base to be Qwen3-14B (D3). That is itself a
+    substrate change and needs its own no-adapter live window first,
+    or the adapter's effect is confounded with the model swap.
+  - Regression check BEFORE going live: replay >= 200 recorded
+    non-game tick prompts from 22.17-era traces (adapter_audit.
+    prompt_text), with and without the adapter. Compare parse_ok rate
+    and tool distribution. Block if the parse rate drops by more than
+    2 points or any tool disappears.
+  Reversal: lora_path: "".
+
+Stage 23.6: Closure
+  Verdict against the pre-registration below, stated plainly,
+  including a null result. Decide whether a 27B attempt or an
+  identity-scale QLoRA (the Corpus Policy's actual subject) is
+  warranted next.
+
+
+MEASUREMENT (pre-registered)
+----------------------------
+Primary: arena win rate vs greedy on the 300 EVAL seeds. Adapter vs
+  the same base without an adapter.
+Success ("she learned"): >= +10 points over the no-adapter base AND
+  p < 0.05 (two-proportion z). The paired-by-seed result is reported as
+  secondary. 300 games per arm gives ~80% power for 48% -> 60%.
+Reference lines on every chart: 37.5 random / 48 greedy / 81 corner
+  table / the 27B live-substrate baseline.
+Secondary: corner take rate, X-square (next-to-corner) rate, max-flip
+  rate, forfeits and parse failures, mean final disc margin.
+Per round (23.4 A): the win-rate curve across rounds. A rise that
+  plateaus is still a result; a rise then collapse (overfitting to its
+  own style) is reported as such.
+Caveats: the arena is not the live tick (no self-context, no thinking,
+  no note), so 23.4 proves the substrate can learn the skill, and 23.5
+  alone speaks to live Nova. Temperature and seeds are fixed per run.
+
+
+GATES AND EXISTING COMMITMENTS
+------------------------------
+Corpus Policy (EXPLORATORY_REGISTER_CONTRACT.txt, "binding on any
+future fine-tune"). Its concern is that training on Governor-passed
+assertion-register prose converts gate policy into weights. This
+phase's corpus is none of the three strata the policy names. It is
+arena game-move records, runtime-verified by the engine, with no
+Governor filtering and no prose. This plan proposes that game-move
+corpora are a fourth, labeled stratum outside the policy's ratchet
+concern. That reading is the operator's to make, not this doc's (D1).
+
+22.5 QLoRA gate (operator, 2026-08-19): "QLoRA becomes a realistic
+option once we see the model using the architecture correctly." That
+gate governs identity consolidation, and on the current record it is
+not met (explorations ~0, 3 of 4 self-model fields unused). This phase
+does not ask to pass it. Offline stages 23.1-23.4 never touch the live
+model, memory or corpus. Only 23.5 does, and it waits on D2.
+
+OPERATOR DECISIONS (record verbatim before the stage they gate)
+---------------------------------------------------------------
+D1 (before 23.3): does the Corpus Policy permit a game-move-only
+   skill corpus as a separate labeled stratum?
+D2 (before 23.5): may a skill adapter go live before the 22.5 closure
+   and its QLoRA gate?
+D3 (before 23.5): move live Nova's substrate from Qwen3.6-27B to
+   Qwen3-14B for the adapter window, or keep 23.5 offline-only until a
+   27B adapter is feasible?
+D4 (before 23.1): the offline blocks. When the daemon pauses, and for
+   how long. The first arena baselines alone are ~20 GPU-hours.
+
+REVERSAL
+--------
+Nothing in 23.1-23.4 changes the live runtime. 23.5 reverses with
+lora_path: "" (and model_path back to the 27B GGUF if D3 moved it).
+Adapters, arena records and training data are retained, never deleted
+(contract invariant 5, applied here by analogy).
