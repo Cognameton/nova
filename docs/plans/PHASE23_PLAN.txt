@@ -330,4 +330,9 @@ GPU use, no live code path changed).
     1.14.0. llama-quantize at ~/Dev/ai-lab/llama.cpp/build/bin needs
     LD_LIBRARY_PATH set to that directory; the checkout (May 2025) has
     Qwen3 in convert_hf_to_gguf.py.
-  Base: Qwen/Qwen3-14B downloading to /srv/ai/models/hf/Qwen3-14B.
+  Base: Qwen/Qwen3-14B at /srv/ai/models/hf/Qwen3-14B (29.5 GB, ~40 min
+    download). Own GGUFs built from it on the CPU: qwen3-14b-bf16.gguf
+    (29.5 GB, kept for requantising) and qwen3-14b-q4_k_m.gguf (9.0 GB,
+    file_type 15, 40 blocks, embedded chat template with
+    enable_thinking) in /srv/ai/models/gguf. Load test is GPU work:
+    first step of the 23.1 model baselines.
