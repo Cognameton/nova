@@ -108,9 +108,11 @@ Stage 23.1: The Arena
     (seed, move count) exactly like greedy, so games replay from their
     records. The game record gains opponent_policy + opponent_params,
     and live code paths are unchanged (live stays greedy).
-    One pool member, mobility at epsilon 0.1, is HELD OUT: never used
-    in training, only in evaluation, to test whether learning carries
-    over to a player she has never met.
+    The mobility STYLE is HELD OUT: never used in training at any
+    epsilon (another mobility setting would leak nearly the same
+    player). Mobility at epsilon 0.1 is the evaluation-only transfer
+    opponent, testing whether learning carries over to a player she
+    has never met.
     Why not a small LLM opponent (considered 2026-09-26): a 0.6B model
     plays at about random strength, costs GPU memory, and its strength
     cannot be dialed. Scripted players are stronger, controllable and
@@ -282,3 +284,50 @@ Nothing in 23.1-23.4 changes the live runtime. 23.5 reverses with
 lora_path: "" (and model_path back to the 27B GGUF if D3 moved it).
 Adapters, arena records and training data are retained, never deleted
 (contract invariant 5, applied here by analogy).
+
+
+IMPLEMENTATION LOG
+------------------
+2026-09-27 — 23.1 CPU side + 23.2 environment (Nova kept running; no
+GPU use, no live code path changed).
+  src/nova/arena/: opponents.py (the five styles, epsilon dial, spec
+    strings "style[:epsilon][:depth]", training_pool() without the
+    mobility style), harness.py (play_game/run_match, streamed
+    games.jsonl + summary.json, disjoint EVAL / TRAIN / CALIBRATION
+    seed ranges, per-move rng = the live derivation for O), model_player.py
+    (prompt arena-v1, tick-JSON answers, 2 retries then a flagged
+    forfeit, generation through the live LlamaCppBackend plus
+    lora_path/lora_scale), calibrate.py (round robin + Bradley-Terry,
+    Elo anchored at greedy = 1000), __main__.py (python -m nova.arena
+    calibrate | match).
+  tests/test_arena.py (22), including a check that the arena's greedy O
+    replays live ReversiController games move for move. Suite 1145 ->
+    1167.
+  STRENGTH LADDER (data/arena/calibration/ladder.json; 100 games per
+  ordered pair + 1,000 as X vs greedy O each; 5m47s on 10 cores):
+      spec              elo    X vs greedy O
+      random            940    34.2%
+      greedy:0.5        992    42.1%
+      greedy:0.25       995    45.7%
+      greedy           1000    51.3%
+      mobility:0.5     1049    56.5%   (held out)
+      mobility:0.25    1064    66.9%   (held out)
+      mobility         1070    68.5%   (held out)
+      corner:0.5       1127    69.3%
+      lookahead:0.5:2  1146    66.8%
+      corner:0.25      1187    74.1%
+      lookahead:0.25:2 1277    81.2%
+      corner           1283    82.9%
+      lookahead:0:2    1470    89.7%
+    In-harness reference lines therefore read random 34 / greedy 51 /
+    corner 83 / lookahead-2 90 (the 37.5 / 48 / 81 quoted above were a
+    quick pre-plan simulation with a different rng scheme). Nova's live
+    53% sits at greedy. The training curriculum climbs random ->
+    greedy -> corner/lookahead at falling epsilon; if she tops
+    lookahead:0:2, add depth 3.
+  Environment: /srv/ai/venvs/nova-train — torch 2.14.0+cu130 (sees both
+    3060s), transformers 5.17.0, peft 0.21.0, bitsandbytes 0.50.2, trl
+    1.14.0. llama-quantize at ~/Dev/ai-lab/llama.cpp/build/bin needs
+    LD_LIBRARY_PATH set to that directory; the checkout (May 2025) has
+    Qwen3 in convert_hf_to_gguf.py.
+  Base: Qwen/Qwen3-14B downloading to /srv/ai/models/hf/Qwen3-14B.
