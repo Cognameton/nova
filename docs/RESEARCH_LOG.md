@@ -328,6 +328,60 @@ follows losses, prediction hit rate, `games` recalls, and whether her other
 text cites the board; then topic diversity against the 09-06..09-17
 baseline. Read on/after 09-22.
 
+## 2026-09-29 — Stage 22.17 read (deep tick; arm 09-25 08:23Z → 09-29 16:40Z)
+
+Pre-registered read. Arm = 879 ticks over 98.3 effective hours, excluding
+the power outage and the operator's ComfyUI stop (09-25 23:12Z → 09-26
+05:15Z). Baseline = the 22.15/22.16 window (09-22 09:11Z → 09-25 08:23Z,
+682 ticks, 71.2 h). Single uncontrolled arm; 22.16 has no separate window.
+
+**Cadence: no change needed.** Median tick latency 101 s (p90 108 s);
+3 ticks over 240 s, 2 over the 300 s interval, all multi-generation rest
+ticks. The 600 s fallback is not triggered.
+
+**The budget binds.** 67% of generations hit 1,024 thinking tokens and
+were force-closed; median 4,348 thinking characters per call. The forcing
+works for thinking that never closes, but a second failure mode appeared:
+thinking that closes on its own near the budget leaves too few of the
+1,536 total tokens for the answer. 33 ticks (3.8%) ended `finish_reason:
+length` with 0–317 visible characters and no action — against 1 parse
+failure in the baseline. Candidate fix (not applied): continue the answer
+in a second call when the visible part is truncated, or give the answer
+its own token allowance.
+
+**In-tick reads are barely used, `read_instructions` never.** 836 of 879
+ticks read nothing; 43 ticks read once or more (`reflect` 41,
+`recall_history` 5, `recall_self` 2), mostly on rest ticks (34 of 48
+reads). She has not once opened the soul or the tick rules.
+
+**Feedback closure (22.16) shows.** Self-model proposals 64 → 20 but
+applied 17 → 19; rate-limited refusals 47 → 1. For the first time since
+09-18 the dead fields moved: `open_tensions` ×2 and `continuity_notes` ×1.
+
+**Play: unchanged within noise.** 23 finished games (5.6/day), 14–8–1,
+61% vs 56% (10–8) in the baseline; n too small to call. Max-flip choice
+33% vs 32%; corner taken when available 61% vs 57%; 1 illegal attempt.
+Calibration still poor: predictions 8/23 right, "win" 16 of 23 times.
+
+**More thinking, more note churn.** Strategy-note versions 3 → 14 in the
+arm (0.17 → 0.61 per game; v11 → v24), each a new threshold rule after a
+loss (e.g. v23 "disc advantage ≥ +5 by m25 AND a stable edge chain > 4";
+v24 raises it after G71). The deliberation goes into rewriting the note,
+not into better moves — consistent with the 09-26 learning verdict (frozen
+weights; see PHASE23_PLAN.txt).
+
+**Surface.** Heartbeats 9.8 → 11.2/day. One self-opened exploration
+(09-26 22:06Z, "The Mechanics of Thematic Stagnation: Why Inquiry
+Recycles"), closed by her after ~80 min. Board share 82% → 89% of ticks.
+
+**Verdict:** keep 22.17 on (no latency cost, real deliberation, feedback
+closure working). Next-stage candidates: (1) fix truncated answers after
+self-closed thinking; (2) consider a larger budget only after (1), since
+two-thirds of calls already hit it; (3) the reads and `read_instructions`
+are unused surface — make them visible at rest or retire them; (4) note
+churn is the live symptom of the learning ceiling — Phase 23 is the
+answer, not more prompting. Nothing changed on the runtime at this read.
+
 ## 2026-09-25 — Stage 22.15 read (arm 09-22 09:11Z → 09-25 07:00Z, 2.7 days)
 
 Read early at operator request; two complete days plus two partials, one
@@ -515,6 +569,12 @@ read_instructions, wider recall) — first deep tick 08:20:52Z: 1,024 tokens rea
 square, no closing tag, no action (72 s). Budget forcing added (the runtime
 closes the block and asks for the answer), budget 1024; **restarted
 2026-09-25 03:23:23 CDT = ARM START**; read on/after 09-29.
+
+**2026-09-29** — Stage 22.17 read (above): cadence fine (median 101 s);
+budget binds (67% forced close) and 3.8% of ticks lose their answer to
+truncation after self-closed thinking; reads barely used, read_instructions
+never; 22.16 feedback cut rate-limited proposals 47 → 1 and revived two dead
+fields; play unchanged within noise (61% vs 56%, n=23); note churn 3.6×.
 
 **2026-09-25** — Stage 22.15 read (above): rest ticks 20% of the surface and
 all diversification comes from them; games read in 10/17 windows; notes
