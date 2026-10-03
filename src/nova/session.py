@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from nova.types import TurnRecord, ValidationResult, RetrievalHit
@@ -47,6 +48,38 @@ class JsonlSessionStore:
             except json.JSONDecodeError:
                 continue
             turns.append(self._turn_from_dict(payload))
+        return turns
+
+    def turns_since(self, *, since: str, origin: str) -> list[TurnRecord]:
+        """Turns from any session with timestamp >= since (UTC ISO) whose
+        notes carry this origin, oldest first. Only files modified at or
+        after `since` are opened (Stage 22.18: the tick's conversation
+        block reads across the daily session rotation)."""
+        try:
+            cutoff = datetime.fromisoformat(since).timestamp()
+        except ValueError:
+            return []
+        turns: list[TurnRecord] = []
+        for path in self.base_dir.glob("*.jsonl"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    continue
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                notes = payload.get("notes") or {}
+                if notes.get("origin") != origin or str(payload.get("timestamp", "")) < since:
+                    continue
+                turns.append(self._turn_from_dict(payload))
+        turns.sort(key=lambda turn: turn.timestamp)
         return turns
 
     def get_session_path(self, *, session_id: str) -> Path:

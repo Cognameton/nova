@@ -105,6 +105,21 @@ class PromptConfig:
     tick_read_instructions_tool: bool = False
     tick_recall_entries: int = 8
     tick_recall_entry_chars: int = 140
+    # Phase 22 Stage 22.18 — conversation reach and chat hygiene. Defaults
+    # reproduce 22.17 exactly. tick_conversation_window_hours: operator chat
+    # turns (assertion register, daemon channel only) from the last N hours
+    # render on every tick as a [Conversations with your operator] block
+    # (0 = off); tick_conversation_turns caps how many. Explore-chat turns
+    # never appear here: they stay behind the membrane in the exploration
+    # journal, which in-register ticks already recall.
+    # chat_dedupe_current_focus: current_focus prints once on chat (in
+    # [Self-Context]) instead of twice. chat_goal_blocks: render the
+    # candidate/selected internal-goal scaffolding on chat (still computed
+    # and traced either way).
+    tick_conversation_window_hours: int = 0
+    tick_conversation_turns: int = 4
+    chat_dedupe_current_focus: bool = False
+    chat_goal_blocks: bool = True
 
 
 @dataclass(slots=True)
@@ -226,6 +241,10 @@ class NovaConfig:
             raise ValueError("prompt.tick_recall_entries must be >= 1")
         if self.prompt.tick_recall_entry_chars < 40:
             raise ValueError("prompt.tick_recall_entry_chars must be >= 40")
+        if self.prompt.tick_conversation_window_hours < 0:
+            raise ValueError("prompt.tick_conversation_window_hours must be non-negative")
+        if self.prompt.tick_conversation_turns < 1:
+            raise ValueError("prompt.tick_conversation_turns must be >= 1")
         if self.generation.tick_thinking_max_tokens <= 0:
             raise ValueError("generation.tick_thinking_max_tokens must be positive")
         if self.prompt.tick_heartbeat_sampling not in VALID_TICK_HEARTBEAT_SAMPLING:

@@ -47,9 +47,15 @@ class NovaPromptComposer:
         contract_rules: list[str],
         session_id: str,
         turn_id: str,
+        dedupe_current_focus: bool = False,
     ) -> PromptBundle:
         persona_block = self._format_persona(persona)
-        self_state_block = self._format_self_state(self_state)
+        # Stage 22.18: [Self-Context] already carries current_focus (with its
+        # revision marker); printing it again here doubled ~390 characters.
+        self_state_block = self._format_self_state(
+            self_state,
+            include_current_focus=not (dedupe_current_focus and self_context_block.strip()),
+        )
         light_context = self._is_context_light_request(user_text)
         effective_memory_hits = [] if light_context else memory_hits
         effective_recent_turns = self._select_recent_turns(recent_turns, user_text=user_text)
@@ -347,13 +353,14 @@ class NovaPromptComposer:
             lines.append(f"Open tensions: {'; '.join(self_state.open_tensions[:2])}")
         return "\n".join(lines)
 
-    def _format_self_state(self, self_state: SelfState) -> str:
+    def _format_self_state(self, self_state: SelfState, *, include_current_focus: bool = True) -> str:
         lines = [
             "[Self-State]",
             f"Identity Summary: {self_state.identity_summary}",
-            f"Current Focus: {self_state.current_focus}",
-            f"Stability Version: {self_state.stability_version}",
         ]
+        if include_current_focus:
+            lines.append(f"Current Focus: {self_state.current_focus}")
+        lines.append(f"Stability Version: {self_state.stability_version}")
         if self_state.active_questions:
             lines.append("Active Questions:")
             lines.extend(f"- {item}" for item in self_state.active_questions)

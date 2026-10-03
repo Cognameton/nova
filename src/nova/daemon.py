@@ -281,13 +281,19 @@ class NovaDaemon:
                     # active exploration before responding.
                     self._last_chat_monotonic = time.monotonic()
                     self.runtime.pause_exploration()
-                    turn = self.runtime.respond(prompt)
-                    return {
+                    # Stage 22.18: the origin tag is what lets the tick's
+                    # conversation block find operator turns (and only them).
+                    turn = self.runtime.respond(prompt, origin="operator_chat")
+                    response = {
                         "type": "chat",
                         "answer": turn.final_answer,
                         "turn_id": getattr(turn, "turn_id", ""),
                         "session_id": self.session_id,
                     }
+                    override = _claim_gate_override(turn)
+                    if override:
+                        response["claim_gate_override"] = override
+                    return response
                 except Exception as exc:
                     return {"type": "error", "message": str(exc)}
 
@@ -325,13 +331,14 @@ class NovaDaemon:
                         return {"type": "error", "message": "message required"}
                     with self._model_lock:
                         turn = self.runtime.explore_chat(message)
-                    return {
-                        "type": "explore",
-                        "chat": {
-                            "answer": turn.final_answer,
-                            "turn_id": getattr(turn, "turn_id", ""),
-                        },
+                    chat = {
+                        "answer": turn.final_answer,
+                        "turn_id": getattr(turn, "turn_id", ""),
                     }
+                    override = _claim_gate_override(turn)
+                    if override:
+                        chat["claim_gate_override"] = override
+                    return {"type": "explore", "chat": chat}
                 return {"type": "error", "message": f"unknown explore action: {action!r}"}
             except Exception as exc:
                 return {"type": "error", "message": str(exc)}
@@ -349,6 +356,24 @@ class NovaDaemon:
 # ---------------------------------------------------------------------------
 # Attach client
 # ---------------------------------------------------------------------------
+
+def _claim_gate_override(turn: Any) -> str:
+    """Stage 22.18: the override reason recorded on a turn, if any."""
+    notes = getattr(turn, "notes", None)
+    if not isinstance(notes, dict):
+        return ""
+    return str(notes.get("claim_gate_override") or "")
+
+
+def _print_override_notice(payload: dict[str, Any]) -> None:
+    reason = payload.get("claim_gate_override")
+    if reason:
+        print(
+            f"[nova] note: the claim gate replaced her answer ({reason}); her"
+            " original words are in the quarantine log. For questions about her"
+            " inner states, use !explore chat.\n"
+        )
+
 
 class NovaAttachClient:
     """Connect to a running NovaDaemon and provide an interactive REPL."""
@@ -374,7 +399,13 @@ class NovaAttachClient:
                 f"uptime: {status.get('uptime_seconds', 0):.0f}s"
             )
 
-        print(f"[nova] type your prompt. Ctrl+D or '!detach' to detach.\n")
+        print(
+            "[nova] type your prompt. Ctrl+D or '!detach' to detach.\n"
+            "[nova] plain text = chat (saved to her memory; she sees it on her ticks).\n"
+            "[nova] !explore start <topic> | !explore chat <message> | !explore close\n"
+            "       = talk inside an exploration (no claim-gate override; journaled,\n"
+            "         recalled on her exploration ticks only).\n"
+        )
 
         try:
             import readline  # noqa: F401 — enables line editing on Linux
@@ -412,7 +443,10 @@ class NovaAttachClient:
                 if action == "chat" and len(parts) > 2:
                     msg["message"] = parts[2]
                 r = self.send(sock, msg)
-                if r:
+                if r and action == "chat" and isinstance(r.get("chat"), dict):
+                    print(f"\n{r['chat'].get('answer', '')}\n")
+                    _print_override_notice(r["chat"])
+                elif r:
                     print(json.dumps(r, indent=2))
                 continue
             if not prompt.strip():
@@ -426,6 +460,7 @@ class NovaAttachClient:
                 print(f"[error] {response.get('message', '?')}")
             else:
                 print(f"\n{response.get('answer', '')}\n")
+                _print_override_notice(response)
 
         try:
             sock.close()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import replace as dataclass_replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -959,6 +959,49 @@ class NovaRuntime:
             )
         return "\n".join(lines)
 
+    # Stage 22.18: per-entry caps for the tick's conversation block.
+    CONVERSATION_OPERATOR_CHARS = 200
+    CONVERSATION_ANSWER_CHARS = 240
+
+    def _conversation_block(self) -> str:
+        """Recent operator conversations for the tick (Stage 22.18).
+
+        Only assertion-register turns that came through the daemon's chat
+        channel (notes.origin == "operator_chat"); explore-chat turns live in
+        the exploration journal and never cross here. Pushed, not fetched:
+        she reads on a few percent of ticks, and the block is what makes a
+        conversation part of her context after it ends.
+        """
+        hours = int(self.config.prompt.tick_conversation_window_hours)
+        limit = int(self.config.prompt.tick_conversation_turns)
+        if hours <= 0 or limit <= 0:
+            return ""
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        turns = self.session_store.turns_since(since=since, origin="operator_chat")
+        if not turns:
+            return ""
+
+        def _clip(text: str, cap: int) -> str:
+            flat = " ".join((text or "").split())
+            return flat if len(flat) <= cap else flat[: cap - 3] + "..."
+
+        lines = [
+            "[Conversations with your operator]",
+            f"(the last {min(len(turns), limit)} of {len(turns)} exchanges in the past"
+            f" {hours} h, oldest first; they are over, nothing here asks for a reply)",
+        ]
+        for turn in turns[-limit:]:
+            stamp = turn.timestamp[:16].replace("T", " ") if turn.timestamp else "?"
+            lines.append(f"  [{stamp}] operator: {_clip(turn.user_text, self.CONVERSATION_OPERATOR_CHARS)}")
+            if turn.notes.get("claim_gate_override"):
+                lines.append(
+                    "    you (your words were replaced by the claim gate's standard refusal): "
+                    + _clip(turn.final_answer, self.CONVERSATION_ANSWER_CHARS)
+                )
+            else:
+                lines.append(f"    you: {_clip(turn.final_answer, self.CONVERSATION_ANSWER_CHARS)}")
+        return "\n".join(lines)
+
     def model_self_state_tick(
         self,
         *,
@@ -1080,6 +1123,7 @@ class NovaRuntime:
             if self.reversi_controller is not None
             else ""
         )
+        conversation_block = self._conversation_block()
         max_reads = int(self.config.prompt.tick_max_reads)
         instructions_enabled = bool(self.config.prompt.tick_read_instructions_tool)
         in_tick_reads: list[str] = []
@@ -1112,6 +1156,7 @@ class NovaRuntime:
                 max_reads=max_reads,
                 instructions_enabled=instructions_enabled,
                 in_tick_reads_block=in_tick_block,
+                conversation_block=conversation_block,
             )
 
         messages = _build("")
@@ -1481,6 +1526,7 @@ class NovaRuntime:
             ("self_context", "[Self-Context]"),
             ("drive_line", "drive"),
             ("tool_results", "[Results of your recent tool calls]"),
+            ("conversation", "[Conversations with your operator]"),
             ("reversi", "[Reversi]"),
             ("exploration_history", "Recent explorations"),
             ("exploration", "[Exploration]"),
@@ -3467,7 +3513,9 @@ class NovaRuntime:
             session_id=run.session_id,
         )
 
-    def respond(self, user_text: str, *, register: str = "assertion") -> TurnRecord:
+    def respond(
+        self, user_text: str, *, register: str = "assertion", origin: str = ""
+    ) -> TurnRecord:
         if (
             self.session_id is None
             or self.persona is None
@@ -3594,13 +3642,24 @@ class NovaRuntime:
             idle_appraisal=idle_pressure_appraisal,
             user_text=user_text,
         )
-        candidate_goal_block = self.candidate_goal_prompt_engine.build_block(
-            candidates=candidate_internal_goals,
-            user_text=user_text,
+        # Stage 22.18: the goal scaffolding can stay off the chat prompt;
+        # candidates and the selection are still computed and traced.
+        render_goal_blocks = bool(self.config.prompt.chat_goal_blocks)
+        candidate_goal_block = (
+            self.candidate_goal_prompt_engine.build_block(
+                candidates=candidate_internal_goals,
+                user_text=user_text,
+            )
+            if render_goal_blocks
+            else ""
         )
-        selected_goal_block = self.selected_goal_prompt_engine.build_block(
-            selected_goal=selected_internal_goal,
-            proposal=internal_goal_initiative_proposal,
+        selected_goal_block = (
+            self.selected_goal_prompt_engine.build_block(
+                selected_goal=selected_internal_goal,
+                proposal=internal_goal_initiative_proposal,
+            )
+            if render_goal_blocks
+            else ""
         )
         self_context_block = self.self_context_engine.prefetch(
             self_state=self.self_state,
@@ -3628,6 +3687,7 @@ class NovaRuntime:
             contract_rules=contract_rules,
             session_id=self.session_id,
             turn_id=turn_id,
+            dedupe_current_focus=bool(self.config.prompt.chat_dedupe_current_focus),
         )
 
         # Phase 22 Stage 22.6 part 2 (experimental, default off): respond()
@@ -3797,6 +3857,10 @@ class NovaRuntime:
         # hard-block above already covers it). Gated the same way as the
         # primary override — assertion register only; inside an active
         # exploration nothing said is a claim until governed export.
+        # Stage 22.18: which override (if any) replaced her answer, so the
+        # operator is told and the tick digest does not pass the canonical
+        # refusal off as her words.
+        claim_gate_override = ""
         never_licensed_matches: list[str] = []
         if "unsupported_interiority" in self._ladder_licensed_classes():
             never_licensed_matches = self._never_licensed_matches(final_answer)
@@ -3823,6 +3887,8 @@ class NovaRuntime:
                 refusal_reason=claim_gate.refusal_reason,
                 turn_id=turn_id,
             )
+            if claim_gate.refusal_text:
+                claim_gate_override = claim_gate.refusal_reason or "claim_gate"
             final_answer = claim_gate.refusal_text or final_answer
         elif never_licensed_matches and not suspend_claim_refusal:
             licensed_rung = self._highest_licensed_rung("unsupported_interiority")
@@ -3839,10 +3905,10 @@ class NovaRuntime:
                 turn_id=turn_id,
                 notes=[f"never_licensed_matches:{','.join(never_licensed_matches)}"],
             )
-            final_answer = (
-                self.claim_gate_engine.ladder_exceeded_refusal_text(licensed_rung)
-                or final_answer
-            )
+            ladder_text = self.claim_gate_engine.ladder_exceeded_refusal_text(licensed_rung)
+            if ladder_text:
+                claim_gate_override = "unsupported_interiority:never_licensed"
+            final_answer = ladder_text or final_answer
         elif not validation.valid:
             if any(violation.startswith("unsupported_claim:") for violation in validation.violations):
                 if not suspend_claim_refusal:
@@ -3858,6 +3924,8 @@ class NovaRuntime:
                         refusal_reason=claim_gate.refusal_reason,
                         turn_id=turn_id,
                     )
+                    if claim_gate.refusal_text:
+                        claim_gate_override = claim_gate.refusal_reason or "validation"
                     final_answer = claim_gate.refusal_text or final_answer
             else:
                 final_answer = (
@@ -3886,6 +3954,8 @@ class NovaRuntime:
                 "candidate_internal_goals": [candidate.to_dict() for candidate in candidate_internal_goals],
                 "selected_internal_goal": selected_internal_goal.to_dict(),
                 "internal_goal_initiative_proposal": internal_goal_initiative_proposal.to_dict(),
+                **({"origin": origin} if origin else {}),
+                **({"claim_gate_override": claim_gate_override} if claim_gate_override else {}),
             },
         )
         # Phase 21 Stage 21.2 (D4): the membrane. An in-register chat turn

@@ -115,6 +115,18 @@ prompt:
   tick_read_instructions_tool: true
   tick_recall_entries: 12
   tick_recall_entry_chars: 200
+  # Stage 22.18 (2026-10-02, operator: "go ahead with the chat cleanup and
+  # digest stage") — conversation reach. Operator chat through the daemon
+  # renders on every tick for 72 h, last 4 exchanges, so a conversation
+  # stays part of her context after it ends (she reads on ~6% of ticks, so
+  # pushed beats fetched). Explore-chat stays behind the membrane. Chat
+  # hygiene from the 09-25 review: current_focus once, goal scaffolding off
+  # the chat prompt (still computed and traced). Claim-gate overrides are
+  # now reported to the operator and labelled on the tick.
+  tick_conversation_window_hours: 72
+  tick_conversation_turns: 4
+  chat_dedupe_current_focus: true
+  chat_goal_blocks: false
 
 # Phase 22 Stage 22.13 — reversi, ENABLED 2026-09-18 (operator decision:
 # "give her something to do"). The research log's diagnosis of the

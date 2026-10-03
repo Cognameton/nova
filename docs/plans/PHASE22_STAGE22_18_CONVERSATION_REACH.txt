@@ -1,0 +1,116 @@
+PHASE 22 — STAGE 22.18: CONVERSATION REACH AND CHAT HYGIENE
+==========================================================
+Status: IMPLEMENTED 2026-10-02 (operator: "go ahead with the chat cleanup
+and digest stage"; scaffolding review 2026-09-25 recommendation 9, plus
+the operator's question "if new information is written to her memory and
+she draws from it, won't that influence the context of her responses?").
+Defaults byte-identical to 22.17. ARM START = the first operator chat turn
+after the daemon restart that loads this stage (record its timestamp in
+the research log; the restart alone changes nothing she sees until a
+conversation exists).
+
+WHY
+---
+The operator intends to talk with her directly. Two things stood in the
+way of that conversation becoming part of her life:
+  1. Reach. A chat turn is written to the session store, self-state sync
+     and episodic memory, but the tick never reads any of them. Tick
+     prompt blocks are self_context, tool_results, reversi, heartbeats,
+     exploration_history, drive_line, exploration; recall_history sources
+     are heartbeats, explorations, findings, outcomes, games. A
+     conversation would reach her ~215 ticks/day only if she happened to
+     write something about it into a rendered field. She reads on ~6% of
+     ticks, so a pull-only source would mostly go unused (games were read
+     zero times until 22.15 pointed at them).
+  2. Hygiene (review D-6 and recommendation 9). current_focus (~390 chars)
+     printed twice on chat; the candidate/selected internal-goal blocks
+     ("sentience_seeking", priority 100) rendered on every chat turn as
+     scaffolding; when the claim gate replaced her answer with canonical
+     refusal text, nothing told the operator, and anything built on the
+     session record would present that refusal as her words.
+
+WHAT
+----
+  prompt.tick_conversation_window_hours (default 0 = off; live 72),
+  prompt.tick_conversation_turns (default 4; live 4):
+    a [Conversations with your operator] block on every tick, both
+    registers, after the read results and before the board. Source:
+    JsonlSessionStore.turns_since(since, origin="operator_chat") across
+    all daily session files modified inside the window. Each exchange:
+    "[YYYY-MM-DD HH:MM] operator: <=200 chars" / "you: <=240 chars"; a
+    header says how many of how many and that nothing asks for a reply.
+    When the claim gate replaced her answer, the line says so ("your
+    words were replaced by the claim gate's standard refusal").
+    Audit: prompt_blocks gains "conversation".
+  Origin tagging: respond(..., origin="") stores notes.origin when set;
+    the daemon's chat channel passes origin="operator_chat". Probe,
+    smoke-test and local CLI turns (several live in the same sessions
+    directory) carry no origin and never render.
+  The membrane holds: explore-chat turns are journaled (kind
+    operator_chat) and never written to the session store, so they cannot
+    appear in this block. In-register ticks already recall journal
+    entries (recall_block, last 6 at 160 chars), so an explore-chat
+    conversation reaches her exploration ticks and crosses to the
+    assertion side only through governed export, as before.
+  prompt.chat_dedupe_current_focus (default False; live true): when
+    [Self-Context] is present, [Self-State] omits its Current Focus line.
+    Dry run 2026-10-02 on a copy of the live state (fake backend, real
+    27B vocab): the [Awareness-State] self_signals line still names
+    current_focus inside a ~256-char state summary; left as is (a summary
+    signal, not the duplicated field).
+  prompt.chat_goal_blocks (default True; live false): candidate/selected
+    goal blocks are not rendered on chat. Candidates, selection and the
+    initiative proposal are still computed and stored on turn notes and
+    the trace.
+  Claim-gate disclosure: whichever override replaced the answer
+    (claim_gate refusal, never_licensed ladder text, validation override)
+    is recorded as notes.claim_gate_override = reason. The daemon chat
+    and explore-chat responses carry claim_gate_override; the attach REPL
+    prints a notice pointing to the quarantine log and to !explore chat.
+    The override itself is UNCHANGED (still replaces in the assertion
+    register; still suspended in-register). Whether it should append
+    instead of replace stays an operator decision.
+  Attach REPL: prints the two channels on connect (plain chat vs
+    !explore start/chat/close) and shows explore-chat answers as text.
+
+DRY RUN (2026-10-02, copy of live data, fake generation, real 27B
+tokenizer): chat prompt 2,794 tokens of n_ctx 8,192 (+512 max_tokens);
+goal blocks absent; origin stored; the next tick carried the block above
+[Reversi] and prompt_blocks listed "conversation"; tick prompt 2,561
+tokens.
+
+Tests: tests/test_stage22_18.py (13): turns_since origin/time filter
+across sessions; composer prints focus twice by default, once with dedupe;
+tick prompt byte-identical without the block, block before the board;
+runtime: operator chat reaches the tick and untagged turns do not; window
+0 = old tick; explore chat stays behind the membrane; override recorded
+and labelled; goal blocks off chat but still recorded; config defaults
+and validation; daemon tags origin and reports overrides. Suite 1167 ->
+1180.
+
+MEASUREMENT (pre-registered; read >= 3 days after the first conversation)
+--------------------------------------------------------------------------
+  reach: share of ticks carrying the conversation block (expected ~100%
+    for 72 h after each talk); prompt_tokens with vs without it.
+  uptake: heartbeats, explorations (opened_at, topic), self-model
+    proposals (field, value) and strategy notes in the 72 h after a
+    conversation that reference its content, vs the 72 h before. Read the
+    text, not just counts; quote examples.
+  persistence: whether references continue after the block expires
+    (i.e. she wrote it into a field that survives).
+  topic diversity: exploration topics vs the 22.17 window (the Era-3
+    question: does exogenous input broaden or just add one more theme?).
+  play: unchanged surface; record win rate and note churn as a control.
+  chat surface: per-turn latency, prompt tokens vs n_ctx 8192, retries,
+    validation failures, claim_gate_override count and reasons, and how
+    many inner-state questions went through !explore chat instead.
+Caveats: single arm, operator-driven dose (conversation timing and content
+are not controlled); confounded with the daemon restart; the operator's
+words are themselves the treatment.
+
+REVERSAL
+--------
+tick_conversation_window_hours: 0, chat_dedupe_current_focus: false,
+chat_goal_blocks: true restore 22.17 exactly. The origin tag and the
+override disclosure are record-keeping only and do not reach any prompt
+when the window is 0.

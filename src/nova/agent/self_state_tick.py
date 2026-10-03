@@ -247,6 +247,7 @@ class SelfStateTickEngine:
         max_reads: int = 0,
         instructions_enabled: bool = False,
         in_tick_reads_block: str = "",
+        conversation_block: str = "",
     ) -> list[dict[str, str]]:
         in_exploration = register == "exploratory"
         if in_exploration:
@@ -311,6 +312,7 @@ class SelfStateTickEngine:
                     tool_results_block=tool_results_block,
                     reversi_block=reversi_block if reversi_enabled else "",
                     in_tick_reads_block=in_tick_reads_block,
+                    conversation_block=conversation_block,
                 ),
             },
         ]
@@ -329,6 +331,7 @@ class SelfStateTickEngine:
         tool_results_block: str = "",
         reversi_block: str = "",
         in_tick_reads_block: str = "",
+        conversation_block: str = "",
     ) -> str:
         parts = [
             f"session_id: {session_id}",
@@ -349,6 +352,10 @@ class SelfStateTickEngine:
             parts.append("")
             parts.append("[Results of your reads this tick]")
             parts.append(in_tick_reads_block)
+        # Stage 22.18: recent operator conversations, both registers.
+        if conversation_block:
+            parts.append("")
+            parts.append(conversation_block)
         # Stage 22.13: the board, every tick, while the game is enabled.
         if reversi_block:
             parts.append("")
