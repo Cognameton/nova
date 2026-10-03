@@ -83,6 +83,13 @@ class NovaDaemon:
         # active exploration; the tick loop resumes it after a full idle
         # tick interval. 0.0 means no chat has occurred this run.
         self._last_chat_monotonic: float = 0.0
+        # Stage 22.18b — conversation holds the tick loop: no daemon tick
+        # fires until a full tick interval has passed since the operator's
+        # last message (chat or explore-chat). 0.0 = no conversation this
+        # run. Manual "tick" requests are operator actions and are not held.
+        self._last_conversation_monotonic: float = 0.0
+        self._ticks_held: int = 0
+        self._hold_logged: bool = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -152,12 +159,39 @@ class NovaDaemon:
     # Tick loop (background thread)
     # ------------------------------------------------------------------
 
+    def _conversation_hold_seconds(self) -> float:
+        """Seconds until a daemon tick is allowed again (0.0 = allowed now)."""
+        if self._last_conversation_monotonic == 0.0:
+            return 0.0
+        idle = time.monotonic() - self._last_conversation_monotonic
+        return max(0.0, self.tick_interval_seconds - idle)
+
     def _tick_loop(self) -> None:
+        wait = float(self.tick_interval_seconds)
         while not self._stop_event.is_set():
-            self._stop_event.wait(timeout=self.tick_interval_seconds)
+            self._stop_event.wait(timeout=wait)
             if self._stop_event.is_set():
                 break
+            wait = float(self.tick_interval_seconds)
             with self._model_lock:
+                # Checked under the model lock: a chat that was answering
+                # while this loop waited for the lock counts as conversation.
+                hold = self._conversation_hold_seconds()
+                if hold > 0.0:
+                    self._ticks_held += 1
+                    if not self._hold_logged:
+                        self._hold_logged = True
+                        print(
+                            f"[{datetime.now(timezone.utc).isoformat()}] tick held:"
+                            f" conversation active, next tick in {hold:.0f}s",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    # Sleep exactly until the operator has been quiet for
+                    # one full interval, then tick.
+                    wait = hold
+                    continue
+                self._hold_logged = False
                 try:
                     # Resume a chat-paused exploration once the session has
                     # been idle for a full tick interval (subordination rule).
@@ -280,10 +314,14 @@ class NovaDaemon:
                     # User-facing work subordinates exploration: pause any
                     # active exploration before responding.
                     self._last_chat_monotonic = time.monotonic()
+                    self._last_conversation_monotonic = self._last_chat_monotonic
                     self.runtime.pause_exploration()
                     # Stage 22.18: the origin tag is what lets the tick's
                     # conversation block find operator turns (and only them).
                     turn = self.runtime.respond(prompt, origin="operator_chat")
+                    # The quiet interval counts from the end of the answer,
+                    # so a slow reply does not eat the operator's reading time.
+                    self._last_conversation_monotonic = time.monotonic()
                     response = {
                         "type": "chat",
                         "answer": turn.final_answer,
@@ -330,7 +368,9 @@ class NovaDaemon:
                     if not message:
                         return {"type": "error", "message": "message required"}
                     with self._model_lock:
+                        self._last_conversation_monotonic = time.monotonic()
                         turn = self.runtime.explore_chat(message)
+                        self._last_conversation_monotonic = time.monotonic()
                     chat = {
                         "answer": turn.final_answer,
                         "turn_id": getattr(turn, "turn_id", ""),

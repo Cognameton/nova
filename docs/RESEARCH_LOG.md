@@ -328,6 +328,29 @@ follows losses, prediction hit rate, `games` recalls, and whether her other
 text cites the board; then topic diversity against the 09-06..09-17
 baseline. Read on/after 09-22.
 
+## 2026-10-03 — Stage 22.18b: conversation holds the tick loop
+
+Operator's original intent, never implemented for ticks: while a conversation
+is happening there are no ticks; they resume after about five quiet minutes.
+Before this change the tick loop fired on a fixed 300 s clock regardless of
+chat (only the *exploration resume* was idle-gated, Phase 21.1), so a tick
+could land mid-conversation and make the operator wait ~100 s for the lock.
+
+Change (`daemon.py`): `_last_conversation_monotonic` is set by both chat
+paths (`chat` and `explore` → `chat`), at the start of the turn and again
+when the answer returns. `_tick_loop` checks `_conversation_hold_seconds()`
+under the model lock; if the operator has been quiet for less than one tick
+interval the tick is held and the loop sleeps exactly until the interval is
+up. Manual `tick` requests are not held. Journal line `tick held:
+conversation active, next tick in Ns` once per hold. 7 new tests, 1187 pass.
+
+Made before the first operator chat of the 22.18 arm, so every conversation
+in that arm runs under this rule. Effect on the 22.18 read: tick counts drop
+during and for 300 s after each conversation; when comparing cadence, count
+ticks per quiet hour, and expect the first tick after a conversation at
+~300 s after the last answer (it is the one that first renders the
+"[Conversations with your operator]" block).
+
 ## 2026-09-29 — Stage 22.17 read (deep tick; arm 09-25 08:23Z → 09-29 16:40Z)
 
 Pre-registered read. Arm = 879 ticks over 98.3 effective hours, excluding

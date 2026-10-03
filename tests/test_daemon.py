@@ -421,5 +421,74 @@ class NovaAttachClientSendStatusTests(unittest.TestCase):
         self.assertFalse(ok)
 
 
+# ---------------------------------------------------------------------------
+# Stage 22.18b — conversation holds the tick loop
+# ---------------------------------------------------------------------------
+
+class ConversationHoldTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _run_loop(self, daemon: NovaDaemon, seconds: float) -> None:
+        thread = threading.Thread(target=daemon._tick_loop, daemon=True)
+        thread.start()
+        time.sleep(seconds)
+        daemon._stop_event.set()
+        thread.join(timeout=2)
+
+    def test_no_hold_before_any_conversation(self):
+        daemon = _make_daemon(self._tmpdir.name, tick_interval=300)
+        self.assertEqual(daemon._conversation_hold_seconds(), 0.0)
+
+    def test_chat_starts_a_hold_of_one_interval(self):
+        daemon = _make_daemon(self._tmpdir.name, tick_interval=300)
+        daemon._dispatch({"type": "chat", "prompt": "hello"})
+        hold = daemon._conversation_hold_seconds()
+        self.assertGreater(hold, 295)
+        self.assertLessEqual(hold, 300)
+
+    def test_explore_chat_also_starts_a_hold(self):
+        daemon = _make_daemon(self._tmpdir.name, tick_interval=300)
+        daemon._dispatch({"type": "explore", "action": "chat", "message": "hello"})
+        self.assertGreater(daemon._conversation_hold_seconds(), 295)
+
+    def test_loop_ticks_when_no_conversation(self):
+        daemon = _make_daemon(self._tmpdir.name, tick_interval=0.02)
+        self._run_loop(daemon, 0.3)
+        self.assertGreaterEqual(daemon.runtime.model_self_state_tick.call_count, 2)
+        self.assertEqual(daemon._ticks_held, 0)
+
+    def test_loop_holds_ticks_during_conversation(self):
+        daemon = _make_daemon(self._tmpdir.name, tick_interval=0.02)
+        daemon._last_conversation_monotonic = time.monotonic() + 60  # operator spoke "just now", far inside the interval
+        self._run_loop(daemon, 0.3)
+        daemon.runtime.model_self_state_tick.assert_not_called()
+        self.assertGreaterEqual(daemon._ticks_held, 1)
+
+    def test_ticks_resume_after_a_quiet_interval(self):
+        daemon = _make_daemon(self._tmpdir.name, tick_interval=0.3)
+        thread = threading.Thread(target=daemon._tick_loop, daemon=True)
+        thread.start()
+        time.sleep(0.15)
+        daemon._last_conversation_monotonic = time.monotonic()  # operator speaks mid-interval
+        time.sleep(0.25)  # t=0.40: the 0.30 wake-up fell inside the quiet interval, so it was held
+        during = daemon.runtime.model_self_state_tick.call_count
+        time.sleep(0.5)   # t=0.90: quiet since 0.15 for more than one interval, so ticks resumed
+        daemon._stop_event.set()
+        thread.join(timeout=2)
+        self.assertEqual(during, 0)
+        self.assertGreaterEqual(daemon._ticks_held, 1)
+        self.assertGreaterEqual(daemon.runtime.model_self_state_tick.call_count, 1)
+
+    def test_manual_tick_is_not_held(self):
+        daemon = _make_daemon(self._tmpdir.name, tick_interval=300)
+        daemon._dispatch({"type": "chat", "prompt": "hello"})
+        resp = daemon._dispatch({"type": "tick"})
+        self.assertEqual(resp["type"], "tick")
+
+
 if __name__ == "__main__":
     unittest.main()
